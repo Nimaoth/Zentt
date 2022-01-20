@@ -2,7 +2,7 @@ FROM debian
 
 # Install utilities
 RUN apt-get update
-RUN apt-get install -y curl xz-utils git
+RUN apt-get install -y curl xz-utils git build-essential manpages-dev gdb
 
 # Install zig
 WORKDIR /home/zig
