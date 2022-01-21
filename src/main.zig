@@ -7,6 +7,8 @@ const std = @import("std");
 pub const TypeId = struct {
     hash: u64,
     name: []const u8,
+    size: u32,
+    alignment: u32,
 
     const Self = @This();
 
@@ -16,6 +18,8 @@ pub const TypeId = struct {
         return Self{
             .hash = hash,
             .name = @typeName(T),
+            .size = @sizeOf(T),
+            .alignment = @alignOf(T),
         };
     }
 
@@ -43,22 +47,84 @@ pub const TypeId = struct {
 };
 
 pub const ArchetypeTable = struct {
+    const ComponentList = struct {
+        data: std.ArrayListAligned(u8, 8),
+        componentId: u64,
+        componentType: TypeId,
+        stride: u64,
+
+        pub fn init(componentId: u64, componentType: TypeId, allocator: std.mem.Allocator) @This() {
+            return @This(){
+                .data = std.ArrayListAligned(u8, 8).init(allocator),
+                .componentId = componentId,
+                .componentType = componentType,
+                .stride = std.mem.alignForward(componentType.size, componentType.alignment),
+            };
+        }
+
+        pub fn deinit(self: *@This()) void {
+            self.data.deinit();
+        }
+
+        pub fn removeComponent(self: *@This(), index: u64) void {
+            if (self.stride == 0)
+                return;
+
+            const byteIndex = index * self.stride;
+            std.debug.assert(byteIndex + self.stride <= self.data.items.len);
+            const lastItemByteIndex = self.data.items.len - self.stride;
+
+            std.log.debug("ComponentList({}, stride = {}).removeComponent({}): move component at {} to {}", .{ self.componentId, self.stride, index, lastItemByteIndex, byteIndex });
+            if (byteIndex != lastItemByteIndex) {
+                std.mem.copy(u8, self.data.items[byteIndex..(byteIndex + self.stride)], self.data.items[lastItemByteIndex..(lastItemByteIndex + self.stride)]);
+            }
+            self.data.resize(self.data.items.len - self.stride) catch unreachable;
+        }
+
+        fn getComponentRaw(self: *@This(), index: u64) ?[]u8 {
+            if ((index + 1) * self.stride <= self.data.items.len) {
+                const byteIndex = index * self.stride;
+                return self.data.items[byteIndex..(byteIndex + self.stride)];
+            } else {
+                return null;
+            }
+        }
+
+        fn addComponentRaw(self: *@This(), data: []const u8) !void {
+            std.debug.assert(data.len == self.stride);
+            const byteIndex = self.data.items.len;
+            try self.data.resize(self.data.items.len + self.stride);
+            std.mem.copy(u8, self.data.items[byteIndex..(byteIndex + self.stride)], data);
+        }
+    };
+
     entities: std.ArrayList(u64),
-    components: std.ArrayList(std.ArrayList(u8)),
+    components: std.ArrayList(ComponentList),
+    typeToList: std.HashMap(TypeId, u64, TypeId.Context, 80),
     archetype: Archetype,
 
     const Self = @This();
 
     pub fn init(archetype: Archetype, allocator: std.mem.Allocator) !Self {
+        var components = std.ArrayList(ComponentList).init(allocator);
+        var typeToList = std.HashMap(TypeId, u64, TypeId.Context, 80).init(allocator);
+        var iter = archetype.components.iterator(.{});
+        while (iter.next()) |componentId| {
+            const componentType = archetype.world.getComponentType(componentId) orelse unreachable;
+            try typeToList.put(componentType, components.items.len);
+            try components.append(ComponentList.init(componentId, componentType, allocator));
+        }
         return Self{
             .archetype = archetype,
             .entities = std.ArrayList(u64).init(allocator),
-            .components = std.ArrayList(std.ArrayList(u8)).init(allocator),
+            .typeToList = typeToList,
+            .components = components,
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.entities.deinit();
+        self.typeToList.deinit();
 
         for (self.components.items) |*componentList| {
             componentList.deinit();
@@ -66,12 +132,110 @@ pub const ArchetypeTable = struct {
         self.components.deinit();
     }
 
+    pub fn getListIndexForType(self: *const Self, typeId: TypeId) ?u64 {
+        return self.typeToList.get(typeId);
+    }
+
+    pub fn getListForType(self: *const Self, typeId: TypeId) ?*ComponentList {
+        if (self.getListIndexForType(typeId)) |index| {
+            return &self.components.items[index];
+        } else {
+            return null;
+        }
+    }
+
+    fn getType(comptime Components: anytype) type {
+        _ = Components;
+        const typeInfo = comptime blk: {
+            const T = @TypeOf(Components);
+            const typeInfo = @typeInfo(T).Struct;
+
+            // Count fields with non-zero size
+            const fieldsWithSize: u64 = blk2: {
+                var size: u64 = 0;
+                inline for (typeInfo.fields) |field| {
+                    const ComponentType = field.default_value orelse unreachable;
+                    if (@sizeOf(ComponentType) > 0) {
+                        size += 1;
+                    }
+                }
+                break :blk2 size;
+            };
+
+            var fields: [fieldsWithSize + 1]std.builtin.TypeInfo.StructField = undefined;
+
+            fields[0] = .{
+                .name = "entities",
+                .field_type = []u64,
+                .default_value = null,
+                .is_comptime = false,
+                .alignment = @alignOf([]u64),
+            };
+
+            // Fill field type info for all components with non-zero size
+            var index: u64 = 1;
+            inline for (typeInfo.fields) |field| {
+                const ComponentType = field.default_value orelse unreachable;
+                std.debug.assert(@TypeOf(ComponentType) == type);
+                if (@sizeOf(ComponentType) > 0) {
+                    fields[index] = .{
+                        .name = @typeName(ComponentType),
+                        .field_type = []ComponentType,
+                        .default_value = null,
+                        .is_comptime = false,
+                        .alignment = @alignOf([]ComponentType),
+                    };
+                    index += 1;
+                }
+            }
+
+            break :blk std.builtin.TypeInfo{
+                .Struct = .{
+                    .layout = .Auto,
+                    .fields = fields[0..],
+                    .decls = &.{},
+                    .is_tuple = false,
+                },
+            };
+        };
+        return @Type(typeInfo);
+    }
+
+    pub fn getTyped(self: *Self, comptime Components: anytype) getType(Components) {
+        _ = self;
+        const T = @TypeOf(Components);
+        const typeInfo = @typeInfo(T).Struct;
+
+        var result: getType(Components) = undefined;
+
+        result.entities = self.entities.items;
+        inline for (typeInfo.fields) |field| {
+            const ComponentType = field.default_value orelse unreachable;
+            std.debug.assert(@TypeOf(ComponentType) == type);
+
+            const componentType = TypeId.init(ComponentType);
+            const componentId = self.archetype.world.getComponentId(componentType) catch unreachable;
+
+            if (self.getListForType(componentType)) |componentList| {
+                std.debug.assert(componentList.componentId == componentId);
+                @field(result, @typeName(ComponentType)) = std.mem.bytesAsSlice(ComponentType, componentList.data.items);
+            }
+        }
+
+        return result;
+        // return Archetype.init(self, hash, bitSet);
+    }
+
     const EntityIndexUpdate = struct { entityId: u64, newIndex: u64 };
 
     pub fn removeEntity(self: *Self, entity: Entity) ?EntityIndexUpdate {
         std.debug.assert(entity.index < self.entities.items.len and entity.table == self);
-        std.log.debug("delete {} at {}", .{ entity.id, entity.index });
         _ = self.entities.swapRemove(entity.index);
+
+        // Remove all components
+        for (self.components.items) |*componentList| {
+            componentList.removeComponent(entity.index);
+        }
 
         if (entity.index < self.entities.items.len) {
             // The index of the last entity changed because it was moved to the current index i.
@@ -87,27 +251,57 @@ pub const ArchetypeTable = struct {
         // @todo: check if the provided components match the archetype
 
         try self.entities.append(entityId);
+        std.log.info("addEntity({}): {}", .{ entityId, components });
+
+        const typeInfo = @typeInfo(@TypeOf(components)).Struct;
+        inline for (typeInfo.fields) |field| {
+            const componentType = TypeId.init(field.field_type);
+            if (self.getListForType(componentType)) |list| {
+                try list.addComponentRaw(std.mem.asBytes(&@field(components, field.name)));
+            }
+        }
 
         return Entity{ .id = entityId, .table = self, .index = self.entities.items.len - 1 };
-
-        // @todo: add components
-        // for (components) |i, component| {
-        //     try self.components.items[i].append(component);
-        // }
     }
 
-    pub fn copyEntityInto(self: *Self, entity: Entity, newComponents: anytype) !Entity {
-        _ = newComponents;
+    /// Adds a new component to the given component list and returns a pointer to the component
+    fn insertComponent(self: *Self, componentTypeIndex: u64, comptime T: type, data: *const T) !*T {
+        var componentList = &self.components.items[componentTypeIndex];
+        const index = componentList.data.items.len;
+        try componentList.data.resize(componentList.data.items.len + componentList.stride);
+        var newComponent = @ptrCast(*T, @alignCast(@alignOf(T), &componentList.data.items[index]));
+        newComponent.* = data.*;
+        return newComponent;
+    }
+
+    pub fn copyEntityInto(self: *Self, entity: Entity, newComponent: anytype) !Entity {
         // @todo: check if the provided components match the archetype
 
+        const ComponentType = @TypeOf(newComponent);
+
+        std.log.info("copyEntityInto({}): {}", .{ entity, newComponent });
+        // Add entity
+        // const index = self.entities.count();
         try self.entities.append(entity.id);
 
-        return Entity{ .id = entity.id, .table = self, .index = self.entities.items.len - 1 };
+        // Add new component
+        const componentType = TypeId.init(ComponentType);
+        const componentId = try self.archetype.world.getComponentId(componentType);
+        if (self.getListForType(componentType)) |componentList| {
+            std.debug.assert(componentList.componentId == componentId);
+            try componentList.addComponentRaw(std.mem.asBytes(&newComponent));
+        }
 
-        // @todo: add components
-        // for (components) |i, component| {
-        //     try self.components.items[i].append(component);
-        // }
+        // Copy existing components
+        for (self.components.items) |*componentList| {
+            if (entity.table.getListForType(componentList.componentType)) |otherList| {
+                if (otherList.getComponentRaw(entity.index)) |oldComponent| {
+                    try componentList.addComponentRaw(oldComponent);
+                }
+            }
+        }
+
+        return Entity{ .id = entity.id, .table = self, .index = self.entities.items.len - 1 };
     }
 
     pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
@@ -136,11 +330,11 @@ pub const BitSet = std.bit_set.StaticBitSet(64);
 pub const Archetype = struct {
     hash: u64,
     components: BitSet,
-    world: *const World,
+    world: *World,
 
     const Self = @This();
 
-    pub fn init(world: *const World, hash: u64, components: BitSet) Self {
+    pub fn init(world: *World, hash: u64, components: BitSet) Self {
         return Self{
             .hash = hash,
             .components = components,
@@ -251,7 +445,7 @@ pub const World = struct {
         };
 
         // Create archetype table for empty entities.
-        var archetype = try world.createArchetype(&.{});
+        var archetype = try world.createArchetypeStruct(.{Tag});
         world.baseArchetypeTable = try world.getOrCreateArchetypeTable(archetype);
 
         return world;
@@ -272,20 +466,18 @@ pub const World = struct {
 
     pub fn dump(self: *Self) void {
         std.debug.print("------------------------- dump -------------------------------\n", .{});
-        std.debug.print("Entities:\n", .{});
-        var entityIter = self.entities.iterator();
-        while (entityIter.next()) |entity| {
-            std.debug.print("  {} -> {}\n", .{ entity.key_ptr.*, entity.value_ptr.* });
-        }
-
-        std.debug.print("Tables:\n", .{});
         var tableIter = self.archetypeTables.iterator();
         while (tableIter.next()) |entry| {
             std.debug.print("  {}\n", .{entry.value_ptr.*});
 
-            for (entry.value_ptr.*.entities.items) |entity| {
-                std.debug.print("    {}\n", .{entity});
+            std.debug.print("    ", .{});
+            for (entry.value_ptr.*.entities.items) |entity, i| {
+                if (i > 0) {
+                    std.debug.print(", ", .{});
+                }
+                std.debug.print("{}", .{entity});
             }
+            std.debug.print("\n", .{});
         }
         std.debug.print("--------------------------------------------------------------\n", .{});
     }
@@ -295,15 +487,31 @@ pub const World = struct {
         _ = System;
     }
 
-    pub fn createEntity(self: *Self) !Entity {
-        _ = self;
+    pub fn createEntity(self: *Self, name: []const u8) !Entity {
+        _ = name;
         const entityId = self.nextEntityId;
         self.nextEntityId += 1;
-        std.log.info("createEntity {}", .{entityId});
+        std.log.info("createEntity {} '{s}'", .{ entityId, name });
 
-        const entity = try self.baseArchetypeTable.addEntity(entityId, .{});
+        const tag = Tag{ .name = name };
+        const entity = try self.baseArchetypeTable.addEntity(entityId, .{tag});
         try self.entities.put(entityId, entity);
         return entity;
+    }
+
+    pub fn createArchetypeStruct(self: *Self, comptime T: anytype) !Archetype {
+        var hash: u64 = 0;
+        var bitSet = BitSet.initEmpty();
+
+        const typeInfo = @typeInfo(@TypeOf(T)).Struct;
+        inline for (typeInfo.fields) |field| {
+            const ComponentType = field.default_value orelse unreachable;
+            std.debug.assert(@TypeOf(ComponentType) == type);
+            const typeId = TypeId.init(ComponentType);
+            bitSet.set(try self.getComponentId(typeId));
+            hash ^= typeId.hash;
+        }
+        return Archetype.init(self, hash, bitSet);
     }
 
     pub fn createArchetype(self: *Self, components: []TypeId) !Archetype {
@@ -331,6 +539,10 @@ pub const World = struct {
         }
     }
 
+    pub fn getArchetypeTable(self: *Self, archetype: Archetype) ?*ArchetypeTable {
+        return self.archetypeTables.getKeyAdapted(&archetype, Archetype.HashTableContext{});
+    }
+
     pub fn getComponentId(self: *Self, typeId: TypeId) !u64 {
         if (self.components.get(typeId)) |componentId| {
             return componentId;
@@ -350,8 +562,6 @@ pub const World = struct {
     }
 
     pub fn addComponent(self: *Self, entityId: u64, component: anytype) !void {
-        _ = component;
-
         if (self.entities.get(entityId)) |oldEntity| {
             const typeId: TypeId = TypeId.init(@TypeOf(component));
             const componentId: u64 = try self.getComponentId(typeId);
@@ -363,7 +573,7 @@ pub const World = struct {
 
             // copy existing entity to new table
             // std.log.debug("add entity {} to table {}", .{ oldEntity, newArchetype });
-            var newEntity = try newTable.copyEntityInto(oldEntity, .{});
+            var newEntity = try newTable.copyEntityInto(oldEntity, component);
 
             // Update entities map
             try self.entities.put(newEntity.id, newEntity);
@@ -411,12 +621,6 @@ pub fn Query(comptime Q: anytype) type {
     return QueryTemplate;
 }
 
-const Position = struct {
-    position: [3]f32,
-};
-
-const Gravity = struct {};
-
 pub fn testSystem(query: Query(.{ Position, Gravity })) void {
     var iter = query.iter();
     while (iter.next()) |entity| {
@@ -424,43 +628,139 @@ pub fn testSystem(query: Query(.{ Position, Gravity })) void {
     }
 }
 
+const Position = struct {
+    position: [3]f32,
+};
+
+const Tag = struct {
+    name: []const u8,
+
+    pub fn format(self: *const @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+        _ = fmt;
+        _ = options;
+        try std.fmt.format(writer, "Tag{{ {s} }}", .{self.name});
+    }
+};
+const Gravity = struct {};
+const ComponentA = struct { i: i64 };
+const ComponentB = struct { b: bool };
+const ComponentC = struct {};
+const ComponentD = struct {};
+
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
+    _ = allocator;
 
     std.debug.print("\n==============================================================================================================================================\n", .{});
 
     var world = try World.init(allocator);
     defer world.deinit();
+    var entity = try world.createEntity("Foo");
+    var entity2 = try world.createEntity("Bar");
 
-    const entity = try world.createEntity();
-    world.dump();
-    try world.addComponent(entity.id, Position{ .position = .{ 1, 2, 3 } });
-    world.dump();
-    try world.addComponent(entity.id, Gravity{});
-    world.dump();
+    try world.addComponent(entity.id, ComponentA{ .i = 123 });
+    try world.addComponent(entity2.id, ComponentA{ .i = 456 });
 
-    const entity2 = try world.createEntity();
-    world.dump();
-    try world.addComponent(entity2.id, Position{ .position = .{ 4, 5, 6 } });
-    world.dump();
-    try world.addComponent(entity2.id, Gravity{});
-    world.dump();
-    try world.addComponent(entity2.id, 5);
-    world.dump();
-    try world.addComponent(entity2.id, true);
-    world.dump();
+    try world.addComponent(entity.id, ComponentB{ .b = true });
+    try world.addComponent(entity2.id, ComponentB{ .b = false });
 
-    try world.addComponent(entity.id, false);
-    world.dump();
-    try world.addComponent(entity.id, 69);
-    world.dump();
+    entity = try world.createEntity("Hans");
+    try world.addComponent(entity.id, ComponentA{ .i = 789 });
 
-    try world.addComponent(entity2.id, @intCast(u8, 5));
-    world.dump();
+    entity = try world.createEntity("im");
+    try world.addComponent(entity.id, ComponentA{ .i = 69 });
 
-    world.addSystem(testSystem);
+    entity = try world.createEntity("Glück");
+    try world.addComponent(entity.id, ComponentA{ .i = 420 });
 
     world.dump();
+    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, ComponentA }))) |table| {
+        std.log.info("Found table {}", .{table});
+        var x = table.getTyped(.{ Tag, ComponentA });
+        std.log.info("{}", .{x});
+
+        std.log.info("ComponentA", .{});
+        for (x.ComponentA) |*a, i| {
+            std.log.info("[{}] {}", .{ i, a.* });
+        }
+    }
+    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, ComponentB }))) |table| {
+        std.log.info("Found table {}", .{table});
+        var x = table.getTyped(.{ Tag, ComponentB });
+        std.log.info("{}", .{x});
+
+        std.log.info("ComponentB", .{});
+        for (x.ComponentB) |*a, i| {
+            std.log.info("[{}] {}", .{ i, a.* });
+        }
+    }
+    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, ComponentA, ComponentB }))) |table| {
+        std.log.info("Found table {}", .{table});
+        var x = table.getTyped(.{ Tag, ComponentA, ComponentB });
+        std.log.info("{}", .{x});
+
+        std.log.info("ComponentA", .{});
+        for (x.ComponentA) |*a, i| {
+            std.log.info("[{}] {}", .{ i, a.* });
+        }
+
+        std.log.info("ComponentB", .{});
+        for (x.ComponentB) |*a, i| {
+            std.log.info("[{}] {}", .{ i, a.* });
+        }
+    }
+
+    // var i: u64 = 0;
+    // while (i < 100) : (i += 1) {
+    //     const entity = try world.createEntity();
+    //     try world.addComponent(entity.id, ComponentA{});
+
+    //     const entity2 = try world.createEntity();
+    //     try world.addComponent(entity2.id, ComponentA{});
+    //     try world.addComponent(entity2.id, ComponentB{});
+
+    //     const entity3 = try world.createEntity();
+    //     try world.addComponent(entity3.id, ComponentC{});
+    //     try world.addComponent(entity3.id, ComponentB{});
+    //     try world.addComponent(entity3.id, ComponentA{});
+
+    //     const entity4 = try world.createEntity();
+    //     try world.addComponent(entity4.id, ComponentB{});
+    //     try world.addComponent(entity4.id, ComponentD{});
+    //     try world.addComponent(entity4.id, ComponentA{});
+    //     try world.addComponent(entity4.id, ComponentC{});
+    // }
+    // world.dump();
+
+    // const entity = try world.createEntity();
+    // world.dump();
+    // try world.addComponent(entity.id, Position{ .position = .{ 1, 2, 3 } });
+    // world.dump();
+    // try world.addComponent(entity.id, Gravity{});
+    // world.dump();
+
+    // const entity2 = try world.createEntity();
+    // world.dump();
+    // try world.addComponent(entity2.id, Position{ .position = .{ 4, 5, 6 } });
+    // world.dump();
+    // try world.addComponent(entity2.id, Gravity{});
+    // world.dump();
+    // try world.addComponent(entity2.id, 5);
+    // world.dump();
+    // try world.addComponent(entity2.id, true);
+    // world.dump();
+
+    // try world.addComponent(entity.id, false);
+    // world.dump();
+    // try world.addComponent(entity.id, 69);
+    // world.dump();
+
+    // try world.addComponent(entity2.id, @intCast(u8, 5));
+    // world.dump();
+
+    // world.addSystem(testSystem);
+
+    // world.dump();
 }
