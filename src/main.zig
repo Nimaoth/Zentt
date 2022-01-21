@@ -1,9 +1,5 @@
 const std = @import("std");
 
-// const TypeContext = struct {
-//     pub const hash = std.getAutoHashFn(std.builtin.TypeInfo, @This());
-//     pub const eql = std.getAutoEqlFn(std.builtin.TypeInfo, @This());
-// };
 pub const TypeId = struct {
     hash: u64,
     name: []const u8,
@@ -46,6 +42,63 @@ pub const TypeId = struct {
     }
 };
 
+//digraph graphname {
+//    "A" -> {B C}
+//    "A" -> X
+//    X -> " lol hi"
+//}
+pub const DotPrinter = struct {
+    const Self = @This();
+
+    pub fn init(writer: anytype) !Self {
+        try writer.writeAll("digraph Archetypes {");
+        return Self{};
+    }
+
+    pub fn deinit(self: *Self, writer: anytype) void {
+        _ = self;
+        writer.writeAll("\n}") catch {};
+    }
+
+    fn newLine(self: *Self, writer: anytype) anyerror!void {
+        _ = self;
+        try writer.writeAll("\n    ");
+    }
+
+    fn printTable(self: *Self, writer: anytype, table: *const ArchetypeTable) anyerror!void {
+        _ = self;
+        try std.fmt.format(writer, "\"{s}\"", .{table.archetype});
+    }
+
+    fn printConnection(self: *Self, writer: anytype, from: *const ArchetypeTable, to: *const ArchetypeTable, color: []const u8, diff: Archetype) anyerror!void {
+        _ = self;
+        try self.printTable(writer, from);
+        try writer.writeAll(" -> ");
+        try self.printTable(writer, to);
+        try std.fmt.format(writer, " [color={s}, label=\"{}\"]", .{ color, diff });
+    }
+
+    pub fn printGraph(self: *Self, writer: anytype, world: *const World) anyerror!void {
+        var tableIter = world.archetypeTables.valueIterator();
+        while (tableIter.next()) |table| {
+            try self.newLine(writer);
+            try self.printTable(writer, table.*);
+
+            var subsetIter = table.*.subsets.iterator();
+            while (subsetIter.next()) |entry| {
+                try self.newLine(writer);
+                try self.printConnection(writer, table.*, entry.value_ptr.*, "red", Archetype.init(@intToPtr(*World, @ptrToInt(world)), 0, entry.key_ptr.*));
+            }
+
+            // var supersetIter = table.*.supersets.valueIterator();
+            // while (supersetIter.next()) |superTable| {
+            //     try self.newLine(writer);
+            //     try self.printConnection(writer, table.*, superTable.*, "green");
+            // }
+        }
+    }
+};
+
 pub const ArchetypeTable = struct {
     const ComponentList = struct {
         data: std.ArrayListAligned(u8, 8),
@@ -58,7 +111,7 @@ pub const ArchetypeTable = struct {
                 .data = std.ArrayListAligned(u8, 8).init(allocator),
                 .componentId = componentId,
                 .componentType = componentType,
-                .stride = std.mem.alignForward(componentType.size, componentType.alignment),
+                .stride = if (componentType.size == 0) 0 else std.mem.alignForward(componentType.size, componentType.alignment),
             };
         }
 
@@ -101,6 +154,8 @@ pub const ArchetypeTable = struct {
     entities: std.ArrayList(u64),
     components: std.ArrayList(ComponentList),
     typeToList: std.HashMap(TypeId, u64, TypeId.Context, 80),
+    supersets: std.AutoHashMap(BitSet, *Self),
+    subsets: std.AutoHashMap(BitSet, *Self),
     archetype: Archetype,
 
     const Self = @This();
@@ -108,7 +163,7 @@ pub const ArchetypeTable = struct {
     pub fn init(archetype: Archetype, allocator: std.mem.Allocator) !Self {
         var components = std.ArrayList(ComponentList).init(allocator);
         var typeToList = std.HashMap(TypeId, u64, TypeId.Context, 80).init(allocator);
-        var iter = archetype.components.iterator(.{});
+        var iter = archetype.components.iterator();
         while (iter.next()) |componentId| {
             const componentType = archetype.world.getComponentType(componentId) orelse unreachable;
             try typeToList.put(componentType, components.items.len);
@@ -119,12 +174,16 @@ pub const ArchetypeTable = struct {
             .entities = std.ArrayList(u64).init(allocator),
             .typeToList = typeToList,
             .components = components,
+            .supersets = std.AutoHashMap(BitSet, *Self).init(allocator),
+            .subsets = std.AutoHashMap(BitSet, *Self).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.entities.deinit();
         self.typeToList.deinit();
+        self.supersets.deinit();
+        self.subsets.deinit();
 
         for (self.components.items) |*componentList| {
             componentList.deinit();
@@ -323,7 +382,57 @@ pub const ArchetypeTable = struct {
     };
 };
 
-pub const BitSet = std.bit_set.StaticBitSet(64);
+pub const BitSet = struct {
+    const Impl = std.bit_set.StaticBitSet(64);
+
+    bitSet: Impl,
+
+    const Self = @This();
+
+    pub fn initEmpty() @This() {
+        return @This(){ .bitSet = Impl.initEmpty() };
+    }
+
+    pub fn set(self: *Self, index: usize) void {
+        self.bitSet.set(index);
+    }
+
+    pub fn unset(self: *Self, index: usize) void {
+        self.bitSet.unset(index);
+    }
+
+    pub fn setUnion(self: *Self, other: BitSet) void {
+        self.bitSet.setUnion(other.bitSet);
+    }
+
+    pub fn setIntersection(self: *Self, other: BitSet) void {
+        self.bitSet.setIntersection(other.bitSet);
+    }
+
+    pub fn isSubSetOf(self: *const Self, other: Self) bool {
+        var sum = self.*;
+        sum.setUnion(other);
+        return std.meta.eql(sum, other);
+    }
+
+    pub fn isSuperSetOf(self: *const Self, other: Self) bool {
+        var sum = self.*;
+        sum.setUnion(other);
+        return std.meta.eql(sum, self.*);
+    }
+
+    pub fn subtract(self: *const Self, other: Self) Self {
+        var diff = self.*;
+        var otherInverse = other;
+        otherInverse.bitSet.toggleAll();
+        diff.setIntersection(otherInverse);
+        return diff;
+    }
+
+    pub fn iterator(self: *const Self) @TypeOf(Impl.initEmpty().iterator(.{})) {
+        return self.bitSet.iterator(.{});
+    }
+};
 
 // A < B = (A u B == B)
 
@@ -388,7 +497,7 @@ pub const Archetype = struct {
         _ = fmt;
         _ = options;
         try std.fmt.format(writer, "{{", .{});
-        var iter = self.components.iterator(.{});
+        var iter = self.components.iterator();
         var i: u64 = 0;
         while (iter.next()) |componentId| {
             defer i += 1;
@@ -482,6 +591,15 @@ pub const World = struct {
         std.debug.print("--------------------------------------------------------------\n", .{});
     }
 
+    pub fn dumpGraph(self: *Self) !void {
+        var graphFile = try std.fs.cwd().createFile("graph.gv", .{});
+        defer graphFile.close();
+        var dotPrinter = try DotPrinter.init(graphFile.writer());
+        defer dotPrinter.deinit(graphFile.writer());
+
+        try dotPrinter.printGraph(graphFile.writer(), self);
+    }
+
     pub fn addSystem(self: *Self, comptime System: anytype) void {
         _ = self;
         _ = System;
@@ -527,6 +645,21 @@ pub const World = struct {
         std.log.info("Creating new archetype table based on {}", .{archetype});
         var table = try self.globalPool.allocator().create(ArchetypeTable);
         table.* = try ArchetypeTable.init(archetype, self.allocator);
+
+        var tableIter = self.archetypeTables.valueIterator();
+        while (tableIter.next()) |otherTable| {
+            if (table.archetype.components.isSubSetOf(otherTable.*.archetype.components)) {
+                std.log.debug("add subset {} < {}", .{ table.archetype, otherTable.*.archetype });
+                try table.subsets.put(otherTable.*.archetype.components.subtract(table.archetype.components), otherTable.*);
+                try otherTable.*.supersets.put(otherTable.*.archetype.components.subtract(table.archetype.components), table);
+            }
+            if (table.archetype.components.isSuperSetOf(otherTable.*.archetype.components)) {
+                std.log.debug("add superset {} > {}", .{ table.archetype, otherTable.*.archetype });
+                try table.supersets.put(table.archetype.components.subtract(otherTable.*.archetype.components), otherTable.*);
+                try otherTable.*.subsets.put(table.archetype.components.subtract(otherTable.*.archetype.components), table);
+            }
+        }
+
         try self.archetypeTables.put(table, table);
         return table;
     }
@@ -642,10 +775,10 @@ const Tag = struct {
     }
 };
 const Gravity = struct {};
-const ComponentA = struct { i: i64 };
-const ComponentB = struct { b: bool };
-const ComponentC = struct {};
-const ComponentD = struct {};
+const A = struct { i: i64 };
+const B = struct { b: bool };
+const C = struct {};
+const D = struct {};
 
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -657,57 +790,60 @@ pub fn main() anyerror!void {
 
     var world = try World.init(allocator);
     defer world.deinit();
+    defer world.dumpGraph() catch {};
     var entity = try world.createEntity("Foo");
     var entity2 = try world.createEntity("Bar");
 
-    try world.addComponent(entity.id, ComponentA{ .i = 123 });
-    try world.addComponent(entity2.id, ComponentA{ .i = 456 });
+    try world.addComponent(entity.id, A{ .i = 123 });
+    try world.addComponent(entity2.id, A{ .i = 456 });
 
-    try world.addComponent(entity.id, ComponentB{ .b = true });
-    try world.addComponent(entity2.id, ComponentB{ .b = false });
+    try world.addComponent(entity.id, B{ .b = true });
+    try world.addComponent(entity2.id, B{ .b = false });
 
     entity = try world.createEntity("Hans");
-    try world.addComponent(entity.id, ComponentA{ .i = 789 });
+    try world.addComponent(entity.id, A{ .i = 789 });
 
     entity = try world.createEntity("im");
-    try world.addComponent(entity.id, ComponentA{ .i = 69 });
+    try world.addComponent(entity.id, A{ .i = 69 });
+    try world.addComponent(entity.id, D{});
 
     entity = try world.createEntity("Glück");
-    try world.addComponent(entity.id, ComponentA{ .i = 420 });
+    try world.addComponent(entity.id, A{ .i = 420 });
+    try world.addComponent(entity.id, C{});
 
     world.dump();
-    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, ComponentA }))) |table| {
+    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, A }))) |table| {
         std.log.info("Found table {}", .{table});
-        var x = table.getTyped(.{ Tag, ComponentA });
+        var x = table.getTyped(.{ Tag, A });
         std.log.info("{}", .{x});
 
-        std.log.info("ComponentA", .{});
-        for (x.ComponentA) |*a, i| {
+        std.log.info("A", .{});
+        for (x.A) |*a, i| {
             std.log.info("[{}] {}", .{ i, a.* });
         }
     }
-    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, ComponentB }))) |table| {
+    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, B }))) |table| {
         std.log.info("Found table {}", .{table});
-        var x = table.getTyped(.{ Tag, ComponentB });
+        var x = table.getTyped(.{ Tag, B });
         std.log.info("{}", .{x});
 
-        std.log.info("ComponentB", .{});
-        for (x.ComponentB) |*a, i| {
+        std.log.info("B", .{});
+        for (x.B) |*a, i| {
             std.log.info("[{}] {}", .{ i, a.* });
         }
     }
-    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, ComponentA, ComponentB }))) |table| {
+    if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, A, B }))) |table| {
         std.log.info("Found table {}", .{table});
-        var x = table.getTyped(.{ Tag, ComponentA, ComponentB });
+        var x = table.getTyped(.{ Tag, A, B });
         std.log.info("{}", .{x});
 
-        std.log.info("ComponentA", .{});
-        for (x.ComponentA) |*a, i| {
+        std.log.info("A", .{});
+        for (x.A) |*a, i| {
             std.log.info("[{}] {}", .{ i, a.* });
         }
 
-        std.log.info("ComponentB", .{});
-        for (x.ComponentB) |*a, i| {
+        std.log.info("B", .{});
+        for (x.B) |*a, i| {
             std.log.info("[{}] {}", .{ i, a.* });
         }
     }
@@ -715,22 +851,22 @@ pub fn main() anyerror!void {
     // var i: u64 = 0;
     // while (i < 100) : (i += 1) {
     //     const entity = try world.createEntity();
-    //     try world.addComponent(entity.id, ComponentA{});
+    //     try world.addComponent(entity.id, A{});
 
     //     const entity2 = try world.createEntity();
-    //     try world.addComponent(entity2.id, ComponentA{});
-    //     try world.addComponent(entity2.id, ComponentB{});
+    //     try world.addComponent(entity2.id, A{});
+    //     try world.addComponent(entity2.id, B{});
 
     //     const entity3 = try world.createEntity();
-    //     try world.addComponent(entity3.id, ComponentC{});
-    //     try world.addComponent(entity3.id, ComponentB{});
-    //     try world.addComponent(entity3.id, ComponentA{});
+    //     try world.addComponent(entity3.id, C{});
+    //     try world.addComponent(entity3.id, B{});
+    //     try world.addComponent(entity3.id, A{});
 
     //     const entity4 = try world.createEntity();
-    //     try world.addComponent(entity4.id, ComponentB{});
-    //     try world.addComponent(entity4.id, ComponentD{});
-    //     try world.addComponent(entity4.id, ComponentA{});
-    //     try world.addComponent(entity4.id, ComponentC{});
+    //     try world.addComponent(entity4.id, B{});
+    //     try world.addComponent(entity4.id, D{});
+    //     try world.addComponent(entity4.id, A{});
+    //     try world.addComponent(entity4.id, C{});
     // }
     // world.dump();
 
