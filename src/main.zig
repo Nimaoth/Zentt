@@ -1,5 +1,9 @@
 const std = @import("std");
 
+const gl = @import("zgl");
+const imgui = @import("imgui.zig");
+const sdl = @import("sdl.zig");
+
 const Rtti = @import("rtti.zig").Rtti;
 const EntityId = @import("entity.zig").EntityId;
 const ComponentId = @import("entity.zig").ComponentId;
@@ -66,32 +70,23 @@ pub fn testSystem5(query: Query(.{B})) !void {
     }
 }
 
-const gl = @import("zgl");
-const imgui = @import("imgui.zig");
-const epoxy = @cImport({
-    @cInclude("epoxy/gl.h");
-});
-const sdl = @import("sdl.zig");
-
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     _ = allocator;
 
-    //
+    // init SDL
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
         sdl.SDL_Log("Unable to initialize SDL: %s", sdl.SDL_GetError());
         return error.SDLInitializationFailed;
     }
     defer sdl.SDL_Quit();
 
+    // create window
     var window = try sdl.Window.init();
     defer window.deinit();
-
     window.makeContextCurrent();
-
-    std.log.info("gl version: {}", .{epoxy.epoxy_gl_version()});
 
     // init imgui
     _ = try imgui.createContext(null);
@@ -121,6 +116,8 @@ pub fn main() anyerror!void {
         }
 
         imgui.newFrame();
+
+        imgui.dockspace();
 
         if (show_demo_window) {
             imgui.showDemoWindow(&show_demo_window);

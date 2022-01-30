@@ -25,7 +25,7 @@ pub const Window = struct {
             c.SDL_WINDOWPOS_CENTERED,
             1280,
             720,
-            c.SDL_WINDOW_OPENGL,
+            c.SDL_WINDOW_OPENGL | c.SDL_WINDOW_RESIZABLE | c.SDL_WINDOW_MAXIMIZED,
         ) orelse {
             c.SDL_Log("Unable to create window: %s", c.SDL_GetError());
             return error.SDLInitializationFailed;

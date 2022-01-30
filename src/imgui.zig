@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const C = @cImport({
     @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", "1");
     @cInclude("cimgui.h");
@@ -66,4 +68,30 @@ pub fn updatePlatformWindows() void {
         C.igRenderPlatformWindowsDefault(null, null);
         _ = sdl.SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
     }
+}
+
+pub fn dockspace() void {
+    var io = getIO();
+
+    var dockspaceFlags: c_int = 0;
+    var windowFlags: c_int = C.ImGuiWindowFlags_NoDocking | C.ImGuiWindowFlags_NoTitleBar | C.ImGuiWindowFlags_NoTitleBar | C.ImGuiWindowFlags_NoCollapse | C.ImGuiWindowFlags_NoResize | C.ImGuiWindowFlags_NoMove | C.ImGuiWindowFlags_NoBringToFrontOnFocus | C.ImGuiWindowFlags_NoNavFocus;
+
+    const viewport = @ptrCast(*C.ImGuiViewport, C.igGetMainViewport());
+    C.igSetNextWindowPos(viewport.WorkPos, 0, .{.x = 0, .y = 0});
+    C.igSetNextWindowSize(viewport.WorkSize, 0);
+    C.igSetNextWindowViewport(viewport.ID);
+    C.igPushStyleVar_Float(C.ImGuiStyleVar_WindowRounding, 0);
+    C.igPushStyleVar_Float(C.ImGuiStyleVar_WindowBorderSize, 0);
+    C.igPushStyleVar_Vec2(C.ImGuiStyleVar_WindowPadding, .{.x = 0, .y = 0});
+    defer C.igPopStyleVar(3);
+
+    var open = true;
+    _ = C.igBegin("Dockspace", &open, windowFlags);
+
+    if ((io.ConfigFlags & C.ImGuiConfigFlags_DockingEnable) != 0) {
+        const id = C.igGetID_Str("Dockspace");
+        _ = C.igDockSpace(id, .{ .x = 0, .y = 0 }, dockspaceFlags, null);
+    }
+
+    C.igEnd();
 }
