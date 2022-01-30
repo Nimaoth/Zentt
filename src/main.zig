@@ -2,6 +2,7 @@ const std = @import("std");
 
 const gl = @import("zgl");
 const imgui = @import("imgui.zig");
+const imgui2 = @import("imgui2.zig");
 const sdl = @import("sdl.zig");
 
 const Rtti = @import("rtti.zig").Rtti;
@@ -89,14 +90,13 @@ pub fn main() anyerror!void {
     window.makeContextCurrent();
 
     // init imgui
-    _ = try imgui.createContext(null);
-    var io = imgui.getIO();
-    io.ConfigFlags |= (1 << 6); // enable docking
-    io.ConfigFlags |= (1 << 10); // enable viewports
-    _ = imgui.ImGui_ImplSDL2_InitForOpenGL(window.handle, true);
-    defer imgui.ImGui_ImplSDL2_Shutdown();
-    _ = imgui.ImGui_ImplOpenGL3_Init("#version 130");
-    defer imgui.ImGui_ImplOpenGL3_Shutdown();
+    _ = imgui.CreateContext();
+    var io = imgui.GetIO();
+    io.ConfigFlags = io.ConfigFlags.with(.{ .DockingEnable = true, .ViewportsEnable = true });
+    _ = imgui2.ImGui_ImplSDL2_InitForOpenGL(window.handle, true);
+    defer imgui2.ImGui_ImplSDL2_Shutdown();
+    _ = imgui2.ImGui_ImplOpenGL3_Init("#version 130");
+    defer imgui2.ImGui_ImplOpenGL3_Shutdown();
 
     var show_demo_window = true;
 
@@ -106,7 +106,7 @@ pub fn main() anyerror!void {
     while (!quit) {
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
-            _ = imgui.ImGui_ImplSDL2_ProcessEvent(event);
+            _ = imgui2.ImGui_ImplSDL2_ProcessEvent(event);
             switch (event.@"type") {
                 sdl.SDL_QUIT => {
                     quit = true;
@@ -115,23 +115,29 @@ pub fn main() anyerror!void {
             }
         }
 
-        imgui.newFrame();
-
-        imgui.dockspace();
+        imgui2.newFrame();
+        imgui2.dockspace();
 
         if (show_demo_window) {
-            imgui.showDemoWindow(&show_demo_window);
+            imgui2.showDemoWindow(&show_demo_window);
         }
 
-        imgui.endFrame();
-        imgui.render();
+        if (imgui.Begin("test")) {
+            if (imgui.Button("press")) {
+                std.log.debug("pressed", .{});
+            }
+        }
+        imgui.End();
+
+        imgui2.endFrame();
+        imgui2.render();
 
         gl.viewport(0, 0, @floatToInt(usize, io.DisplaySize.x), @floatToInt(usize, io.DisplaySize.y));
         gl.clearColor(1, 0, 1, 1);
         gl.clear(.{ .color = true });
 
-        imgui.ImGui_ImplOpenGL3_RenderDrawData(imgui.getDrawData());
-        imgui.updatePlatformWindows();
+        imgui2.ImGui_ImplOpenGL3_RenderDrawData(imgui2.getDrawData());
+        imgui2.updatePlatformWindows();
 
         window.swapBuffers();
     }
