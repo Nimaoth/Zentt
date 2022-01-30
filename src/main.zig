@@ -66,11 +66,78 @@ pub fn testSystem5(query: Query(.{B})) !void {
     }
 }
 
+const gl = @import("zgl");
+const imgui = @import("imgui.zig");
+const epoxy = @cImport({
+    @cInclude("epoxy/gl.h");
+});
+const sdl = @import("sdl.zig");
+
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
     _ = allocator;
+
+    //
+    if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
+        sdl.SDL_Log("Unable to initialize SDL: %s", sdl.SDL_GetError());
+        return error.SDLInitializationFailed;
+    }
+    defer sdl.SDL_Quit();
+
+    var window = try sdl.Window.init();
+    defer window.deinit();
+
+    window.makeContextCurrent();
+
+    std.log.info("gl version: {}", .{epoxy.epoxy_gl_version()});
+
+    // init imgui
+    _ = try imgui.createContext(null);
+    var io = imgui.getIO();
+    io.ConfigFlags |= (1 << 6); // enable docking
+    io.ConfigFlags |= (1 << 10); // enable viewports
+    _ = imgui.ImGui_ImplSDL2_InitForOpenGL(window.handle, true);
+    defer imgui.ImGui_ImplSDL2_Shutdown();
+    _ = imgui.ImGui_ImplOpenGL3_Init("#version 130");
+    defer imgui.ImGui_ImplOpenGL3_Shutdown();
+
+    var show_demo_window = true;
+
+    // Wait for the user to close the window.
+    std.debug.print("\n==============================================================================================================================================\n", .{});
+    var quit = false;
+    while (!quit) {
+        var event: sdl.SDL_Event = undefined;
+        while (sdl.SDL_PollEvent(&event) != 0) {
+            _ = imgui.ImGui_ImplSDL2_ProcessEvent(event);
+            switch (event.@"type") {
+                sdl.SDL_QUIT => {
+                    quit = true;
+                },
+                else => {},
+            }
+        }
+
+        imgui.newFrame();
+
+        if (show_demo_window) {
+            imgui.showDemoWindow(&show_demo_window);
+        }
+
+        imgui.endFrame();
+        imgui.render();
+
+        gl.viewport(0, 0, @floatToInt(usize, io.DisplaySize.x), @floatToInt(usize, io.DisplaySize.y));
+        gl.clearColor(1, 0, 1, 1);
+        gl.clear(.{ .color = true });
+
+        imgui.ImGui_ImplOpenGL3_RenderDrawData(imgui.getDrawData());
+        imgui.updatePlatformWindows();
+
+        window.swapBuffers();
+    }
 
     std.debug.print("\n==============================================================================================================================================\n", .{});
 

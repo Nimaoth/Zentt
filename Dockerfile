@@ -2,7 +2,16 @@ FROM debian
 
 # Install utilities
 RUN apt-get update
-RUN apt-get install -y curl xz-utils git build-essential manpages-dev gdb
+RUN apt-get install -y curl xz-utils git build-essential manpages-dev gdb meson ninja-build libegl1-mesa-dev libsdl2-dev
+
+# Install libepoxy
+WORKDIR /home
+RUN git clone https://github.com/anholt/libepoxy.git
+WORKDIR /home/libepoxy
+RUN meson _build
+WORKDIR /home/libepoxy/_build
+RUN meson compile
+RUN ninja install
 
 # Install zig
 WORKDIR /home/zig
