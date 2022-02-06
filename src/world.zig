@@ -9,6 +9,16 @@ const BitSet = @import("bit_set.zig");
 const DotPrinter = @import("dot_printer.zig");
 const Query = @import("query.zig").Query;
 const SystemParameterType = @import("system_parameter_type.zig").SystemParameterType;
+const imgui = @import("imgui.zig");
+const imgui2 = @import("imgui2.zig");
+
+const System = struct {
+    const InvokeFunction = fn (world: *Self) anyerror!void;
+
+    name: [*:0]const u8,
+    invoke: InvokeFunction,
+    enabled: bool = true,
+};
 
 allocator: std.mem.Allocator,
 globalPool: std.heap.ArenaAllocator,
@@ -19,6 +29,7 @@ entities: std.AutoHashMap(u64, Entity),
 nextEntityId: u64 = 1,
 components: std.HashMap(Rtti, u64, Rtti.Context, 80),
 componentIdToComponentType: std.ArrayList(Rtti),
+frameSystems: std.ArrayList(System),
 
 const Self = @This();
 
@@ -33,6 +44,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .entities = @TypeOf(world.entities).init(allocator),
         .components = @TypeOf(world.components).init(allocator),
         .componentIdToComponentType = @TypeOf(world.componentIdToComponentType).init(allocator),
+        .frameSystems = @TypeOf(world.frameSystems).init(allocator),
     };
 
     // Create archetype table for empty entities.
@@ -87,10 +99,27 @@ pub fn dumpGraph(self: *Self) !void {
     try dotPrinter.printGraph(graphFile.writer(), self);
 }
 
-pub fn runSystem(self: *Self, comptime system: anytype) !void {
-    _ = self;
-    _ = system;
+pub fn runFrameSystems(self: *Self) !void {
+    for (self.frameSystems.items) |*system| {
+        _ = imgui.Begin(system.name);
+        _ = imgui.Checkbox("Enabled", &system.enabled);
+        if (system.enabled) {
+            try system.invoke(self);
+        }
+        imgui.End();
+    }
+}
 
+pub fn addSystem(self: *Self, comptime system: anytype, name: [*:0]const u8) !void {
+    const wrapper = try createSystemWrapper(system);
+    try self.frameSystems.append(.{
+        .name = name,
+        .invoke = wrapper,
+        .enabled = true,
+    });
+}
+
+pub fn createSystemWrapper(comptime system: anytype) !System.InvokeFunction {
     const X = struct {
         pub fn invoke(world: *Self) !void {
             const ArgsType = std.meta.ArgsTuple(@TypeOf(system));
@@ -109,7 +138,42 @@ pub fn runSystem(self: *Self, comptime system: anytype) !void {
                             const archetype = try world.createArchetypeStruct(ComponentTypes);
 
                             var tables = try world.getDirectSupersetTables(archetype);
-                            @field(args, field.name) = ParamType.init(tables.items);
+                            @field(args, field.name) = ParamType.init(tables.items, true);
+
+                            {
+                                var iter = @field(args, field.name).iter();
+
+                                var tableFlags = imgui.TableFlags{
+                                    .Resizable = true,
+                                    .RowBg = true,
+                                    .Sortable = true,
+                                };
+                                tableFlags = tableFlags.with(imgui.TableFlags.Borders);
+                                if (imgui.BeginTable("Entities", @intCast(i32, ParamType.ComponentCount + 1), tableFlags, .{}, 0)) {
+                                    const componentsTypeInfo = @typeInfo(@TypeOf(ParamType.ComponentTypes)).Struct;
+                                    imgui.TableSetupColumn("Entity ID", .{}, 0, 0);
+                                    inline for (componentsTypeInfo.fields) |componentInfo| {
+                                        const ComponentType = componentInfo.default_value orelse unreachable;
+                                        imgui.TableSetupColumn(@typeName(ComponentType), .{}, 0, 0);
+                                    }
+                                    imgui.TableHeadersRow();
+
+                                    defer imgui.EndTable();
+                                    while (iter.next()) |entity| {
+                                        imgui.TableNextRow(.{}, 0);
+                                        _ = imgui.TableSetColumnIndex(0);
+                                        imgui.Text("%d", entity.id);
+                                        inline for (componentsTypeInfo.fields) |componentInfo, i| {
+                                            const ComponentType = componentInfo.default_value orelse unreachable;
+                                            _ = ComponentType;
+                                            _ = imgui.TableSetColumnIndex(@intCast(i32, i + 1));
+                                            if (@hasField(@TypeOf(entity), @typeName(ComponentType))) {
+                                                imgui2.any(@field(entity, @typeName(ComponentType)), "");
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         },
                     }
                 }
@@ -119,7 +183,7 @@ pub fn runSystem(self: *Self, comptime system: anytype) !void {
         }
     };
 
-    try X.invoke(self);
+    return X.invoke;
 }
 
 pub fn createEntity(self: *Self, name: []const u8) !Entity {

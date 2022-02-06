@@ -849,6 +849,178 @@ pub const KeyModFlags = packed struct {
     pub usingnamespace FlagsMixin(Self);
 };
 
+pub const TableFlagsInt = FlagsInt;
+pub const TableFlags = packed struct {
+    Resizable: bool = false,
+    Reorderable: bool = false,
+    Hideable: bool = false,
+    Sortable: bool = false,
+    NoSavedSettings: bool = false,
+    ContextMenuInBody: bool = false,
+    RowBg: bool = false,
+    BordersInnerH: bool = false,
+    BordersOuterH: bool = false,
+    BordersInnerV: bool = false,
+    BordersOuterV: bool = false,
+    NoBordersInBody: bool = false,
+    NoBordersInBodyUntilResize: bool = false,
+    SizingFixedFit: bool = false,
+    SizingFixedSame: bool = false,
+    SizingStretchSame: bool = false,
+    NoHostExtendX: bool = false,
+    NoHostExtendY: bool = false,
+    NoKeepColumnsVisible: bool = false,
+    PreciseWidths: bool = false,
+    NoClip: bool = false,
+    PadOuterX: bool = false,
+    NoPadOuterX: bool = false,
+    NoPadInnerX: bool = false,
+    ScrollX: bool = false,
+    ScrollY: bool = false,
+    SortMulti: bool = false,
+    SortTristate: bool = false,
+
+    __reserved_bit_28: bool = false,
+    __reserved_bit_29: bool = false,
+    __reserved_bit_30: bool = false,
+    __reserved_bit_31: bool = false,
+
+    const Self = @This();
+    pub const None = Self{};
+
+    pub const BordersH = Self{ .BordersInnerH = true, .BordersOuterH = true };
+    pub const BordersV = Self{ .BordersInnerV = true, .BordersOuterV = true };
+    pub const BordersInner = Self{ .BordersInnerH = true, .BordersInnerH = true };
+    pub const BordersOuter = Self{ .BordersOuterV = true, .BordersOuterH = true };
+    pub const Borders = Self{ .BordersInnerH = true, .BordersOuterH = true, .BordersInnerV = true, .BordersOuterV = true };
+    pub const SizingStretchProp = Self{ .SizingFixedFit = true, .SizingFixedSame = true };
+
+    pub usingnamespace FlagsMixin(Self);
+};
+
+pub const TableColumnFlagsInt = FlagsInt;
+pub const TableColumnFlags = packed struct {
+    Disabled: bool = false,
+    __reserved_bit_01: bool = false,
+    __reserved_bit_02: bool = false,
+    __reserved_bit_03: bool = false,
+    __reserved_bit_04: bool = false,
+    __reserved_bit_05: bool = false,
+    __reserved_bit_06: bool = false,
+    __reserved_bit_07: bool = false,
+    __reserved_bit_08: bool = false,
+    __reserved_bit_09: bool = false,
+    __reserved_bit_10: bool = false,
+    __reserved_bit_11: bool = false,
+    __reserved_bit_12: bool = false,
+    __reserved_bit_13: bool = false,
+    __reserved_bit_14: bool = false,
+    __reserved_bit_15: bool = false,
+    __reserved_bit_16: bool = false,
+    __reserved_bit_17: bool = false,
+    __reserved_bit_18: bool = false,
+    __reserved_bit_19: bool = false,
+    __reserved_bit_20: bool = false,
+    __reserved_bit_21: bool = false,
+    __reserved_bit_22: bool = false,
+    __reserved_bit_23: bool = false,
+    __reserved_bit_24: bool = false,
+    __reserved_bit_25: bool = false,
+    __reserved_bit_26: bool = false,
+    __reserved_bit_27: bool = false,
+    __reserved_bit_28: bool = false,
+    __reserved_bit_29: bool = false,
+    __reserved_bit_30: bool = false,
+    __reserved_bit_31: bool = false,
+
+    const Self = @This();
+    pub const None = Self{};
+
+    pub usingnamespace FlagsMixin(Self);
+};
+
+pub const TableRowFlagsInt = FlagsInt;
+pub const TableRowFlags = packed struct {
+    Headers: bool = false,
+    __reserved_bit_01: bool = false,
+    __reserved_bit_02: bool = false,
+    __reserved_bit_03: bool = false,
+    __reserved_bit_04: bool = false,
+    __reserved_bit_05: bool = false,
+    __reserved_bit_06: bool = false,
+    __reserved_bit_07: bool = false,
+    __reserved_bit_08: bool = false,
+    __reserved_bit_09: bool = false,
+    __reserved_bit_10: bool = false,
+    __reserved_bit_11: bool = false,
+    __reserved_bit_12: bool = false,
+    __reserved_bit_13: bool = false,
+    __reserved_bit_14: bool = false,
+    __reserved_bit_15: bool = false,
+    __reserved_bit_16: bool = false,
+    __reserved_bit_17: bool = false,
+    __reserved_bit_18: bool = false,
+    __reserved_bit_19: bool = false,
+    __reserved_bit_20: bool = false,
+    __reserved_bit_21: bool = false,
+    __reserved_bit_22: bool = false,
+    __reserved_bit_23: bool = false,
+    __reserved_bit_24: bool = false,
+    __reserved_bit_25: bool = false,
+    __reserved_bit_26: bool = false,
+    __reserved_bit_27: bool = false,
+    __reserved_bit_28: bool = false,
+    __reserved_bit_29: bool = false,
+    __reserved_bit_30: bool = false,
+    __reserved_bit_31: bool = false,
+
+    const Self = @This();
+    pub const None = Self{};
+
+    pub usingnamespace FlagsMixin(Self);
+};
+
+pub const SliderFlagsInt = FlagsInt;
+pub const SliderFlags = packed struct {
+    AlwaysClamp: bool = false,
+    Logarithmic: bool = false,
+    NoRoundToFormat: bool = false,
+    NoInput: bool = false,
+    __reserved_bit_04: bool = false,
+    __reserved_bit_05: bool = false,
+    __reserved_bit_06: bool = false,
+    __reserved_bit_07: bool = false,
+    __reserved_bit_08: bool = false,
+    __reserved_bit_09: bool = false,
+    __reserved_bit_10: bool = false,
+    __reserved_bit_11: bool = false,
+    __reserved_bit_12: bool = false,
+    __reserved_bit_13: bool = false,
+    __reserved_bit_14: bool = false,
+    __reserved_bit_15: bool = false,
+    __reserved_bit_16: bool = false,
+    __reserved_bit_17: bool = false,
+    __reserved_bit_18: bool = false,
+    __reserved_bit_19: bool = false,
+    __reserved_bit_20: bool = false,
+    __reserved_bit_21: bool = false,
+    __reserved_bit_22: bool = false,
+    __reserved_bit_23: bool = false,
+    __reserved_bit_24: bool = false,
+    __reserved_bit_25: bool = false,
+    __reserved_bit_26: bool = false,
+    __reserved_bit_27: bool = false,
+    __reserved_bit_28: bool = false,
+    __reserved_bit_29: bool = false,
+    __reserved_bit_30: bool = false,
+    __reserved_bit_31: bool = false,
+
+    const Self = @This();
+    pub const None = Self{};
+
+    pub usingnamespace FlagsMixin(Self);
+};
+
 pub const Col = enum(i32) {
     Text = 0,
     TextDisabled = 1,
@@ -2148,8 +2320,8 @@ pub const TextRange = extern struct {
 };
 
 pub const Vec2 = extern struct {
-    x: f32,
-    y: f32,
+    x: f32 = 0,
+    y: f32 = 0,
 
     /// init(self: *Vec2) void
     pub const init = raw.ImVec2_ImVec2;
@@ -2162,10 +2334,10 @@ pub const Vec2 = extern struct {
 };
 
 pub const Vec4 = extern struct {
-    x: f32,
-    y: f32,
-    z: f32,
-    w: f32,
+    x: f32 = 0,
+    y: f32 = 0,
+    z: f32 = 0,
+    w: f32 = 0,
 
     /// init(self: *Vec4) void
     pub const init = raw.ImVec4_ImVec4;
@@ -3685,13 +3857,13 @@ pub inline fn DragIntRange2(label: ?[*:0]const u8, v_current_min: *i32, v_curren
 /// DragScalarExt(label: ?[*:0]const u8, data_type: DataType, p_data: ?*c_void, v_speed: f32, p_min: ?*const c_void, p_max: ?*const c_void, format: ?[*:0]const u8, power: f32) bool
 pub const DragScalarExt = raw.igDragScalar;
 pub inline fn DragScalar(label: ?[*:0]const u8, data_type: DataType, p_data: ?*anyopaque, v_speed: f32) bool {
-    return DragScalarExt(label, data_type, p_data, v_speed, null, null, null, 1.0);
+    return DragScalarExt(label, data_type, p_data, v_speed, null, null, null, SliderFlags.None.toInt());
 }
 
 /// DragScalarNExt(label: ?[*:0]const u8, data_type: DataType, p_data: ?*c_void, components: i32, v_speed: f32, p_min: ?*const c_void, p_max: ?*const c_void, format: ?[*:0]const u8, power: f32) bool
 pub const DragScalarNExt = raw.igDragScalarN;
 pub inline fn DragScalarN(label: ?[*:0]const u8, data_type: DataType, p_data: ?*anyopaque, components: i32, v_speed: f32) bool {
-    return DragScalarNExt(label, data_type, p_data, components, v_speed, null, null, null, 1.0);
+    return DragScalarNExt(label, data_type, p_data, components, v_speed, null, null, null, SliderFlags.None.toInt());
 }
 
 /// Dummy(size: Vec2) void
@@ -4426,10 +4598,10 @@ pub const PushStyleColorU32 = raw.igPushStyleColorU32;
 pub const PushStyleColorVec4 = raw.igPushStyleColorVec4;
 
 /// PushStyleVarFloat(idx: StyleVar, val: f32) void
-pub const PushStyleVarFloat = raw.igPushStyleVarFloat;
+pub const PushStyleVarFloat = raw.igPushStyleVar_Float;
 
 /// PushStyleVarVec2(idx: StyleVar, val: Vec2) void
-pub const PushStyleVarVec2 = raw.igPushStyleVarVec2;
+pub const PushStyleVarVec2 = raw.igPushStyleVar_Vec2;
 
 /// PushTextWrapPosExt(wrap_local_pos_x: f32) void
 pub const PushTextWrapPosExt = raw.igPushTextWrapPos;
@@ -4818,26 +4990,26 @@ pub inline fn TextUnformatted(text: ?[*]const u8) void {
 pub const TextWrapped = raw.igTextWrapped;
 
 /// TreeNodeStr(label: ?[*:0]const u8) bool
-pub const TreeNodeStr = raw.igTreeNodeStr;
+pub const TreeNodeStr = raw.igTreeNode_Str;
 
 /// TreeNodeStrStr(str_id: ?[*:0]const u8, fmt: ?[*:0]const u8, ...: ...) bool
-pub const TreeNodeStrStr = raw.igTreeNodeStrStr;
+pub const TreeNodeStrStr = raw.igTreeNode_StrStr;
 
 /// TreeNodePtr(ptr_id: ?*const c_void, fmt: ?[*:0]const u8, ...: ...) bool
-pub const TreeNodePtr = raw.igTreeNodePtr;
+pub const TreeNodePtr = raw.igTreeNode_Ptr;
 
 pub inline fn TreeNodeExStrExt(label: ?[*:0]const u8, flags: TreeNodeFlags) bool {
-    return raw.igTreeNodeExStr(label, flags.toInt());
+    return raw.igTreeNodeEx_Str(label, flags.toInt());
 }
 pub inline fn TreeNodeExStr(label: ?[*:0]const u8) bool {
     return TreeNodeExStrExt(label, .{});
 }
 
 /// TreeNodeExStrStr(str_id: ?[*:0]const u8, flags: TreeNodeFlags, fmt: ?[*:0]const u8, ...: ...) bool
-pub const TreeNodeExStrStr = raw.igTreeNodeExStrStr;
+pub const TreeNodeExStrStr = raw.igTreeNodeEx_StrStr;
 
 /// TreeNodeExPtr(ptr_id: ?*const c_void, flags: TreeNodeFlags, fmt: ?[*:0]const u8, ...: ...) bool
-pub const TreeNodeExPtr = raw.igTreeNodeExPtr;
+pub const TreeNodeExPtr = raw.igTreeNodeEx_Ptr;
 
 /// TreePop() void
 pub const TreePop = raw.igTreePop;
@@ -4889,6 +5061,22 @@ pub const ValueFloatExt = raw.igValueFloat;
 pub inline fn ValueFloat(prefix: ?[*:0]const u8, v: f32) void {
     return ValueFloatExt(prefix, v, null);
 }
+
+pub fn BeginTable(str_id: ?[*:0]const u8, column: i32, flags: TableFlags, outer_size: Vec2, inner_width: f32) bool {
+    return raw.igBeginTable(str_id, column, flags.toInt(), outer_size, inner_width);
+}
+pub const EndTable = raw.igEndTable;
+pub fn TableNextRow(row_flags: TableRowFlags, min_row_height: f32) void {
+    raw.igTableNextRow(row_flags.toInt(), min_row_height);
+}
+pub const TableNextColumn = raw.igTableNextColumn;
+pub const TableSetColumnIndex = raw.igTableSetColumnIndex;
+pub fn TableSetupColumn(label: ?[*:0]const u8, flags: TableColumnFlags, init_width_or_weight: f32, user_id: ID) void {
+    raw.igTableSetupColumn(label, flags.toInt(), init_width_or_weight, user_id);
+}
+pub const TableSetupScrollFreeze = raw.igTableSetupScrollFreeze;
+pub const TableHeadersRow = raw.igTableHeadersRow;
+pub const TableHeader = raw.igTableHeader;
 
 pub const raw = struct {
     pub extern fn ImColor_HSV_nonUDT(pOut: *Color, self: *Color, h: f32, s: f32, v: f32, a: f32) callconv(.C) void;
@@ -5710,8 +5898,8 @@ pub const raw = struct {
     pub extern fn igDragInt3(label: ?[*:0]const u8, v: *[3]i32, v_speed: f32, v_min: i32, v_max: i32, format: ?[*:0]const u8) callconv(.C) bool;
     pub extern fn igDragInt4(label: ?[*:0]const u8, v: *[4]i32, v_speed: f32, v_min: i32, v_max: i32, format: ?[*:0]const u8) callconv(.C) bool;
     pub extern fn igDragIntRange2(label: ?[*:0]const u8, v_current_min: *i32, v_current_max: *i32, v_speed: f32, v_min: i32, v_max: i32, format: ?[*:0]const u8, format_max: ?[*:0]const u8) callconv(.C) bool;
-    pub extern fn igDragScalar(label: ?[*:0]const u8, data_type: DataType, p_data: ?*anyopaque, v_speed: f32, p_min: ?*const anyopaque, p_max: ?*const anyopaque, format: ?[*:0]const u8, power: f32) callconv(.C) bool;
-    pub extern fn igDragScalarN(label: ?[*:0]const u8, data_type: DataType, p_data: ?*anyopaque, components: i32, v_speed: f32, p_min: ?*const anyopaque, p_max: ?*const anyopaque, format: ?[*:0]const u8, power: f32) callconv(.C) bool;
+    pub extern fn igDragScalar(label: ?[*:0]const u8, data_type: DataType, p_data: ?*anyopaque, v_speed: f32, p_min: ?*const anyopaque, p_max: ?*const anyopaque, format: ?[*:0]const u8, flags: SliderFlagsInt) callconv(.C) bool;
+    pub extern fn igDragScalarN(label: ?[*:0]const u8, data_type: DataType, p_data: ?*anyopaque, components: i32, v_speed: f32, p_min: ?*const anyopaque, p_max: ?*const anyopaque, format: ?[*:0]const u8, flags: SliderFlagsInt) callconv(.C) bool;
     pub extern fn igDummy(size: Vec2) callconv(.C) void;
     pub extern fn igEnd() callconv(.C) void;
     pub extern fn igEndChild() callconv(.C) void;
@@ -5886,8 +6074,8 @@ pub const raw = struct {
     pub extern fn igPushItemWidth(item_width: f32) callconv(.C) void;
     pub extern fn igPushStyleColorU32(idx: Col, col: u32) callconv(.C) void;
     pub extern fn igPushStyleColorVec4(idx: Col, col: Vec4) callconv(.C) void;
-    pub extern fn igPushStyleVarFloat(idx: StyleVar, val: f32) callconv(.C) void;
-    pub extern fn igPushStyleVarVec2(idx: StyleVar, val: Vec2) callconv(.C) void;
+    pub extern fn igPushStyleVar_Float(idx: StyleVar, val: f32) callconv(.C) void;
+    pub extern fn igPushStyleVar_Vec2(idx: StyleVar, val: Vec2) callconv(.C) void;
     pub extern fn igPushTextWrapPos(wrap_local_pos_x: f32) callconv(.C) void;
     pub extern fn igRadioButtonBool(label: ?[*:0]const u8, active: bool) callconv(.C) bool;
     pub extern fn igRadioButtonIntPtr(label: ?[*:0]const u8, v: *i32, v_button: i32) callconv(.C) bool;
@@ -5969,15 +6157,15 @@ pub const raw = struct {
     pub extern fn igTextDisabled(fmt: ?[*:0]const u8, ...) callconv(.C) void;
     pub extern fn igTextUnformatted(text: ?[*]const u8, text_end: ?[*]const u8) callconv(.C) void;
     pub extern fn igTextWrapped(fmt: ?[*:0]const u8, ...) callconv(.C) void;
-    pub extern fn igTreeNodeStr(label: ?[*:0]const u8) callconv(.C) bool;
-    pub extern fn igTreeNodeStrStr(str_id: ?[*:0]const u8, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
-    pub extern fn igTreeNodePtr(ptr_id: ?*const anyopaque, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
-    pub extern fn igTreeNodeExStr(label: ?[*:0]const u8, flags: TreeNodeFlagsInt) callconv(.C) bool;
-    pub extern fn igTreeNodeExStrStr(str_id: ?[*:0]const u8, flags: TreeNodeFlagsInt, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
-    pub extern fn igTreeNodeExPtr(ptr_id: ?*const anyopaque, flags: TreeNodeFlagsInt, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
+    pub extern fn igTreeNode_Str(label: ?[*:0]const u8) callconv(.C) bool;
+    pub extern fn igTreeNode_StrStr(str_id: ?[*:0]const u8, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
+    pub extern fn igTreeNode_Ptr(ptr_id: ?*const anyopaque, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
+    pub extern fn igTreeNodeEx_Str(label: ?[*:0]const u8, flags: TreeNodeFlagsInt) callconv(.C) bool;
+    pub extern fn igTreeNodeEx_StrStr(str_id: ?[*:0]const u8, flags: TreeNodeFlagsInt, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
+    pub extern fn igTreeNodeEx_Ptr(ptr_id: ?*const anyopaque, flags: TreeNodeFlagsInt, fmt: ?[*:0]const u8, ...) callconv(.C) bool;
     pub extern fn igTreePop() callconv(.C) void;
-    pub extern fn igTreePushStr(str_id: ?[*:0]const u8) callconv(.C) void;
-    pub extern fn igTreePushPtr(ptr_id: ?*const anyopaque) callconv(.C) void;
+    pub extern fn igTreePush_Str(str_id: ?[*:0]const u8) callconv(.C) void;
+    pub extern fn igTreePush_Ptr(ptr_id: ?*const anyopaque) callconv(.C) void;
     pub extern fn igUnindent(indent_w: f32) callconv(.C) void;
     pub extern fn igVSliderFloat(label: ?[*:0]const u8, size: Vec2, v: *f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) callconv(.C) bool;
     pub extern fn igVSliderInt(label: ?[*:0]const u8, size: Vec2, v: *i32, v_min: i32, v_max: i32, format: ?[*:0]const u8) callconv(.C) bool;
@@ -5986,4 +6174,13 @@ pub const raw = struct {
     pub extern fn igValueInt(prefix: ?[*:0]const u8, v: i32) callconv(.C) void;
     pub extern fn igValueUint(prefix: ?[*:0]const u8, v: u32) callconv(.C) void;
     pub extern fn igValueFloat(prefix: ?[*:0]const u8, v: f32, float_format: ?[*:0]const u8) callconv(.C) void;
+    pub extern fn igBeginTable(str_id: ?[*:0]const u8, column: i32, flags: TableFlagsInt, outer_size: Vec2, inner_width: f32) bool;
+    pub extern fn igEndTable() void;
+    pub extern fn igTableNextRow(row_flags: TableRowFlagsInt, min_row_height: f32) void;
+    pub extern fn igTableNextColumn() bool;
+    pub extern fn igTableSetColumnIndex(column_n: i32) bool;
+    pub extern fn igTableSetupColumn(label: ?[*:0]const u8, flags: TableColumnFlagsInt, init_width_or_weight: f32, user_id: ID) void;
+    pub extern fn igTableSetupScrollFreeze(cols: i32, rows: i32) void;
+    pub extern fn igTableHeadersRow() void;
+    pub extern fn igTableHeader(label: ?[*:0]const u8) void;
 };

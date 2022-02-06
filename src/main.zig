@@ -25,49 +25,44 @@ const Tag = struct {
         try std.fmt.format(writer, "Tag{{ {s} }}", .{self.name});
     }
 };
-const Gravity = struct {};
+const Gravity = struct { uiae: i32 = 99 };
 const A = struct { i: i64 };
-const B = struct { b: bool };
+const B = struct { b: bool, Gravity: Gravity = .{} };
 const C = struct { i: i16 = 123, b: bool = true, u: u8 = 9 };
 const D = struct {};
 
 pub fn testSystem1(query: Query(.{A})) !void {
-    std.log.info("A", .{});
     var iter = query.iter();
     while (iter.next()) |entity| {
-        std.log.info("{}", .{entity});
+        _ = entity;
     }
 }
 
 pub fn testSystem2(query: Query(.{ A, B })) !void {
-    std.log.info("A, B", .{});
     var iter = query.iter();
     while (iter.next()) |entity| {
-        std.log.info("{}", .{entity});
+        _ = entity;
     }
 }
 
 pub fn testSystem3(query: Query(.{ A, B, C })) !void {
-    std.log.info("A, B, C", .{});
     var iter = query.iter();
     while (iter.next()) |entity| {
-        std.log.info("{}", .{entity});
+        _ = entity;
     }
 }
 
 pub fn testSystem4(query: Query(.{ A, B, C, D })) !void {
-    std.log.info("A, B, C, D", .{});
     var iter = query.iter();
     while (iter.next()) |entity| {
-        std.log.info("{}", .{entity});
+        _ = entity;
     }
 }
 
 pub fn testSystem5(query: Query(.{B})) !void {
-    std.log.info("B", .{});
     var iter = query.iter();
     while (iter.next()) |entity| {
-        std.log.info("{}", .{entity});
+        _ = entity;
     }
 }
 
@@ -97,52 +92,6 @@ pub fn main() anyerror!void {
     defer imgui2.ImGui_ImplSDL2_Shutdown();
     _ = imgui2.ImGui_ImplOpenGL3_Init("#version 130");
     defer imgui2.ImGui_ImplOpenGL3_Shutdown();
-
-    var show_demo_window = true;
-
-    // Wait for the user to close the window.
-    std.debug.print("\n==============================================================================================================================================\n", .{});
-    var quit = false;
-    while (!quit) {
-        var event: sdl.SDL_Event = undefined;
-        while (sdl.SDL_PollEvent(&event) != 0) {
-            _ = imgui2.ImGui_ImplSDL2_ProcessEvent(event);
-            switch (event.@"type") {
-                sdl.SDL_QUIT => {
-                    quit = true;
-                },
-                else => {},
-            }
-        }
-
-        imgui2.newFrame();
-        imgui2.dockspace();
-
-        if (show_demo_window) {
-            imgui2.showDemoWindow(&show_demo_window);
-        }
-
-        if (imgui.Begin("test")) {
-            if (imgui.Button("press")) {
-                std.log.debug("pressed", .{});
-            }
-        }
-        imgui.End();
-
-        imgui2.endFrame();
-        imgui2.render();
-
-        gl.viewport(0, 0, @floatToInt(usize, io.DisplaySize.x), @floatToInt(usize, io.DisplaySize.y));
-        gl.clearColor(1, 0, 1, 1);
-        gl.clear(.{ .color = true });
-
-        imgui2.ImGui_ImplOpenGL3_RenderDrawData(imgui2.getDrawData());
-        imgui2.updatePlatformWindows();
-
-        window.swapBuffers();
-    }
-
-    std.debug.print("\n==============================================================================================================================================\n", .{});
 
     var world = try World.init(allocator);
     defer world.deinit();
@@ -190,12 +139,95 @@ pub fn main() anyerror!void {
         .addComponent(D{})
         .build();
 
+    try world.addSystem(testSystem1, "{A}");
+    try world.addSystem(testSystem2, "{A, B}");
+    try world.addSystem(testSystem3, "{A, B, C}");
+    try world.addSystem(testSystem4, "{A, B, C, D}");
+    try world.addSystem(testSystem5, "{B}");
+
+    var show_demo_window = true;
+
+    // Wait for the user to close the window.
+    std.debug.print("\n==============================================================================================================================================\n", .{});
+    var quit = false;
+
+    var lastFrameTime = std.time.nanoTimestamp();
+    var frameTime: f64 = 0;
+    while (!quit) {
+        var event: sdl.SDL_Event = undefined;
+        while (sdl.SDL_PollEvent(&event) != 0) {
+            _ = imgui2.ImGui_ImplSDL2_ProcessEvent(event);
+            switch (event.@"type") {
+                sdl.SDL_QUIT => {
+                    quit = true;
+                },
+                else => {},
+            }
+        }
+
+        const currentFrameTime = std.time.nanoTimestamp();
+        const frameTimeNs = currentFrameTime - lastFrameTime;
+        frameTime = (0.9 * frameTime) + (0.1 * (@intToFloat(f64, frameTimeNs) / std.time.ns_per_ms));
+        lastFrameTime = currentFrameTime;
+        var fps: f64 = blk: {
+            if (frameTime == 0) {
+                break :blk -1;
+            } else {
+                break :blk (1000.0 / frameTime);
+            }
+        };
+
+        imgui2.newFrame();
+        imgui2.dockspace();
+
+        if (show_demo_window) {
+            imgui2.showDemoWindow(&show_demo_window);
+        }
+
+        if (imgui.Begin("Stats")) {
+            imgui.LabelText("Frame time: ", "%.2f", frameTime);
+            imgui.LabelText("FPS: ", "%.1f", fps);
+        }
+        imgui.End();
+
+        if (imgui.Begin("Entities")) {
+            var tableFlags = imgui.TableFlags{
+                .Resizable = true,
+                .RowBg = true,
+                .Sortable = true,
+            };
+            tableFlags = tableFlags.with(imgui.TableFlags.Borders);
+            if (imgui.BeginTable("Entities", 2, tableFlags, .{}, 0)) {
+                defer imgui.EndTable();
+
+                var entityIter = world.entities.iterator();
+                while (entityIter.next()) |entry| {
+                    imgui.TableNextRow(.{}, 0);
+                    _ = imgui.TableSetColumnIndex(0);
+                    imgui.Text("%d", entry.key_ptr.*);
+                }
+            }
+        }
+        imgui.End();
+
+        try world.runFrameSystems();
+
+        imgui2.endFrame();
+        imgui2.render();
+
+        gl.viewport(0, 0, @floatToInt(usize, io.DisplaySize.x), @floatToInt(usize, io.DisplaySize.y));
+        gl.clearColor(1, 0, 1, 1);
+        gl.clear(.{ .color = true });
+
+        imgui2.ImGui_ImplOpenGL3_RenderDrawData(imgui2.getDrawData());
+        imgui2.updatePlatformWindows();
+
+        window.swapBuffers();
+    }
+
+    std.debug.print("\n==============================================================================================================================================\n", .{});
+
     world.dump();
-    try world.runSystem(testSystem1);
-    try world.runSystem(testSystem2);
-    try world.runSystem(testSystem3);
-    try world.runSystem(testSystem4);
-    try world.runSystem(testSystem5);
 
     // if (world.getArchetypeTable(try world.createArchetypeStruct(.{ Tag, B }))) |table| {
     //     std.log.info("Found table {}", .{table});

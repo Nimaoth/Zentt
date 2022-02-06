@@ -9,7 +9,6 @@ pub const EntityId = u64;
 pub const ComponentId = u64;
 
 pub fn Query(comptime Components: anytype) type {
-    _ = Components;
     const EntityHandle = getEntityHandle(Components);
 
     const Iterator = struct {
@@ -110,12 +109,16 @@ pub fn Query(comptime Components: anytype) type {
         const Self = @This();
         pub const Type = SystemParameterType.Query;
         pub const ComponentTypes = Components;
+        pub const ComponentCount = @typeInfo(@TypeOf(Components)).Struct.fields.len;
 
         tables: []*ArchetypeTable,
+        enabled: bool,
+        componentCount: i64 = ComponentCount,
 
-        pub fn init(tables: []*ArchetypeTable) @This() {
+        pub fn init(tables: []*ArchetypeTable, enabled: bool) @This() {
             return @This(){
                 .tables = tables,
+                .enabled = enabled,
             };
         }
 

@@ -5,6 +5,7 @@ const C = @cImport({
     @cInclude("cimgui.h");
 });
 
+const imgui = @import("imgui.zig");
 const sdl = @import("sdl.zig");
 
 pub extern fn ImGui_ImplGlfw_InitForOpenGL(window: *anyopaque, install_callbacks: bool) bool;
@@ -94,4 +95,76 @@ pub fn dockspace() void {
     }
 
     C.igEnd();
+}
+
+pub fn property(name: [*:0]const u8) void {
+    imgui.Text("%s: ", name);
+    imgui.SameLine();
+}
+
+pub fn any(value: anytype, name: [*:0]const u8) void {
+    _ = name;
+    const typeInfoOuter = @typeInfo(@TypeOf(value));
+
+    const actualType = typeInfoOuter.Pointer.child;
+
+    const typeInfo = @typeInfo(actualType);
+    switch (typeInfo) {
+        .Int => |ti| {
+            const dataType: imgui.DataType = blk: {
+                if (ti.signedness == .signed) {
+                    switch (ti.bits) {
+                        8 => break :blk .S8,
+                        16 => break :blk .S16,
+                        32 => break :blk .S32,
+                        64 => break :blk .S64,
+                        else => @compileError("Unsupported type " ++ @typeName(@TypeOf(actualType))),
+                    }
+                } else {
+                    switch (ti.bits) {
+                        8 => break :blk .U8,
+                        16 => break :blk .U16,
+                        32 => break :blk .U32,
+                        64 => break :blk .U64,
+                        else => @compileError("Unsupported type " ++ @typeName(@TypeOf(actualType))),
+                    }
+                }
+            };
+
+            property(name);
+            _ = imgui.DragScalar(name, dataType, value, 1);
+        },
+
+        .Float => |ti| {
+            const dataType: imgui.DataType = blk: {
+                switch (ti.bits) {
+                    32 => break :blk .F32,
+                    64 => break :blk .F64,
+                    else => @compileError("Unsupported type " ++ @typeName(@TypeOf(actualType))),
+                }
+            };
+
+            property(name);
+            _ = imgui.DragScalar(name, dataType, value, 1);
+        },
+
+        .Bool => {
+            property(name);
+            _ = imgui.Checkbox(name, value);
+        },
+
+        .Struct => |ti| {
+            const flags = imgui.TreeNodeFlags{ .Bullet = true, .SpanFullWidth = false, .DefaultOpen = true };
+            if (imgui.TreeNodeExPtr(value, flags.toInt(), name)) {
+                defer imgui.TreePop();
+                inline for (ti.fields) |field| {
+                    any(&@field(value, field.name), @ptrCast([*:0]const u8, field.name.ptr));
+                }
+            }
+        },
+
+        else => {
+            @compileError("Can't display value of type " ++ @typeName(actualType));
+        },
+    }
 }
