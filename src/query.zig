@@ -34,15 +34,15 @@ pub fn Query(comptime Components: anytype) type {
         pub fn updateComponentIndexMap(self: *Self) void {
             std.debug.assert(self.tableIndex < self.tables.len);
             const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
-            var index: u64 = 0;
 
             const table = self.tables[self.tableIndex];
 
-            inline for (typeInfo.fields) |field| {
+            inline for (typeInfo.fields) |field, index| {
                 const ComponentType = field.default_value orelse unreachable;
                 if (@sizeOf(ComponentType) > 0) {
                     self.componentIndexMap[index] = table.getListIndexForType(Rtti.init(ComponentType));
-                    index += 1;
+                } else {
+                    self.componentIndexMap[index] = 0;
                 }
             }
         }
@@ -89,15 +89,15 @@ pub fn Query(comptime Components: anytype) type {
             result.id = chunk.getEntityId(index);
 
             const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
-            var componentIndex: u64 = 0;
-            inline for (typeInfo.fields) |field| {
+            const resultTypeInfo = @typeInfo(EntityHandle).Struct;
+            inline for (typeInfo.fields) |field, i| {
                 const ComponentType = field.default_value orelse unreachable;
                 std.debug.assert(@TypeOf(ComponentType) == type);
                 if (@sizeOf(ComponentType) > 0) {
-                    var data = chunk.getComponentRaw(self.mapComponentIndex(componentIndex), index);
-
-                    @field(result, @typeName(ComponentType)) = @ptrCast(*ComponentType, @alignCast(@alignOf(ComponentType), data.ptr));
-                    componentIndex += 1;
+                    var data = chunk.getComponentRaw(self.mapComponentIndex(i), index);
+                    @field(result, resultTypeInfo.fields[i + 1].name) = @ptrCast(*ComponentType, @alignCast(@alignOf(ComponentType), data.ptr));
+                } else {
+                    @field(result, resultTypeInfo.fields[i + 1].name) = 0;
                 }
             }
 
@@ -132,14 +132,16 @@ pub fn Query(comptime Components: anytype) type {
 
 fn getNumSizedTypes(comptime T: anytype) u64 {
     const typeInfo = @typeInfo(@TypeOf(T)).Struct;
-    var num: u64 = 0;
-    inline for (typeInfo.fields) |field| {
-        const ComponentType = field.default_value orelse unreachable;
-        if (@sizeOf(ComponentType) > 0) {
-            num += 1;
+    return typeInfo.fields.len;
+}
+
+fn deduplicate(comptime name: []const u8, comptime otherFields: []std.builtin.TypeInfo.StructField) []const u8 {
+    for (otherFields) |field| {
+        if (std.mem.eql(u8, name, field.name)) {
+            return deduplicate(name ++ "2", otherFields);
         }
     }
-    return num;
+    return name;
 }
 
 fn getEntityHandle(comptime Components: anytype) type {
@@ -148,10 +150,7 @@ fn getEntityHandle(comptime Components: anytype) type {
         const T = @TypeOf(Components);
         const typeInfo = @typeInfo(T).Struct;
 
-        // Count fields with non-zero size
-        const fieldsWithSize: u64 = getNumSizedTypes(Components);
-
-        var fields: [fieldsWithSize + 1]std.builtin.TypeInfo.StructField = undefined;
+        var fields: [typeInfo.fields.len + 1]std.builtin.TypeInfo.StructField = undefined;
 
         fields[0] = .{
             .name = "id",
@@ -162,20 +161,26 @@ fn getEntityHandle(comptime Components: anytype) type {
         };
 
         // Fill field type info for all components with non-zero size
-        var index: u64 = 1;
-        inline for (typeInfo.fields) |field| {
+        inline for (typeInfo.fields) |field, index| {
             const ComponentType = field.default_value orelse unreachable;
 
             std.debug.assert(@TypeOf(ComponentType) == type);
             if (@sizeOf(ComponentType) > 0) {
-                fields[index] = .{
-                    .name = @typeName(ComponentType),
+                fields[index + 1] = .{
+                    .name = deduplicate(@typeName(ComponentType), fields[0..(index + 1)]),
                     .field_type = *ComponentType,
                     .default_value = null,
                     .is_comptime = false,
                     .alignment = @alignOf(*ComponentType),
                 };
-                index += 1;
+            } else {
+                fields[index + 1] = .{
+                    .name = deduplicate(@typeName(ComponentType), fields[0..(index + 1)]),
+                    .field_type = u8,
+                    .default_value = @intCast(u8, 0),
+                    .is_comptime = false,
+                    .alignment = @alignOf(u8),
+                };
             }
         }
 

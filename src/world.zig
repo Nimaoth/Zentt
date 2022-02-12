@@ -223,7 +223,7 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
         tableFlags = tableFlags.with(imgui.TableFlags.Borders);
         if (imgui.BeginTable("Entities", @intCast(i32, ParamType.ComponentCount + 1), tableFlags, .{}, 0)) {
             const componentsTypeInfo = @typeInfo(@TypeOf(ParamType.ComponentTypes)).Struct;
-            imgui.TableSetupColumn("Entity ID", .{}, 0, 0);
+            imgui.TableSetupColumn("ID", .{ .WidthFixed = true }, 5, 0);
             inline for (componentsTypeInfo.fields) |componentInfo| {
                 const ComponentType = componentInfo.default_value orelse unreachable;
                 imgui.TableSetupColumn(@typeName(ComponentType), .{}, 0, 0);
@@ -239,8 +239,11 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
                     const ComponentType = componentInfo.default_value orelse unreachable;
                     _ = ComponentType;
                     _ = imgui.TableSetColumnIndex(@intCast(i32, i + 1));
-                    if (@hasField(@TypeOf(entity), @typeName(ComponentType))) {
-                        imgui2.any(@field(entity, @typeName(ComponentType)), "");
+
+                    const field = @typeInfo(@TypeOf(entity)).Struct.fields[i + 1];
+                    if (field.field_type != u8) {
+                        const fieldName = field.name;
+                        imgui2.any(@field(entity, fieldName), "");
                     }
                 }
             }
@@ -248,11 +251,10 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
     }
 }
 
-pub fn createEntity(self: *Self, name: []const u8) !Entity {
-    _ = name;
+pub fn createEntity(self: *Self) !Entity {
     const entityId = self.nextEntityId;
     self.nextEntityId += 1;
-    std.log.info("createEntity {} '{s}'", .{ entityId, name });
+    std.log.info("createEntity {}", .{entityId});
 
     const entity = try self.baseArchetypeTable.addEntity(entityId, .{});
     try self.entities.put(entityId, entity);

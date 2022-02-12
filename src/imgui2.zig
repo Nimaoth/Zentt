@@ -108,6 +108,13 @@ pub fn any(value: anytype, name: [*:0]const u8) void {
 
     const actualType = typeInfoOuter.Pointer.child;
 
+    // Special case: string
+    if (actualType == []const u8) {
+        property(name);
+        imgui.Text("%.*s", value.*.len, value.*.ptr);
+        return;
+    }
+
     const typeInfo = @typeInfo(actualType);
     switch (typeInfo) {
         .Int => |ti| {
@@ -163,7 +170,22 @@ pub fn any(value: anytype, name: [*:0]const u8) void {
             }
         },
 
+        .Pointer => |ti| {
+            switch (ti.size) {
+                .Slice => {
+                    @compileLog(typeInfo);
+                    @compileError("Can't display value of type " ++ @typeName(actualType));
+                },
+
+                else => {
+                    @compileLog(typeInfo);
+                    @compileError("Can't display value of type " ++ @typeName(actualType));
+                },
+            }
+        },
+
         else => {
+            @compileLog(typeInfo);
             @compileError("Can't display value of type " ++ @typeName(actualType));
         },
     }

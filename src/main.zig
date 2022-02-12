@@ -11,19 +11,10 @@ const ComponentId = @import("entity.zig").ComponentId;
 const World = @import("world.zig");
 const EntityBuilder = @import("entity_builder.zig");
 const Query = @import("query.zig").Query;
+const Tag = @import("tag_component.zig").Tag;
 
 const Position = struct {
     position: [3]f32,
-};
-
-const Tag = struct {
-    name: []const u8,
-
-    pub fn format(self: *const @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-        _ = fmt;
-        _ = options;
-        try std.fmt.format(writer, "Tag{{ {s} }}", .{self.name});
-    }
 };
 const Gravity = struct { uiae: i32 = 99 };
 const A = struct { i: i64 };
@@ -31,28 +22,36 @@ const B = struct { b: bool, Gravity: Gravity = .{} };
 const C = struct { i: i16 = 123, b: bool = true, u: u8 = 9 };
 const D = struct {};
 
-pub fn testSystem1(query: Query(.{A})) !void {
+pub fn testSystem1(query: Query(.{ Tag, A })) !void {
     var iter = query.iter();
     while (iter.next()) |entity| {
         _ = entity;
     }
 }
 
-pub fn testSystem2(query: Query(.{ A, B })) !void {
+pub fn testSystem2(query: Query(.{ Tag, A, B })) !void {
     var iter = query.iter();
     while (iter.next()) |entity| {
         _ = entity;
     }
 }
 
-pub fn testSystem3(query: Query(.{ A, B, C })) !void {
+pub fn testSystem3(query: Query(.{ Tag, A, B, C })) !void {
     var iter = query.iter();
     while (iter.next()) |entity| {
         _ = entity;
     }
 }
 
-pub fn testSystem4(query: Query(.{ A, B, C, D })) !void {
+pub fn testSystem4(query: Query(.{ Tag, A, B, C, D })) !void {
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        _ = entity;
+    }
+}
+
+pub fn testSystem5(time: *const Time, query: Query(.{ Tag, B })) !void {
+    _ = time;
     var iter = query.iter();
     while (iter.next()) |entity| {
         _ = entity;
@@ -63,14 +62,6 @@ const Time = struct {
     delta: f64 = 0,
     now: f64 = 0,
 };
-
-pub fn testSystem5(time: *const Time, query: Query(.{B})) !void {
-    _ = time;
-    var iter = query.iter();
-    while (iter.next()) |entity| {
-        _ = entity;
-    }
-}
 
 pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -102,42 +93,42 @@ pub fn main() anyerror!void {
     defer world.deinit();
     defer world.dumpGraph() catch {};
 
-    _ = try EntityBuilder.init(world, "Foo")
+    _ = try EntityBuilder.initWithTag(world, "Foo")
         .addComponent(A{ .i = 1 })
         .build();
 
-    _ = try EntityBuilder.init(world, "Foo2")
+    _ = try EntityBuilder.initWithTag(world, "Foo2")
         .addComponent(A{ .i = 2 })
         .build();
 
-    _ = try EntityBuilder.init(world, "Bar")
+    _ = try EntityBuilder.initWithTag(world, "Bar")
         .addComponent(A{ .i = 11 })
         .addComponent(B{ .b = false })
         .build();
 
-    _ = try EntityBuilder.init(world, "Bar2")
+    _ = try EntityBuilder.initWithTag(world, "Bar2")
         .addComponent(A{ .i = 12 })
         .addComponent(B{ .b = true })
         .build();
 
-    _ = try EntityBuilder.init(world, "Bar3")
+    _ = try EntityBuilder.initWithTag(world, "Bar3")
         .addComponent(B{ .b = false })
         .addComponent(A{ .i = 13 })
         .build();
 
-    _ = try EntityBuilder.init(world, "Baz")
+    _ = try EntityBuilder.initWithTag(world, "Baz")
         .addComponent(B{ .b = true })
         .addComponent(C{})
         .addComponent(A{ .i = 21 })
         .build();
 
-    _ = try EntityBuilder.init(world, "Baz2")
+    _ = try EntityBuilder.initWithTag(world, "Baz2")
         .addComponent(A{ .i = 22 })
         .addComponent(C{ .i = 420, .u = 69 })
         .addComponent(B{ .b = false })
         .build();
 
-    _ = try EntityBuilder.init(world, "Tog")
+    _ = try EntityBuilder.initWithTag(world, "Tog")
         .addComponent(C{ .i = 69 })
         .addComponent(B{ .b = true })
         .addComponent(A{ .i = 31 })
