@@ -59,7 +59,13 @@ pub fn testSystem4(query: Query(.{ A, B, C, D })) !void {
     }
 }
 
-pub fn testSystem5(query: Query(.{B})) !void {
+const Time = struct {
+    delta: f64 = 0,
+    now: f64 = 0,
+};
+
+pub fn testSystem5(time: *const Time, query: Query(.{B})) !void {
+    _ = time;
     var iter = query.iter();
     while (iter.next()) |entity| {
         _ = entity;
@@ -70,7 +76,6 @@ pub fn main() anyerror!void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    _ = allocator;
 
     // init SDL
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
@@ -145,6 +150,8 @@ pub fn main() anyerror!void {
     try world.addSystem(testSystem4, "{A, B, C, D}");
     try world.addSystem(testSystem5, "{B}");
 
+    _ = try world.addResource(Time{});
+
     var show_demo_window = true;
 
     // Wait for the user to close the window.
@@ -152,7 +159,7 @@ pub fn main() anyerror!void {
     var quit = false;
 
     var lastFrameTime = std.time.nanoTimestamp();
-    var frameTime: f64 = 0;
+    var frameTimeSmoothed: f64 = 0;
     while (!quit) {
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
@@ -167,15 +174,20 @@ pub fn main() anyerror!void {
 
         const currentFrameTime = std.time.nanoTimestamp();
         const frameTimeNs = currentFrameTime - lastFrameTime;
-        frameTime = (0.9 * frameTime) + (0.1 * (@intToFloat(f64, frameTimeNs) / std.time.ns_per_ms));
+        const frameTime = (@intToFloat(f64, frameTimeNs) / std.time.ns_per_ms);
+        frameTimeSmoothed = (0.9 * frameTimeSmoothed) + (0.1 * frameTime);
         lastFrameTime = currentFrameTime;
         var fps: f64 = blk: {
-            if (frameTime == 0) {
+            if (frameTimeSmoothed == 0) {
                 break :blk -1;
             } else {
-                break :blk (1000.0 / frameTime);
+                break :blk (1000.0 / frameTimeSmoothed);
             }
         };
+
+        var timeResource = try world.getResource(Time);
+        timeResource.delta = @intToFloat(f64, frameTimeNs) / std.time.ns_per_s;
+        timeResource.now += timeResource.delta;
 
         imgui2.newFrame();
         imgui2.dockspace();
@@ -185,7 +197,7 @@ pub fn main() anyerror!void {
         }
 
         if (imgui.Begin("Stats")) {
-            imgui.LabelText("Frame time: ", "%.2f", frameTime);
+            imgui.LabelText("Frame time: ", "%.2f", frameTimeSmoothed);
             imgui.LabelText("FPS: ", "%.1f", fps);
         }
         imgui.End();

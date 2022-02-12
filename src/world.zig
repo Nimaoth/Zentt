@@ -22,6 +22,7 @@ const System = struct {
 
 allocator: std.mem.Allocator,
 globalPool: std.heap.ArenaAllocator,
+resourceAllocator: std.heap.ArenaAllocator,
 
 archetypeTables: std.HashMap(*ArchetypeTable, *ArchetypeTable, ArchetypeTable.HashTableContext, 80),
 baseArchetypeTable: *ArchetypeTable,
@@ -30,6 +31,7 @@ nextEntityId: u64 = 1,
 components: std.HashMap(Rtti, u64, Rtti.Context, 80),
 componentIdToComponentType: std.ArrayList(Rtti),
 frameSystems: std.ArrayList(System),
+resources: std.HashMap(Rtti, *u8, Rtti.Context, 80),
 
 const Self = @This();
 
@@ -40,11 +42,13 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .allocator = allocator,
         .baseArchetypeTable = undefined,
         .globalPool = std.heap.ArenaAllocator.init(allocator),
+        .resourceAllocator = std.heap.ArenaAllocator.init(allocator),
         .archetypeTables = @TypeOf(world.archetypeTables).init(allocator),
         .entities = @TypeOf(world.entities).init(allocator),
         .components = @TypeOf(world.components).init(allocator),
         .componentIdToComponentType = @TypeOf(world.componentIdToComponentType).init(allocator),
         .frameSystems = @TypeOf(world.frameSystems).init(allocator),
+        .resources = @TypeOf(world.resources).init(allocator),
     };
 
     // Create archetype table for empty entities.
@@ -61,9 +65,11 @@ pub fn deinit(self: *Self) void {
     }
     self.archetypeTables.deinit();
     self.globalPool.deinit();
+    self.resourceAllocator.deinit();
     self.entities.deinit();
     self.components.deinit();
     self.componentIdToComponentType.deinit();
+    self.resources.deinit();
     self.allocator.destroy(self);
 }
 
@@ -99,6 +105,28 @@ pub fn dumpGraph(self: *Self) !void {
     try dotPrinter.printGraph(graphFile.writer(), self);
 }
 
+pub fn addResource(self: *Self, resource: anytype) !*@TypeOf(resource) {
+    const ResourceType = @TypeOf(resource);
+    const rtti = Rtti.init(ResourceType);
+
+    if (self.resources.contains(rtti)) {
+        return error.ResourceAlreadyExists;
+    }
+
+    var newResource = try self.resourceAllocator.allocator().create(ResourceType);
+    newResource.* = resource;
+
+    try self.resources.put(rtti, @ptrCast(*u8, newResource));
+
+    return newResource;
+}
+
+pub fn getResource(self: *Self, comptime ResourceType: type) !*ResourceType {
+    const rtti = Rtti.init(ResourceType);
+    const resourcePtr = self.resources.get(rtti) orelse return error.ResourceNotFound;
+    return @ptrCast(*ResourceType, @alignCast(@alignOf(ResourceType), resourcePtr));
+}
+
 pub fn runFrameSystems(self: *Self) !void {
     for (self.frameSystems.items) |*system| {
         _ = imgui.Begin(system.name);
@@ -111,7 +139,7 @@ pub fn runFrameSystems(self: *Self) !void {
 }
 
 pub fn addSystem(self: *Self, comptime system: anytype, name: [*:0]const u8) !void {
-    const wrapper = try createSystemWrapper(system);
+    const wrapper = try createSystemInvokeFunction(system);
     try self.frameSystems.append(.{
         .name = name,
         .invoke = wrapper,
@@ -119,9 +147,9 @@ pub fn addSystem(self: *Self, comptime system: anytype, name: [*:0]const u8) !vo
     });
 }
 
-pub fn createSystemWrapper(comptime system: anytype) !System.InvokeFunction {
+pub fn createSystemInvokeFunction(comptime system: anytype) !System.InvokeFunction {
     const X = struct {
-        pub fn invoke(world: *Self) !void {
+        fn invoke(world: *Self) !void {
             const ArgsType = std.meta.ArgsTuple(@TypeOf(system));
             const argsTypeInfo = @typeInfo(ArgsType).Struct;
 
@@ -129,52 +157,25 @@ pub fn createSystemWrapper(comptime system: anytype) !System.InvokeFunction {
 
             inline for (argsTypeInfo.fields) |field| {
                 const ParamType = field.field_type;
-                if (@hasDecl(ParamType, "Type")) {
-                    const systemParamType: SystemParameterType = ParamType.Type;
-                    switch (systemParamType) {
-                        .Query => {
-                            const ComponentTypes = ParamType.ComponentTypes;
+                const paramTypeInfo = @typeInfo(ParamType);
 
-                            const archetype = try world.createArchetypeStruct(ComponentTypes);
+                // Pointer to the argument we want to fill out.
+                var argPtr = &@field(args, field.name);
 
-                            var tables = try world.getDirectSupersetTables(archetype);
-                            @field(args, field.name) = ParamType.init(tables.items, true);
-
-                            {
-                                var iter = @field(args, field.name).iter();
-
-                                var tableFlags = imgui.TableFlags{
-                                    .Resizable = true,
-                                    .RowBg = true,
-                                    .Sortable = true,
-                                };
-                                tableFlags = tableFlags.with(imgui.TableFlags.Borders);
-                                if (imgui.BeginTable("Entities", @intCast(i32, ParamType.ComponentCount + 1), tableFlags, .{}, 0)) {
-                                    const componentsTypeInfo = @typeInfo(@TypeOf(ParamType.ComponentTypes)).Struct;
-                                    imgui.TableSetupColumn("Entity ID", .{}, 0, 0);
-                                    inline for (componentsTypeInfo.fields) |componentInfo| {
-                                        const ComponentType = componentInfo.default_value orelse unreachable;
-                                        imgui.TableSetupColumn(@typeName(ComponentType), .{}, 0, 0);
-                                    }
-                                    imgui.TableHeadersRow();
-
-                                    defer imgui.EndTable();
-                                    while (iter.next()) |entity| {
-                                        imgui.TableNextRow(.{}, 0);
-                                        _ = imgui.TableSetColumnIndex(0);
-                                        imgui.Text("%d", entity.id);
-                                        inline for (componentsTypeInfo.fields) |componentInfo, i| {
-                                            const ComponentType = componentInfo.default_value orelse unreachable;
-                                            _ = ComponentType;
-                                            _ = imgui.TableSetColumnIndex(@intCast(i32, i + 1));
-                                            if (@hasField(@TypeOf(entity), @typeName(ComponentType))) {
-                                                imgui2.any(@field(entity, @typeName(ComponentType)), "");
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
+                if (paramTypeInfo == .Struct) {
+                    if (@hasDecl(ParamType, "Type")) {
+                        const systemParamType: SystemParameterType = ParamType.Type;
+                        switch (systemParamType) {
+                            .Query => try handleQuery(world, argPtr, ParamType),
+                        }
+                    }
+                } else if (paramTypeInfo == .Pointer) {
+                    // Special case: World
+                    if (paramTypeInfo.Pointer.child == Self) {
+                        argPtr.* = world;
+                    } else {
+                        // Parameter is a resource.
+                        try handleResource(world, argPtr, ParamType);
                     }
                 }
             }
@@ -184,6 +185,64 @@ pub fn createSystemWrapper(comptime system: anytype) !System.InvokeFunction {
     };
 
     return X.invoke;
+}
+
+fn handleResource(world: *Self, queryArg: anytype, comptime ParamType: type) !void {
+    const paramTypeInfo = @typeInfo(ParamType);
+    if (paramTypeInfo != .Pointer or paramTypeInfo.Pointer.size != .One) {
+        @compileError("handleResource: ParamType must be a pointer to a single item, but is " ++ @typeName(ParamType));
+    }
+
+    const ResourceType = paramTypeInfo.Pointer.child;
+
+    const resource = try world.getResource(ResourceType);
+    queryArg.* = @ptrCast(ParamType, resource);
+
+    imgui2.any(resource, @typeName(ResourceType));
+}
+
+fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void {
+    const ComponentTypes = ParamType.ComponentTypes;
+
+    const archetype = try world.createArchetypeStruct(ComponentTypes);
+
+    var tables = try world.getDirectSupersetTables(archetype);
+    queryArg.* = ParamType.init(tables.items, true);
+
+    {
+        var iter = queryArg.iter();
+
+        var tableFlags = imgui.TableFlags{
+            .Resizable = true,
+            .RowBg = true,
+            .Sortable = true,
+        };
+        tableFlags = tableFlags.with(imgui.TableFlags.Borders);
+        if (imgui.BeginTable("Entities", @intCast(i32, ParamType.ComponentCount + 1), tableFlags, .{}, 0)) {
+            const componentsTypeInfo = @typeInfo(@TypeOf(ParamType.ComponentTypes)).Struct;
+            imgui.TableSetupColumn("Entity ID", .{}, 0, 0);
+            inline for (componentsTypeInfo.fields) |componentInfo| {
+                const ComponentType = componentInfo.default_value orelse unreachable;
+                imgui.TableSetupColumn(@typeName(ComponentType), .{}, 0, 0);
+            }
+            imgui.TableHeadersRow();
+
+            defer imgui.EndTable();
+            while (iter.next()) |entity| {
+                imgui.TableNextRow(.{}, 0);
+                _ = imgui.TableSetColumnIndex(0);
+                imgui.Text("%d", entity.id);
+                inline for (componentsTypeInfo.fields) |componentInfo, i| {
+                    const ComponentType = componentInfo.default_value orelse unreachable;
+                    _ = ComponentType;
+                    _ = imgui.TableSetColumnIndex(@intCast(i32, i + 1));
+                    if (@hasField(@TypeOf(entity), @typeName(ComponentType))) {
+                        imgui2.any(@field(entity, @typeName(ComponentType)), "");
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub fn createEntity(self: *Self, name: []const u8) !Entity {

@@ -138,8 +138,8 @@ pub fn any(value: anytype, name: [*:0]const u8) void {
         .Float => |ti| {
             const dataType: imgui.DataType = blk: {
                 switch (ti.bits) {
-                    32 => break :blk .F32,
-                    64 => break :blk .F64,
+                    32 => break :blk .Float,
+                    64 => break :blk .Double,
                     else => @compileError("Unsupported type " ++ @typeName(@TypeOf(actualType))),
                 }
             };
