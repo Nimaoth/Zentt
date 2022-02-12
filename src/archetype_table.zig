@@ -75,7 +75,6 @@ pub fn removeEntity(self: *Self, entity: Entity) ?Chunk.EntityIndexUpdate {
 }
 
 pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
-    _ = components;
     // @todo: check if the provided components match the archetype
 
     std.log.info("addEntity({}): {}", .{ entityId, components });

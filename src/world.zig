@@ -12,6 +12,9 @@ const SystemParameterType = @import("system_parameter_type.zig").SystemParameter
 const imgui = @import("imgui.zig");
 const imgui2 = @import("imgui2.zig");
 
+pub const EntityId = u64;
+pub const ComponentId = u64;
+
 const System = struct {
     const InvokeFunction = fn (world: *Self) anyerror!void;
 
@@ -27,7 +30,7 @@ resourceAllocator: std.heap.ArenaAllocator,
 archetypeTables: std.HashMap(*ArchetypeTable, *ArchetypeTable, ArchetypeTable.HashTableContext, 80),
 baseArchetypeTable: *ArchetypeTable,
 entities: std.AutoHashMap(u64, Entity),
-nextEntityId: u64 = 1,
+nextEntityId: EntityId = 1,
 components: std.HashMap(Rtti, u64, Rtti.Context, 80),
 componentIdToComponentType: std.ArrayList(Rtti),
 frameSystems: std.ArrayList(System),
@@ -147,7 +150,7 @@ pub fn addSystem(self: *Self, comptime system: anytype, name: [*:0]const u8) !vo
     });
 }
 
-pub fn createSystemInvokeFunction(comptime system: anytype) !System.InvokeFunction {
+fn createSystemInvokeFunction(comptime system: anytype) !System.InvokeFunction {
     const X = struct {
         fn invoke(world: *Self) !void {
             const ArgsType = std.meta.ArgsTuple(@TypeOf(system));
@@ -256,127 +259,29 @@ pub fn createEntity(self: *Self, name: []const u8) !Entity {
     return entity;
 }
 
-pub fn createArchetypeStruct(self: *Self, comptime T: anytype) !Archetype {
-    var hash: u64 = 0;
-    var bitSet = BitSet.initEmpty();
-
-    const typeInfo = @typeInfo(@TypeOf(T)).Struct;
-    inline for (typeInfo.fields) |field| {
-        const ComponentType = field.default_value orelse unreachable;
-        std.debug.assert(@TypeOf(ComponentType) == type);
-        const rtti = Rtti.init(ComponentType);
-        bitSet.set(try self.getComponentId(rtti));
-        hash ^= rtti.hash;
-    }
-    return Archetype.init(self, hash, bitSet);
+pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
+    return self.entities.contains(entityId);
 }
 
-fn hashTypes(types: []Rtti) u64 {
-    var hash: u64 = 0;
-    for (types) |id| {
-        hash ^= id.hash;
-    }
-    return hash;
-}
+pub fn deleteEntity(self: *Self, entityId: EntityId) !void {
+    std.log.info("deleteEntity {}", .{entityId});
 
-pub fn createArchetype(self: *Self, components: []Rtti) !Archetype {
-    var hash = hashTypes(components);
-    var bitSet = BitSet.initEmpty();
-    for (components) |rtti| {
-        bitSet.set(try self.getComponentId(rtti));
-    }
-    return Archetype.init(self, hash, bitSet);
-}
-
-pub fn createArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable {
-    std.log.info("Creating new archetype table based on {}", .{archetype});
-    var table = try self.globalPool.allocator().create(ArchetypeTable);
-    try table.init(archetype, self.allocator);
-
-    var tableIter = self.archetypeTables.valueIterator();
-    while (tableIter.next()) |otherTable| {
-        if (table.archetype.components.isSubSetOf(otherTable.*.archetype.components)) {
-            std.log.debug("add subset {} < {}", .{ table.archetype, otherTable.*.archetype });
-            try table.subsets.put(otherTable.*.archetype.components.subtract(table.archetype.components), otherTable.*);
-            try otherTable.*.supersets.put(otherTable.*.archetype.components.subtract(table.archetype.components), table);
+    if (self.entities.get(entityId)) |entity| {
+        if (entity.chunk.removeEntity(entity.index)) |update| {
+            // Another entity moved while removing oldEntity, so update the index.
+            var otherEntity = self.entities.getEntry(update.entityId) orelse unreachable;
+            otherEntity.value_ptr.index = update.newIndex;
         }
-        if (table.archetype.components.isSuperSetOf(otherTable.*.archetype.components)) {
-            std.log.debug("add superset {} > {}", .{ table.archetype, otherTable.*.archetype });
-            try table.supersets.put(table.archetype.components.subtract(otherTable.*.archetype.components), otherTable.*);
-            try otherTable.*.subsets.put(table.archetype.components.subtract(otherTable.*.archetype.components), table);
-        }
-    }
-
-    try self.archetypeTables.put(table, table);
-    return table;
-}
-
-pub fn getOrCreateArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable {
-    if (self.archetypeTables.getKeyAdapted(&archetype, Archetype.HashTableContext{})) |table| {
-        return table;
+        _ = self.entities.remove(entityId);
     } else {
-        return try self.createArchetypeTable(try archetype.clone());
+        return error.InvalidEntityId;
     }
 }
 
-pub fn getArchetypeTable(self: *Self, archetype: Archetype) ?*ArchetypeTable {
-    return self.archetypeTables.getKeyAdapted(&archetype, Archetype.HashTableContext{});
-}
-
-pub fn getAllSupersetTablesOf(self: *Self, table: *ArchetypeTable, result: *std.AutoHashMap(*ArchetypeTable, bool)) !void {
-    var iter = table.supersets.keyIterator();
-    while (iter.next()) |super| {
-        try result.put(super.*, false);
-        try self.getAllSupersetTablesOf(super.*);
-    }
-}
-
-pub fn getAllSupersetTables(self: *Self, archetype: Archetype) !std.AutoHashMap(*ArchetypeTable, bool) {
-    var result = std.AutoHashMap(*ArchetypeTable, bool).init(self.allocator);
-
-    if (self.archetypeTables.getKeyAdapted(&archetype, Archetype.HashTableContext{})) |exactMatch| {
-        result.put(exactMatch, true);
-        try self.getAllSupersetTablesOf(exactMatch);
-    }
-
-    return result;
-}
-
-pub fn getDirectSupersetTables(self: *Self, archetype: Archetype) !std.ArrayList(*ArchetypeTable) {
-    var result = std.ArrayList(*ArchetypeTable).init(self.globalPool.allocator());
-
-    var table = try self.getOrCreateArchetypeTable(archetype);
-    try result.append(table);
-    var iter = table.subsets.valueIterator();
-    while (iter.next()) |super| {
-        try result.append(super.*);
-    }
-
-    return result;
-}
-
-pub fn getComponentId(self: *Self, rtti: Rtti) !u64 {
-    if (self.components.get(rtti)) |componentId| {
-        return componentId;
-    } else {
-        const componentId = self.componentIdToComponentType.items.len;
-        try self.components.put(rtti, componentId);
-        try self.componentIdToComponentType.append(rtti);
-        return componentId;
-    }
-}
-
-pub fn getComponentType(self: *const Self, componentId: u64) ?Rtti {
-    if (componentId >= self.componentIdToComponentType.items.len) {
-        return null;
-    }
-    return self.componentIdToComponentType.items[componentId];
-}
-
-pub fn addComponent(self: *Self, entityId: u64, component: anytype) !Entity {
+pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !Entity {
     if (self.entities.get(entityId)) |oldEntity| {
         const rtti: Rtti = Rtti.init(@TypeOf(component));
-        const componentId: u64 = try self.getComponentId(rtti);
+        const componentId: u64 = try self.getComponentId(@TypeOf(component));
         var newComponents = BitSet.initEmpty();
         newComponents.set(componentId);
         var newArchetype = try oldEntity.chunk.table.archetype.addComponents(rtti.hash, newComponents);
@@ -403,4 +308,89 @@ pub fn addComponent(self: *Self, entityId: u64, component: anytype) !Entity {
     } else {
         return error.InvalidEntity;
     }
+}
+
+pub fn getComponentType(self: *const Self, componentId: ComponentId) ?Rtti {
+    if (componentId >= self.componentIdToComponentType.items.len) {
+        return null;
+    }
+    return self.componentIdToComponentType.items[componentId];
+}
+
+// Utility functions
+
+/// Returns the id of the component with the given type.
+fn getComponentId(self: *Self, comptime ComponentType: type) !ComponentId {
+    const rtti = Rtti.init(ComponentType);
+    if (self.components.get(rtti)) |componentId| {
+        return componentId;
+    } else {
+        const componentId = self.componentIdToComponentType.items.len;
+        try self.components.put(rtti, componentId);
+        try self.componentIdToComponentType.append(rtti);
+        return componentId;
+    }
+}
+
+/// Creates an archetype based on the given components.
+fn createArchetypeStruct(self: *Self, comptime T: anytype) !Archetype {
+    var hash: u64 = 0;
+    var bitSet = BitSet.initEmpty();
+
+    const typeInfo = @typeInfo(@TypeOf(T)).Struct;
+    inline for (typeInfo.fields) |field| {
+        const ComponentType = field.default_value orelse unreachable;
+        std.debug.assert(@TypeOf(ComponentType) == type);
+        const rtti = Rtti.init(ComponentType);
+        bitSet.set(try self.getComponentId(ComponentType));
+        hash ^= rtti.hash;
+    }
+    return Archetype.init(self, hash, bitSet);
+}
+
+/// Creates an archetype table for the given archetype.
+fn createArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable {
+    std.log.info("Creating new archetype table based on {}", .{archetype});
+    var table = try self.globalPool.allocator().create(ArchetypeTable);
+    try table.init(archetype, self.allocator);
+
+    var tableIter = self.archetypeTables.valueIterator();
+    while (tableIter.next()) |otherTable| {
+        if (table.archetype.components.isSubSetOf(otherTable.*.archetype.components)) {
+            std.log.debug("add subset {} < {}", .{ table.archetype, otherTable.*.archetype });
+            try table.subsets.put(otherTable.*.archetype.components.subtract(table.archetype.components), otherTable.*);
+            try otherTable.*.supersets.put(otherTable.*.archetype.components.subtract(table.archetype.components), table);
+        }
+        if (table.archetype.components.isSuperSetOf(otherTable.*.archetype.components)) {
+            std.log.debug("add superset {} > {}", .{ table.archetype, otherTable.*.archetype });
+            try table.supersets.put(table.archetype.components.subtract(otherTable.*.archetype.components), otherTable.*);
+            try otherTable.*.subsets.put(table.archetype.components.subtract(otherTable.*.archetype.components), table);
+        }
+    }
+
+    try self.archetypeTables.put(table, table);
+    return table;
+}
+
+/// Returns the archetype table associated with the given archetype. Creates a new table if it doesn't exist yet.
+fn getOrCreateArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable {
+    if (self.archetypeTables.getKeyAdapted(&archetype, Archetype.HashTableContext{})) |table| {
+        return table;
+    } else {
+        return try self.createArchetypeTable(try archetype.clone());
+    }
+}
+
+/// Returns a list of all archetype tables which include all components of 'archetype'
+fn getDirectSupersetTables(self: *Self, archetype: Archetype) !std.ArrayList(*ArchetypeTable) {
+    var result = std.ArrayList(*ArchetypeTable).init(self.globalPool.allocator());
+
+    var table = try self.getOrCreateArchetypeTable(archetype);
+    try result.append(table);
+    var iter = table.subsets.valueIterator();
+    while (iter.next()) |super| {
+        try result.append(super.*);
+    }
+
+    return result;
 }
