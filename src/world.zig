@@ -35,10 +35,10 @@ archetypeTables: std.HashMap(*ArchetypeTable, *ArchetypeTable, ArchetypeTable.Ha
 baseArchetypeTable: *ArchetypeTable,
 entities: std.AutoHashMap(u64, Entity),
 nextEntityId: EntityId = 1,
-components: std.HashMap(Rtti.TypeId, ComponentInfo, Rtti.TypeId.Context, 80),
+components: std.AutoHashMap(Rtti.TypeId, ComponentInfo),
 componentIdToComponentType: std.ArrayList(Rtti.TypeId),
 frameSystems: std.ArrayList(System),
-resources: std.HashMap(Rtti.TypeId, *u8, Rtti.TypeId.Context, 80),
+resources: std.AutoHashMap(Rtti.TypeId, *u8),
 
 const Self = @This();
 
@@ -320,7 +320,7 @@ pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.Type
         const componentId: u64 = try self.getComponentIdForRtti(componentType);
         var newComponents = BitSet.initEmpty();
         newComponents.set(componentId);
-        var newArchetype = try oldEntity.chunk.table.archetype.addComponents(componentType.hash, newComponents);
+        var newArchetype = try oldEntity.chunk.table.archetype.addComponents(componentType.typeInfo.hash, newComponents);
 
         var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
 
@@ -416,7 +416,7 @@ fn createArchetypeStruct(self: *Self, comptime T: anytype) !Archetype {
         std.debug.assert(@TypeOf(ComponentType) == type);
         const rtti = Rtti.typeId(ComponentType);
         bitSet.set(try self.getComponentId(ComponentType));
-        hash ^= rtti.hash;
+        hash ^= rtti.typeInfo.hash;
     }
     return Archetype.init(self, hash, bitSet);
 }

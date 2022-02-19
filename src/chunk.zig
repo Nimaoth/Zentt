@@ -11,12 +11,12 @@ pub const ComponentId = u64;
 const Self = @This();
 
 const Components = struct {
-    componentType: Rtti,
+    componentType: Rtti.TypeId,
     data: []u8,
 
     pub fn getRaw(self: *const @This(), index: u64) []u8 {
-        const byteIndex = index * self.componentType.size;
-        return self.data[byteIndex..(byteIndex + self.componentType.size)];
+        const byteIndex = index * self.componentType.typeInfo.size;
+        return self.data[byteIndex..(byteIndex + self.componentType.typeInfo.size)];
     }
 
     pub fn setRaw(self: *@This(), index: u64, data: []const u8) void {
@@ -60,10 +60,10 @@ pub fn init(table: *ArchetypeTable, capacity: u64, allocator: std.mem.Allocator)
     var iter = table.archetype.components.iterator();
     while (iter.next()) |componentId| {
         const componentType = table.archetype.world.getComponentType(componentId) orelse unreachable;
-        if (componentType.size == 0)
+        if (componentType.typeInfo.size == 0)
             continue;
 
-        size = std.mem.alignForward(size, componentType.alignment) + capacity * componentType.size + 8;
+        size = std.mem.alignForward(size, componentType.typeInfo.alignment) + capacity * componentType.typeInfo.size + 8;
     }
 
     const pool = try allocator.alignedAlloc(u8, 4096, size);
@@ -79,17 +79,17 @@ pub fn init(table: *ArchetypeTable, capacity: u64, allocator: std.mem.Allocator)
     iter = table.archetype.components.iterator();
     while (iter.next()) |componentId| {
         const componentType = table.archetype.world.getComponentType(componentId) orelse unreachable;
-        if (componentType.size == 0)
+        if (componentType.typeInfo.size == 0)
             continue;
         defer componentIndex += 1;
 
-        currentComponentDataIndex = std.mem.alignForward(currentComponentDataIndex, componentType.alignment);
+        currentComponentDataIndex = std.mem.alignForward(currentComponentDataIndex, componentType.typeInfo.alignment);
         components[componentIndex] = Components{
             .componentType = componentType,
-            .data = pool[currentComponentDataIndex..(currentComponentDataIndex + capacity * componentType.size)],
+            .data = pool[currentComponentDataIndex..(currentComponentDataIndex + capacity * componentType.typeInfo.size)],
         };
         std.mem.set(u8, components[componentIndex].data, @intCast(u8, componentIndex + 1));
-        currentComponentDataIndex += capacity * componentType.size + 8;
+        currentComponentDataIndex += capacity * componentType.typeInfo.size + 8;
     }
     components = components[0..componentIndex];
 

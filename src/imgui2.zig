@@ -8,6 +8,8 @@ const C = @cImport({
 const imgui = @import("imgui.zig");
 const sdl = @import("sdl.zig");
 
+const Rtti = @import("rtti.zig");
+
 pub extern fn ImGui_ImplGlfw_InitForOpenGL(window: *anyopaque, install_callbacks: bool) bool;
 pub extern fn ImGui_ImplGlfw_Shutdown() void;
 pub extern fn ImGui_ImplGlfw_NewFrame() void;
@@ -97,13 +99,12 @@ pub fn dockspace() void {
     C.igEnd();
 }
 
-pub fn property(name: [*:0]const u8) void {
-    imgui.Text("%s: ", name);
+pub fn property(name: []const u8) void {
+    imgui.Text("%.*s: ", name.len, name.ptr);
     imgui.SameLine();
 }
 
-pub fn any(value: anytype, name: [*:0]const u8) void {
-    _ = name;
+pub fn any(value: anytype, name: []const u8) void {
     const typeInfoOuter = @typeInfo(@TypeOf(value));
 
     const actualType = typeInfoOuter.Pointer.child;
@@ -139,7 +140,7 @@ pub fn any(value: anytype, name: [*:0]const u8) void {
             };
 
             property(name);
-            _ = imgui.DragScalar(name, dataType, value, 1);
+            _ = imgui.DragScalar("", dataType, value, 1);
         },
 
         .Float => |ti| {
@@ -152,20 +153,20 @@ pub fn any(value: anytype, name: [*:0]const u8) void {
             };
 
             property(name);
-            _ = imgui.DragScalar(name, dataType, value, 1);
+            _ = imgui.DragScalar("", dataType, value, 1);
         },
 
         .Bool => {
             property(name);
-            _ = imgui.Checkbox(name, value);
+            _ = imgui.Checkbox("", value);
         },
 
         .Struct => |ti| {
             const flags = imgui.TreeNodeFlags{ .Bullet = true, .SpanFullWidth = false, .DefaultOpen = true };
-            if (imgui.TreeNodeExPtr(value, flags.toInt(), name)) {
+            if (imgui.TreeNodeExPtr(value, flags.toInt(), null)) {
                 defer imgui.TreePop();
                 inline for (ti.fields) |field| {
-                    any(&@field(value, field.name), @ptrCast([*:0]const u8, field.name.ptr));
+                    any(&@field(value, field.name), field.name);
                 }
             }
         },
@@ -188,5 +189,88 @@ pub fn any(value: anytype, name: [*:0]const u8) void {
             @compileLog(typeInfo);
             @compileError("Can't display value of type " ++ @typeName(actualType));
         },
+    }
+}
+
+pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
+    // Special case: string
+    if (typeInfo == Rtti.typeInfo([]const u8)) {
+        const string = @ptrCast(*[]const u8, @alignCast(@alignOf(*u8), value.ptr)).*;
+        imgui.Text("%.*s", string.len, string.ptr);
+        return;
+    }
+
+    switch (typeInfo.kind) {
+        .Int => |ti| {
+            const dataType: imgui.DataType = blk: {
+                if (ti.signedness == .signed) {
+                    switch (ti.bits) {
+                        8 => break :blk .S8,
+                        16 => break :blk .S16,
+                        32 => break :blk .S32,
+                        64 => break :blk .S64,
+                        else => unreachable,
+                    }
+                } else {
+                    switch (ti.bits) {
+                        8 => break :blk .U8,
+                        16 => break :blk .U16,
+                        32 => break :blk .U32,
+                        64 => break :blk .U64,
+                        else => unreachable,
+                    }
+                }
+            };
+
+            _ = imgui.DragScalar("", dataType, value.ptr, 1);
+        },
+
+        .Float => |ti| {
+            const dataType: imgui.DataType = blk: {
+                switch (ti.bits) {
+                    32 => break :blk .Float,
+                    64 => break :blk .Double,
+                    else => unreachable,
+                }
+            };
+
+            _ = imgui.DragScalar("", dataType, value.ptr, 1);
+        },
+
+        .Bool => {
+            _ = imgui.Checkbox("", @ptrCast(*bool, value.ptr));
+        },
+
+        .Struct => |ti| {
+            var tableFlags = imgui.TableFlags{
+                .Resizable = true,
+                .RowBg = true,
+            };
+            if (imgui.BeginTable("ComponentData", 2, tableFlags, .{}, 0)) {
+                defer imgui.EndTable();
+
+                for (ti.fields) |field| {
+                    imgui.TableNextRow(.{}, 0);
+                    _ = imgui.TableSetColumnIndex(0);
+                    imgui.Text("%.*s", field.name.len, field.name.ptr);
+
+                    _ = imgui.TableSetColumnIndex(1);
+                    anyDynamic(
+                        field.field_type,
+                        value[field.offset..(field.offset + field.field_type.size)],
+                    );
+                }
+            }
+        },
+
+        .Pointer => |ti| {
+            switch (ti.size) {
+                .Slice => {},
+
+                else => {},
+            }
+        },
+
+        else => {},
     }
 }

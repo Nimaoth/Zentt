@@ -17,13 +17,13 @@ const Commands = union(enum) {
     DestroyEntity: EntityId,
     AddComponent: struct {
         index: usize,
-        componentType: Rtti,
+        componentType: Rtti.TypeId,
         componentDataIndex: usize,
         componentDataLen: usize,
     },
     RemoveComponent: struct {
         entityId: EntityId,
-        componentType: Rtti,
+        componentType: Rtti.TypeId,
     },
 };
 

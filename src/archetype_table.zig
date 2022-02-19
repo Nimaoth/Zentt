@@ -6,7 +6,7 @@ const Rtti = @import("rtti.zig");
 const Chunk = @import("chunk.zig");
 const Entity = @import("entity.zig");
 
-typeToList: std.HashMap(Rtti.TypeId, u64, Rtti.TypeId.Context, 80),
+typeToList: std.AutoHashMap(Rtti.TypeId, u64),
 supersets: std.AutoHashMap(BitSet, *Self),
 subsets: std.AutoHashMap(BitSet, *Self),
 archetype: Archetype,
@@ -20,11 +20,11 @@ pub fn init(self: *Self, archetype: Archetype, allocator: std.mem.Allocator) !vo
     self.subsets = std.AutoHashMap(BitSet, *Self).init(allocator);
     self.archetype = archetype;
     self.firstChunk = try Chunk.init(self, 100, allocator);
-    self.typeToList = std.HashMap(Rtti.TypeId, u64, Rtti.TypeId.Context, 80).init(allocator);
+    self.typeToList = std.AutoHashMap(Rtti.TypeId, u64).init(allocator);
     var iter = archetype.components.iterator();
     while (iter.next()) |componentId| {
         const componentType = archetype.world.getComponentType(componentId) orelse unreachable;
-        if (componentType.size > 0) {
+        if (componentType.typeInfo.size > 0) {
             try self.typeToList.put(componentType, self.typeToList.count());
         }
     }
@@ -90,7 +90,7 @@ pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
     return entity;
 }
 
-pub fn copyEntityIntoRaw(self: *Self, entity: Entity, componentType: Rtti, componentData: []const u8) !Entity {
+pub fn copyEntityIntoRaw(self: *Self, entity: Entity, componentType: Rtti.TypeId, componentData: []const u8) !Entity {
     // @todo: check if the provided components match the archetype
     std.log.err("ArchetypeTable.copyEntityIntoRaw: {any}", .{componentData});
 
@@ -101,7 +101,7 @@ pub fn copyEntityIntoRaw(self: *Self, entity: Entity, componentType: Rtti, compo
 
     // Add new component
     std.debug.assert(self.typeToList.count() == newEntity.chunk.components.len);
-    if (componentType.size > 0) {
+    if (componentType.typeInfo.size > 0) {
         try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType), newEntity.index, componentData);
     }
 

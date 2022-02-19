@@ -43,7 +43,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId) !void {
         }
 
         for (entity.chunk.components) |components| {
-            const rtti = components.componentType;
+            const rtti = components.componentType.typeInfo;
             var componentName = std.ArrayList(u8).init(scratchBuffer.allocator());
             try std.fmt.format(componentName.writer(), "{s}", .{rtti.name});
             try componentName.append(0);
@@ -52,7 +52,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId) !void {
                 null,
                 imgui.TreeNodeFlags.CollapsingHeader,
             )) {
-                imgui.Text("uiae");
+                imgui2.anyDynamic(rtti, components.getRaw(entity.index));
             }
         }
 
