@@ -23,6 +23,10 @@ const System = struct {
     enabled: bool = true,
 };
 
+const ComponentInfo = struct {
+    id: u64,
+};
+
 allocator: std.mem.Allocator,
 globalPool: std.heap.ArenaAllocator,
 resourceAllocator: std.heap.ArenaAllocator,
@@ -31,10 +35,10 @@ archetypeTables: std.HashMap(*ArchetypeTable, *ArchetypeTable, ArchetypeTable.Ha
 baseArchetypeTable: *ArchetypeTable,
 entities: std.AutoHashMap(u64, Entity),
 nextEntityId: EntityId = 1,
-components: std.HashMap(Rtti, u64, Rtti.Context, 80),
-componentIdToComponentType: std.ArrayList(Rtti),
+components: std.HashMap(Rtti.TypeId, ComponentInfo, Rtti.TypeId.Context, 80),
+componentIdToComponentType: std.ArrayList(Rtti.TypeId),
 frameSystems: std.ArrayList(System),
-resources: std.HashMap(Rtti, *u8, Rtti.Context, 80),
+resources: std.HashMap(Rtti.TypeId, *u8, Rtti.TypeId.Context, 80),
 
 const Self = @This();
 
@@ -110,7 +114,7 @@ pub fn dumpGraph(self: *Self) !void {
 
 pub fn addResource(self: *Self, resource: anytype) !*@TypeOf(resource) {
     const ResourceType = @TypeOf(resource);
-    const rtti = Rtti.init(ResourceType);
+    const rtti = Rtti.typeId(ResourceType);
 
     if (self.resources.contains(rtti)) {
         return error.ResourceAlreadyExists;
@@ -125,7 +129,7 @@ pub fn addResource(self: *Self, resource: anytype) !*@TypeOf(resource) {
 }
 
 pub fn getResource(self: *Self, comptime ResourceType: type) !*ResourceType {
-    const rtti = Rtti.init(ResourceType);
+    const rtti = Rtti.typeId(ResourceType);
     const resourcePtr = self.resources.get(rtti) orelse return error.ResourceNotFound;
     return @ptrCast(*ResourceType, @alignCast(@alignOf(ResourceType), resourcePtr));
 }
@@ -266,8 +270,6 @@ pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
 }
 
 pub fn deleteEntity(self: *Self, entityId: EntityId) !void {
-    std.log.info("deleteEntity {}", .{entityId});
-
     if (self.entities.get(entityId)) |entity| {
         if (entity.chunk.removeEntity(entity.index)) |update| {
             // Another entity moved while removing oldEntity, so update the index.
@@ -282,7 +284,7 @@ pub fn deleteEntity(self: *Self, entityId: EntityId) !void {
 
 pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !Entity {
     if (self.entities.get(entityId)) |oldEntity| {
-        const rtti: Rtti = Rtti.init(@TypeOf(component));
+        const rtti: Rtti = Rtti.typeId(@TypeOf(component));
         const componentId: u64 = try self.getComponentId(@TypeOf(component));
         var newComponents = BitSet.initEmpty();
         newComponents.set(componentId);
@@ -312,23 +314,92 @@ pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !Entity
     }
 }
 
-pub fn getComponentType(self: *const Self, componentId: ComponentId) ?Rtti {
+pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.TypeId, componentData: []const u8) !Entity {
+    std.log.err("World.addComponentRaw: {*}", .{componentData.ptr});
+    if (self.entities.get(entityId)) |oldEntity| {
+        const componentId: u64 = try self.getComponentIdForRtti(componentType);
+        var newComponents = BitSet.initEmpty();
+        newComponents.set(componentId);
+        var newArchetype = try oldEntity.chunk.table.archetype.addComponents(componentType.hash, newComponents);
+
+        var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
+
+        // copy existing entity to new table
+        // std.log.debug("add entity {} to table {}", .{ oldEntity, newArchetype });
+        var newEntity = try newTable.copyEntityIntoRaw(oldEntity, componentType, componentData);
+
+        // Update entities map
+        try self.entities.put(newEntity.id, newEntity);
+
+        // Remove old entity
+        // std.log.debug("remove entity {} from table {}", .{ entityId, oldEntity });
+        if (oldEntity.chunk.table.removeEntity(oldEntity)) |update| {
+            // Another entity moved while removing oldEntity, so update the index.
+            var entity = self.entities.getEntry(update.entityId) orelse unreachable;
+            // std.log.debug("update index of {} from {} to {}", .{ entity.key_ptr.*, entity.value_ptr.index, update.newIndex });
+            entity.value_ptr.index = update.newIndex;
+        }
+
+        return newEntity;
+    } else {
+        return error.InvalidEntity;
+    }
+}
+
+pub fn removeComponent(self: *const Self, entityId: EntityId, componentType: Rtti.TypeId) !void {
+    _ = self;
+    _ = entityId;
+    _ = componentType;
+    // @todo
+}
+
+pub fn getComponentType(self: *const Self, componentId: ComponentId) ?Rtti.TypeId {
     if (componentId >= self.componentIdToComponentType.items.len) {
         return null;
     }
     return self.componentIdToComponentType.items[componentId];
 }
 
+pub fn getComponent(self: *Self, entityId: EntityId, comptime ComponentType: type) !?*ComponentType {
+    if (self.entities.get(entityId)) |entity| {
+        // Check if entity has the specified component.
+        const componentId = try self.getComponentId(ComponentType);
+        if (!entity.chunk.table.archetype.components.isSet(componentId)) {
+            return null;
+        }
+
+        // Component exists on this entity.
+        const componentIndex = entity.chunk.table.getListIndexForType(Rtti.typeId(ComponentType));
+        const rawData = entity.chunk.getComponentRaw(componentIndex, entity.index);
+        std.debug.assert(rawData.len == @sizeOf(ComponentType));
+        return @ptrCast(*ComponentType, @alignCast(@alignOf(ComponentType), rawData.ptr));
+    } else {
+        return error.InvalidEntity;
+    }
+}
+
 // Utility functions
 
 /// Returns the id of the component with the given type.
-fn getComponentId(self: *Self, comptime ComponentType: type) !ComponentId {
-    const rtti = Rtti.init(ComponentType);
-    if (self.components.get(rtti)) |componentId| {
-        return componentId;
+pub fn getComponentId(self: *Self, comptime ComponentType: type) !ComponentId {
+    const rtti = Rtti.typeId(ComponentType);
+    if (self.components.get(rtti)) |componentInfo| {
+        return componentInfo.id;
     } else {
         const componentId = self.componentIdToComponentType.items.len;
-        try self.components.put(rtti, componentId);
+        try self.components.put(rtti, .{ .id = componentId });
+        try self.componentIdToComponentType.append(rtti);
+        return componentId;
+    }
+}
+
+/// Returns the id of the component with the given type.
+pub fn getComponentIdForRtti(self: *Self, rtti: Rtti.TypeId) !ComponentId {
+    if (self.components.get(rtti)) |componentInfo| {
+        return componentInfo.id;
+    } else {
+        const componentId = self.componentIdToComponentType.items.len;
+        try self.components.put(rtti, .{ .id = componentId });
         try self.componentIdToComponentType.append(rtti);
         return componentId;
     }
@@ -343,7 +414,7 @@ fn createArchetypeStruct(self: *Self, comptime T: anytype) !Archetype {
     inline for (typeInfo.fields) |field| {
         const ComponentType = field.default_value orelse unreachable;
         std.debug.assert(@TypeOf(ComponentType) == type);
-        const rtti = Rtti.init(ComponentType);
+        const rtti = Rtti.typeId(ComponentType);
         bitSet.set(try self.getComponentId(ComponentType));
         hash ^= rtti.hash;
     }

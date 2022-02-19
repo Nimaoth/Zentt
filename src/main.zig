@@ -4,14 +4,15 @@ const gl = @import("zgl");
 const imgui = @import("imgui.zig");
 const imgui2 = @import("imgui2.zig");
 const sdl = @import("sdl.zig");
+const Details = @import("details_window.zig");
 
-const Rtti = @import("rtti.zig").Rtti;
 const EntityId = @import("entity.zig").EntityId;
 const ComponentId = @import("entity.zig").ComponentId;
 const World = @import("world.zig");
 const EntityBuilder = @import("entity_builder.zig");
 const Query = @import("query.zig").Query;
 const Tag = @import("tag_component.zig").Tag;
+const Commands = @import("commands.zig");
 
 const Position = struct {
     position: [3]f32,
@@ -93,47 +94,47 @@ pub fn main() anyerror!void {
     defer world.deinit();
     defer world.dumpGraph() catch {};
 
-    _ = try EntityBuilder.initWithTag(world, "Foo")
-        .addComponent(A{ .i = 1 })
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Foo")
+    //     .addComponent(A{ .i = 1 })
+    //     .build();
 
-    _ = try EntityBuilder.initWithTag(world, "Foo2")
-        .addComponent(A{ .i = 2 })
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Foo2")
+    //     .addComponent(A{ .i = 2 })
+    //     .build();
 
-    _ = try EntityBuilder.initWithTag(world, "Bar")
-        .addComponent(A{ .i = 11 })
-        .addComponent(B{ .b = false })
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Bar")
+    //     .addComponent(A{ .i = 11 })
+    //     .addComponent(B{ .b = false })
+    //     .build();
 
-    _ = try EntityBuilder.initWithTag(world, "Bar2")
-        .addComponent(A{ .i = 12 })
-        .addComponent(B{ .b = true })
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Bar2")
+    //     .addComponent(A{ .i = 12 })
+    //     .addComponent(B{ .b = true })
+    //     .build();
 
-    _ = try EntityBuilder.initWithTag(world, "Bar3")
-        .addComponent(B{ .b = false })
-        .addComponent(A{ .i = 13 })
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Bar3")
+    //     .addComponent(B{ .b = false })
+    //     .addComponent(A{ .i = 13 })
+    //     .build();
 
-    _ = try EntityBuilder.initWithTag(world, "Baz")
-        .addComponent(B{ .b = true })
-        .addComponent(C{})
-        .addComponent(A{ .i = 21 })
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Baz")
+    //     .addComponent(B{ .b = true })
+    //     .addComponent(C{})
+    //     .addComponent(A{ .i = 21 })
+    //     .build();
 
-    _ = try EntityBuilder.initWithTag(world, "Baz2")
-        .addComponent(A{ .i = 22 })
-        .addComponent(C{ .i = 420, .u = 69 })
-        .addComponent(B{ .b = false })
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Baz2")
+    //     .addComponent(A{ .i = 22 })
+    //     .addComponent(C{ .i = 420, .u = 69 })
+    //     .addComponent(B{ .b = false })
+    //     .build();
 
-    _ = try EntityBuilder.initWithTag(world, "Tog")
-        .addComponent(C{ .i = 69 })
-        .addComponent(B{ .b = true })
-        .addComponent(A{ .i = 31 })
-        .addComponent(D{})
-        .build();
+    // _ = try EntityBuilder.initWithTag(world, "Tog")
+    //     .addComponent(C{ .i = 69 })
+    //     .addComponent(B{ .b = true })
+    //     .addComponent(A{ .i = 31 })
+    //     .addComponent(D{})
+    //     .build();
 
     try world.addSystem(testSystem1, "{A}");
     try world.addSystem(testSystem2, "{A, B}");
@@ -142,12 +143,26 @@ pub fn main() anyerror!void {
     try world.addSystem(testSystem5, "{B}");
 
     _ = try world.addResource(Time{});
+    var commands = try world.addResource(Commands.init(allocator));
+    defer commands.deinit();
+
+    const e = try commands.createEntity();
+    _ = try commands.addComponent(e, Tag{ .name = "e" });
+    _ = try commands.addComponent(e, C{ .i = 69 });
+    _ = try commands.addComponent(e, B{ .b = false });
+    _ = try commands.addComponent(e, A{ .i = 31 });
+    _ = try commands.addComponent(e, D{});
+    _ = try commands.applyCommands(world);
+
+    var details = Details.init(allocator);
 
     var show_demo_window = true;
 
     // Wait for the user to close the window.
     std.debug.print("\n==============================================================================================================================================\n", .{});
     var quit = false;
+
+    var selectedEntity: EntityId = 0;
 
     var lastFrameTime = std.time.nanoTimestamp();
     var frameTimeSmoothed: f64 = 0;
@@ -194,28 +209,60 @@ pub fn main() anyerror!void {
         imgui.End();
 
         if (imgui.Begin("Entities")) {
+            if (imgui.Button("Create Entity")) {
+                const entt = try commands.createEntity();
+                _ = entt;
+                // _ = try commands.addComponent(e, Tag{ .name = "e" });
+            }
+
             var tableFlags = imgui.TableFlags{
                 .Resizable = true,
                 .RowBg = true,
                 .Sortable = true,
             };
             tableFlags = tableFlags.with(imgui.TableFlags.Borders);
-            if (imgui.BeginTable("Entities", 2, tableFlags, .{}, 0)) {
+            if (imgui.BeginTable("Entities", 4, tableFlags, .{}, 0)) {
                 defer imgui.EndTable();
 
                 var entityIter = world.entities.iterator();
                 while (entityIter.next()) |entry| {
+                    const entityId = entry.key_ptr.*;
+                    imgui.PushIDInt64(entityId);
+                    defer imgui.PopID();
+
                     imgui.TableNextRow(.{}, 0);
                     _ = imgui.TableSetColumnIndex(0);
-                    imgui.Text("%d", entry.key_ptr.*);
+                    imgui.Text("%d", entityId);
+
+                    _ = imgui.TableSetColumnIndex(1);
+                    if (try world.getComponent(entityId, Tag)) |tag| {
+                        imgui.Text("%.*s", tag.name.len, tag.name.ptr);
+                    }
+
+                    _ = imgui.TableSetColumnIndex(2);
+                    if (imgui.Button("Select")) {
+                        // const entt = try commands.getEntity(entityId);
+                        // _ = try commands.addComponent(entt, Tag{ .name = "lol" });
+                        selectedEntity = entityId;
+                    }
+
+                    _ = imgui.TableSetColumnIndex(3);
+                    if (imgui.Button("Destroy")) {
+                        try commands.destroyEntity(entityId);
+                    }
                 }
             }
         }
         imgui.End();
 
+        try details.draw(world, selectedEntity);
+
         try world.runFrameSystems();
 
         imgui2.endFrame();
+
+        try commands.applyCommands(world);
+
         imgui2.render();
 
         gl.viewport(0, 0, @floatToInt(usize, io.DisplaySize.x), @floatToInt(usize, io.DisplaySize.y));

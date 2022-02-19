@@ -9,6 +9,9 @@ const Self = @This();
 pub fn initEmpty() @This() {
     return @This(){ .bitSet = Impl.initEmpty() };
 }
+pub fn isSet(self: *Self, index: usize) bool {
+    return self.bitSet.isSet(index);
+}
 
 pub fn set(self: *Self, index: usize) void {
     self.bitSet.set(index);

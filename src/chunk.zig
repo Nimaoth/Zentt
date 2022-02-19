@@ -163,6 +163,7 @@ pub const EntityIndexUpdate = struct { entityId: u64, newIndex: u64 };
 
 pub fn removeEntity(self: *Self, index: u64) ?EntityIndexUpdate {
     std.debug.assert(index < self.count);
+
     self.count -= 1;
     if (index < self.count) {
         self.entityIds[index] = self.entityIds[self.count];
@@ -176,7 +177,7 @@ pub fn removeEntity(self: *Self, index: u64) ?EntityIndexUpdate {
 
         // The index of the last entity changed because it was moved to the current index i.
         // Update the index stored in the entities map in the world.
-        return EntityIndexUpdate{ .entityId = self.entityIds[self.count], .newIndex = index };
+        return EntityIndexUpdate{ .entityId = self.entityIds[index], .newIndex = index };
     }
     return null;
 }

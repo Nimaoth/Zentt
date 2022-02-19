@@ -3699,7 +3699,7 @@ pub inline fn CollapsingHeader(label: ?[*:0]const u8) bool {
 }
 
 pub inline fn CollapsingHeaderBoolPtrExt(label: ?[*:0]const u8, p_open: ?*bool, flags: TreeNodeFlags) bool {
-    return raw.igCollapsingHeaderBoolPtr(label, p_open, flags.toInt());
+    return raw.igCollapsingHeader_BoolPtr(label, p_open, flags.toInt());
 }
 pub inline fn CollapsingHeaderBoolPtr(label: ?[*:0]const u8, p_open: ?*bool) bool {
     return CollapsingHeaderBoolPtrExt(label, p_open, .{});
@@ -4583,7 +4583,12 @@ pub const PushIDStr = raw.igPushIDStr;
 pub const PushIDRange = raw.igPushIDRange;
 
 /// PushIDPtr(ptr_id: ?*const c_void) void
-pub const PushIDPtr = raw.igPushIDPtr;
+pub const PushIDPtr = raw.igPushID_Ptr;
+
+/// PushIDInt(int_id: i32) void
+pub fn PushIDInt64(id: u64) void {
+    PushIDPtr(@intToPtr(*anyopaque, id));
+}
 
 /// PushIDInt(int_id: i32) void
 pub const PushIDInt = raw.igPushIDInt;
@@ -5871,7 +5876,7 @@ pub const raw = struct {
     pub extern fn igCheckboxFlags(label: ?[*:0]const u8, flags: ?*u32, flags_value: u32) callconv(.C) bool;
     pub extern fn igCloseCurrentPopup() callconv(.C) void;
     pub extern fn igCollapsingHeader(label: ?[*:0]const u8, flags: TreeNodeFlagsInt) callconv(.C) bool;
-    pub extern fn igCollapsingHeaderBoolPtr(label: ?[*:0]const u8, p_open: ?*bool, flags: TreeNodeFlagsInt) callconv(.C) bool;
+    pub extern fn igCollapsingHeader_BoolPtr(label: ?[*:0]const u8, p_open: ?*bool, flags: TreeNodeFlagsInt) callconv(.C) bool;
     pub extern fn igColorButton(desc_id: ?[*:0]const u8, col: Vec4, flags: ColorEditFlagsInt, size: Vec2) callconv(.C) bool;
     pub extern fn igColorConvertFloat4ToU32(in: Vec4) callconv(.C) u32;
     pub extern fn igColorConvertHSVtoRGB(h: f32, s: f32, v: f32, out_r: *f32, out_g: *f32, out_b: *f32) callconv(.C) void;
@@ -6069,7 +6074,7 @@ pub const raw = struct {
     pub extern fn igPushFont(font: ?*Font) callconv(.C) void;
     pub extern fn igPushIDStr(str_id: ?[*:0]const u8) callconv(.C) void;
     pub extern fn igPushIDRange(str_id_begin: ?[*]const u8, str_id_end: ?[*]const u8) callconv(.C) void;
-    pub extern fn igPushIDPtr(ptr_id: ?*const anyopaque) callconv(.C) void;
+    pub extern fn igPushID_Ptr(ptr_id: ?*const anyopaque) callconv(.C) void;
     pub extern fn igPushIDInt(int_id: i32) callconv(.C) void;
     pub extern fn igPushItemWidth(item_width: f32) callconv(.C) void;
     pub extern fn igPushStyleColorU32(idx: Col, col: u32) callconv(.C) void;

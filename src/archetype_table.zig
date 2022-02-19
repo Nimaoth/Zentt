@@ -6,7 +6,7 @@ const Rtti = @import("rtti.zig");
 const Chunk = @import("chunk.zig");
 const Entity = @import("entity.zig");
 
-typeToList: std.HashMap(Rtti, u64, Rtti.Context, 80),
+typeToList: std.HashMap(Rtti.TypeId, u64, Rtti.TypeId.Context, 80),
 supersets: std.AutoHashMap(BitSet, *Self),
 subsets: std.AutoHashMap(BitSet, *Self),
 archetype: Archetype,
@@ -20,7 +20,7 @@ pub fn init(self: *Self, archetype: Archetype, allocator: std.mem.Allocator) !vo
     self.subsets = std.AutoHashMap(BitSet, *Self).init(allocator);
     self.archetype = archetype;
     self.firstChunk = try Chunk.init(self, 100, allocator);
-    self.typeToList = std.HashMap(Rtti, u64, Rtti.Context, 80).init(allocator);
+    self.typeToList = std.HashMap(Rtti.TypeId, u64, Rtti.TypeId.Context, 80).init(allocator);
     var iter = archetype.components.iterator();
     while (iter.next()) |componentId| {
         const componentType = archetype.world.getComponentType(componentId) orelse unreachable;
@@ -40,7 +40,7 @@ pub fn deinit(self: *Self) void {
     self.subsets.deinit();
 }
 
-pub fn getListIndexForType(self: *const Self, rtti: Rtti) u64 {
+pub fn getListIndexForType(self: *const Self, rtti: Rtti.TypeId) u64 {
     return self.typeToList.get(rtti) orelse unreachable;
 }
 
@@ -82,12 +82,37 @@ pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
 
     const typeInfo = @typeInfo(@TypeOf(components)).Struct;
     inline for (typeInfo.fields) |field| {
-        const componentType = Rtti.init(field.field_type);
+        const componentType = Rtti.typeId(field.field_type);
         const index = self.getListIndexForType(componentType);
         try entity.chunk.setComponentRaw(index, entity.index, std.mem.asBytes(&@field(components, field.name)));
     }
 
     return entity;
+}
+
+pub fn copyEntityIntoRaw(self: *Self, entity: Entity, componentType: Rtti, componentData: []const u8) !Entity {
+    // @todo: check if the provided components match the archetype
+    std.log.err("ArchetypeTable.copyEntityIntoRaw: {any}", .{componentData});
+
+    std.log.info("copyEntityIntoRaw({}): {}", .{ entity, componentType });
+
+    // Add entity
+    const newEntity: Entity = try self.firstChunk.addEntity(entity.id);
+
+    // Add new component
+    std.debug.assert(self.typeToList.count() == newEntity.chunk.components.len);
+    if (componentType.size > 0) {
+        try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType), newEntity.index, componentData);
+    }
+
+    // Copy existing components
+    for (entity.chunk.components) |*componentList| {
+        var oldData = componentList.getRaw(entity.index);
+        const newComponentIndex = newEntity.chunk.table.getListIndexForType(componentList.componentType);
+        try newEntity.chunk.setComponentRaw(newComponentIndex, newEntity.index, oldData);
+    }
+
+    return newEntity;
 }
 
 pub fn copyEntityInto(self: *Self, entity: Entity, newComponent: anytype) !Entity {
@@ -101,7 +126,7 @@ pub fn copyEntityInto(self: *Self, entity: Entity, newComponent: anytype) !Entit
     const newEntity: Entity = try self.firstChunk.addEntity(entity.id);
 
     // Add new component
-    const componentType = Rtti.init(ComponentType);
+    const componentType = Rtti.typeId(ComponentType);
     std.debug.assert(self.typeToList.count() == newEntity.chunk.components.len);
     if (componentType.size > 0) {
         try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType), newEntity.index, std.mem.asBytes(&newComponent));
