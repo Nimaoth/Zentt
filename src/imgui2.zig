@@ -1,4 +1,5 @@
 const std = @import("std");
+const vk = @import("vulkan");
 
 const C = @cImport({
     @cDefine("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", "1");
@@ -10,10 +11,32 @@ const sdl = @import("sdl.zig");
 
 const Rtti = @import("rtti.zig");
 
+pub const ImGui_ImplVulkan_InitInfo = extern struct {
+    Instance: vk.Instance,
+    PhysicalDevice: vk.PhysicalDevice,
+    Device: vk.Device,
+    QueueFamily: u32,
+    Queue: vk.Queue,
+    PipelineCache: [*c]vk.PipelineCache,
+    DescriptorPool: vk.DescriptorPool,
+    Subpass: u32 = 0,
+    MinImageCount: u32, // >= 2
+    ImageCount: u32, // >= MinImageCount
+    MSAASamples: vk.Flags, // >= VK_SAMPLE_COUNT_1_BIT
+    Allocator: ?*const vk.AllocationCallbacks,
+    CheckVkResultFn: ?fn (vk.Result) callconv(vk.vulkan_call_conv) void,
+};
+
+const ImGuiContext = C.ImGuiContext;
+const ImFontAtlas = C.ImFontAtlas;
+const ImDrawData = C.ImDrawData;
+const ImGuiIO = C.ImGuiIO;
+
 pub extern fn ImGui_ImplGlfw_InitForOpenGL(window: *anyopaque, install_callbacks: bool) bool;
 pub extern fn ImGui_ImplGlfw_Shutdown() void;
 pub extern fn ImGui_ImplGlfw_NewFrame() void;
 pub extern fn ImGui_ImplSDL2_InitForOpenGL(window: *anyopaque, install_callbacks: bool) bool;
+pub extern fn ImGui_ImplSDL2_InitForVulkan(window: *anyopaque) bool;
 pub extern fn ImGui_ImplSDL2_Shutdown() void;
 pub extern fn ImGui_ImplSDL2_NewFrame() void;
 pub extern fn ImGui_ImplSDL2_ProcessEvent(window: sdl.SDL_Event) void;
@@ -21,11 +44,14 @@ pub extern fn ImGui_ImplOpenGL3_Init(glsl_version: [*:0]const u8) bool;
 pub extern fn ImGui_ImplOpenGL3_Shutdown() void;
 pub extern fn ImGui_ImplOpenGL3_NewFrame() void;
 pub extern fn ImGui_ImplOpenGL3_RenderDrawData(draw_data: *ImDrawData) void;
-
-const ImGuiContext = C.ImGuiContext;
-const ImFontAtlas = C.ImFontAtlas;
-const ImDrawData = C.ImDrawData;
-const ImGuiIO = C.ImGuiIO;
+pub extern fn ImGui_ImplVulkan_Init(info: *const ImGui_ImplVulkan_InitInfo, render_pass: vk.RenderPass) bool;
+pub extern fn ImGui_ImplVulkan_Shutdown() void;
+pub extern fn ImGui_ImplVulkan_NewFrame() void;
+pub extern fn ImGui_ImplVulkan_RenderDrawData(draw_data: *ImDrawData, command_buffer: vk.CommandBuffer, pipeline: vk.Pipeline) void;
+pub extern fn ImGui_ImplVulkan_CreateFontsTexture(command_buffer: vk.CommandBuffer) bool;
+pub extern fn ImGui_ImplVulkan_DestroyFontUploadObjects() void;
+pub extern fn ImGui_ImplVulkan_SetMinImageCount(min_image_count: u32) void;
+pub extern fn ImGui_ImplVulkan_LoadFunctions(loader_func: *const anyopaque, user_data: ?*const anyopaque) bool;
 
 pub fn createContext(shared_font_atlas: ?*ImFontAtlas) !*ImGuiContext {
     const result = @ptrCast(?*C.ImGuiContext, C.igCreateContext(shared_font_atlas));
@@ -49,7 +75,7 @@ pub fn renderPlatformWindowsDefault(platform_render_arg: ?*anyopaque, renderer_r
 }
 
 pub fn newFrame() void {
-    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     C.igNewFrame();
 }
@@ -65,11 +91,11 @@ pub fn render() void {
 pub fn updatePlatformWindows() void {
     var io = getIO();
     if ((io.ConfigFlags & (1 << 10)) != 0) {
-        const backup_current_window = sdl.SDL_GL_GetCurrentWindow();
-        const backup_current_context = sdl.SDL_GL_GetCurrentContext();
+        // const backup_current_window = sdl.SDL_GL_GetCurrentWindow();
+        // const backup_current_context = sdl.SDL_GL_GetCurrentContext();
         C.igUpdatePlatformWindows();
         C.igRenderPlatformWindowsDefault(null, null);
-        _ = sdl.SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
+        // _ = sdl.SDL_GL_MakeCurrent(backup_current_window, backup_current_context);
     }
 }
 
