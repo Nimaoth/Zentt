@@ -154,7 +154,7 @@ pub fn main() anyerror!void {
     _ = try commands.addComponent(e, B{ .b = false });
     _ = try commands.addComponent(e, A{ .i = 31 });
     _ = try commands.addComponent(e, D{});
-    // _ = try commands.applyCommands(world);
+    _ = try commands.applyCommands(world);
 
     var details = Details.init(allocator);
 

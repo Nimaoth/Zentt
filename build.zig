@@ -125,6 +125,7 @@ pub fn build(b: *std.build.Builder) void {
             "-Wall",
             "-fno-exceptions",
             "-fno-rtti",
+            "-g",
             "-fno-threadsafe-statics",
             "-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES",
             "-DIMGUI_IMPL_API=extern\"C\"",

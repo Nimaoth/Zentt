@@ -5,6 +5,9 @@ const ComponentId = @import("entity.zig").ComponentId;
 const World = @import("world.zig");
 const Tag = @import("tag_component.zig").Tag;
 const Rtti = @import("rtti.zig");
+const Commands = @import("commands.zig");
+
+const root = @import("root");
 
 const imgui = @import("imgui.zig");
 const imgui2 = @import("imgui2.zig");
@@ -19,7 +22,7 @@ pub fn init(allocator: std.mem.Allocator) Self {
     };
 }
 
-pub fn draw(self: *Self, world: *World, entityId: EntityId) !void {
+pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands) !void {
     var scratchBuffer = std.heap.ArenaAllocator.init(self.allocator);
     defer scratchBuffer.deinit();
 
@@ -27,7 +30,6 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId) !void {
 
     _ = imgui.Begin("Details");
     if (world.entities.get(entityId)) |entity| {
-        _ = entity;
         if (try world.getComponent(entityId, Tag)) |tag| {
             imgui2.property("Tag");
             if (tag.name.len < tagBuffer.len) {
@@ -54,6 +56,31 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId) !void {
             )) {
                 imgui2.anyDynamic(rtti, components.getRaw(entity.index));
             }
+        }
+
+        if (imgui.SmallButton("Add Tag")) {
+            const entityHandle = try commands.getEntity(entityId);
+            _ = try commands.addComponent(entityHandle, Tag{ .name = "foo" });
+        }
+
+        if (imgui.SmallButton("Add A")) {
+            const entityHandle = try commands.getEntity(entityId);
+            _ = try commands.addComponent(entityHandle, root.A{ .i = @intCast(i64, entityId) });
+        }
+
+        if (imgui.SmallButton("Add B")) {
+            const entityHandle = try commands.getEntity(entityId);
+            _ = try commands.addComponent(entityHandle, root.B{ .b = true });
+        }
+
+        if (imgui.SmallButton("Add C")) {
+            const entityHandle = try commands.getEntity(entityId);
+            _ = try commands.addComponent(entityHandle, root.C{});
+        }
+
+        if (imgui.SmallButton("Add D")) {
+            const entityHandle = try commands.getEntity(entityId);
+            _ = try commands.addComponent(entityHandle, root.D{});
         }
 
         // Check if entity has the specified component.

@@ -55,6 +55,66 @@ export fn vulkan_loader(function_name: [*:0]const u8, user_data: ?*anyopaque) vk
     return sdl.SDL_Vulkan_GetVkGetInstanceProcAddrZig()(instance, function_name);
 }
 
+const Details = @import("details_window.zig");
+
+const EntityId = @import("entity.zig").EntityId;
+const ComponentId = @import("entity.zig").ComponentId;
+const World = @import("world.zig");
+const EntityBuilder = @import("entity_builder.zig");
+const Query = @import("query.zig").Query;
+const Tag = @import("tag_component.zig").Tag;
+const Commands = @import("commands.zig");
+
+pub const Position = struct {
+    position: [3]f32,
+};
+pub const Gravity = struct { uiae: f32 = 99 };
+pub const A = struct { i: i64 };
+pub const B = struct { b: bool, Gravity: Gravity = .{} };
+pub const C = struct { i: i16 = 123, b: bool = true, u: u8 = 9 };
+pub const D = struct {};
+
+pub fn testSystem1(query: Query(.{ Tag, A })) !void {
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        _ = entity;
+    }
+}
+
+pub fn testSystem2(query: Query(.{ Tag, A, B })) !void {
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        _ = entity;
+    }
+}
+
+pub fn testSystem3(query: Query(.{ Tag, A, B, C })) !void {
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        _ = entity;
+    }
+}
+
+pub fn testSystem4(query: Query(.{ Tag, A, B, C, D })) !void {
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        _ = entity;
+    }
+}
+
+pub fn testSystem5(time: *const Time, query: Query(.{ Tag, B })) !void {
+    _ = time;
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        _ = entity;
+    }
+}
+
+const Time = struct {
+    delta: f64 = 0,
+    now: f64 = 0,
+};
+
 pub fn main() !void {
     // init SDL
     if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
@@ -261,6 +321,33 @@ pub fn main() !void {
         imgui2.ImGui_ImplVulkan_DestroyFontUploadObjects();
     }
 
+    var world = try World.init(allocator);
+    defer world.deinit();
+    defer world.dumpGraph() catch {};
+    try world.addSystem(testSystem1, "{A}");
+    try world.addSystem(testSystem2, "{A, B}");
+    try world.addSystem(testSystem3, "{A, B, C}");
+    try world.addSystem(testSystem4, "{A, B, C, D}");
+    try world.addSystem(testSystem5, "{B}");
+
+    _ = try world.addResource(Time{});
+    var commands = try world.addResource(Commands.init(allocator));
+    defer commands.deinit();
+
+    const e = try commands.createEntity();
+    _ = try commands.addComponent(e, Tag{ .name = "e" });
+    _ = try commands.addComponent(e, C{ .i = 69 });
+    _ = try commands.addComponent(e, B{ .b = false });
+    _ = try commands.addComponent(e, A{ .i = 31 });
+    _ = try commands.addComponent(e, D{});
+    _ = try commands.applyCommands(world);
+
+    var details = Details.init(allocator);
+    var selectedEntity: EntityId = 0;
+
+    var lastFrameTime = std.time.nanoTimestamp();
+    var frameTimeSmoothed: f64 = 0;
+
     var quit = false;
     var i: i64 = 0;
     while (!quit) {
@@ -274,8 +361,23 @@ pub fn main() !void {
                 else => {},
             }
         }
+        const currentFrameTime = std.time.nanoTimestamp();
+        const frameTimeNs = currentFrameTime - lastFrameTime;
+        const frameTime = (@intToFloat(f64, frameTimeNs) / std.time.ns_per_ms);
+        frameTimeSmoothed = (0.9 * frameTimeSmoothed) + (0.1 * frameTime);
+        lastFrameTime = currentFrameTime;
+        var fps: f64 = blk: {
+            if (frameTimeSmoothed == 0) {
+                break :blk -1;
+            } else {
+                break :blk (1000.0 / frameTimeSmoothed);
+            }
+        };
+        _ = fps;
 
-        // std.log.debug("frame {}, {}", .{ i, swapchain.image_index });
+        var timeResource = try world.getResource(Time);
+        timeResource.delta = @intToFloat(f64, frameTimeNs) / std.time.ns_per_s;
+        timeResource.now += timeResource.delta;
 
         const cmdbuf = cmdbufs[swapchain.image_index];
         const imgui_cmdbuf = imgui_cmdbufs[swapchain.image_index];
@@ -283,8 +385,6 @@ pub fn main() !void {
 
         var w: c_int = undefined;
         var h: c_int = undefined;
-        // w = @intCast(c_int, extent.width);
-        // h = @intCast(c_int, extent.height);
         sdl.SDL_Vulkan_GetDrawableSize(window, &w, &h);
 
         try swapchain.prepare();
@@ -294,6 +394,64 @@ pub fn main() !void {
 
         var b = true;
         imgui2.showDemoWindow(&b);
+
+        if (imgui.Begin("Stats")) {
+            imgui.LabelText("Frame time: ", "%.2f", frameTimeSmoothed);
+            imgui.LabelText("FPS: ", "%.1f", fps);
+        }
+        imgui.End();
+
+        if (imgui.Begin("Entities")) {
+            if (imgui.Button("Create Entity")) {
+                const entt = try commands.createEntity();
+                _ = entt;
+                // _ = try commands.addComponent(e, Tag{ .name = "e" });
+            }
+
+            var tableFlags = imgui.TableFlags{
+                .Resizable = true,
+                .RowBg = true,
+                .Sortable = true,
+            };
+            tableFlags = tableFlags.with(imgui.TableFlags.Borders);
+            if (imgui.BeginTable("Entities", 4, tableFlags, .{}, 0)) {
+                defer imgui.EndTable();
+
+                var entityIter = world.entities.iterator();
+                while (entityIter.next()) |entry| {
+                    const entityId = entry.key_ptr.*;
+                    imgui.PushIDInt64(entityId);
+                    defer imgui.PopID();
+
+                    imgui.TableNextRow(.{}, 0);
+                    _ = imgui.TableSetColumnIndex(0);
+                    imgui.Text("%d", entityId);
+
+                    _ = imgui.TableSetColumnIndex(1);
+                    if (try world.getComponent(entityId, Tag)) |tag| {
+                        imgui.Text("%.*s", tag.name.len, tag.name.ptr);
+                    }
+
+                    _ = imgui.TableSetColumnIndex(2);
+                    if (imgui.Button("Select")) {
+                        // const entt = try commands.getEntity(entityId);
+                        // _ = try commands.addComponent(entt, Tag{ .name = "lol" });
+                        selectedEntity = entityId;
+                    }
+
+                    _ = imgui.TableSetColumnIndex(3);
+                    if (imgui.Button("Destroy")) {
+                        try commands.destroyEntity(entityId);
+                    }
+                }
+            }
+        }
+        imgui.End();
+
+        try details.draw(world, selectedEntity, commands);
+
+        try world.runFrameSystems();
+        _ = try commands.applyCommands(world);
 
         imgui2.render();
         imgui2.endFrame();

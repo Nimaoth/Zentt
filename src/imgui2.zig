@@ -131,6 +131,9 @@ pub fn property(name: []const u8) void {
 }
 
 pub fn any(value: anytype, name: []const u8) void {
+    imgui.PushIDInt64(@ptrToInt(value));
+    defer imgui.PopID();
+
     const typeInfoOuter = @typeInfo(@TypeOf(value));
 
     const actualType = typeInfoOuter.Pointer.child;
@@ -166,7 +169,7 @@ pub fn any(value: anytype, name: []const u8) void {
             };
 
             property(name);
-            _ = imgui.DragScalar("", dataType, value, 1);
+            _ = imgui.DragScalarExt("", dataType, value, 1, null, null, null, (imgui.SliderFlags{ .NoRoundToFormat = true, .AlwaysClamp = true }).toInt());
         },
 
         .Float => |ti| {
@@ -189,7 +192,7 @@ pub fn any(value: anytype, name: []const u8) void {
 
         .Struct => |ti| {
             const flags = imgui.TreeNodeFlags{ .Bullet = true, .SpanFullWidth = false, .DefaultOpen = true };
-            if (imgui.TreeNodeExPtr(value, flags.toInt(), null)) {
+            if (imgui.TreeNodeExPtr(value, flags.toInt(), "")) {
                 defer imgui.TreePop();
                 inline for (ti.fields) |field| {
                     any(&@field(value, field.name), field.name);
@@ -219,6 +222,9 @@ pub fn any(value: anytype, name: []const u8) void {
 }
 
 pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
+    imgui.PushIDInt64(@ptrToInt(value.ptr));
+    defer imgui.PopID();
+
     // Special case: string
     if (typeInfo == Rtti.typeInfo([]const u8)) {
         const string = @ptrCast(*[]const u8, @alignCast(@alignOf(*u8), value.ptr)).*;
@@ -248,7 +254,7 @@ pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
                 }
             };
 
-            _ = imgui.DragScalar("", dataType, value.ptr, 1);
+            _ = imgui.DragScalarExt("", dataType, value.ptr, 1, null, null, null, (imgui.SliderFlags{ .NoRoundToFormat = true, .AlwaysClamp = true }).toInt());
         },
 
         .Float => |ti| {
