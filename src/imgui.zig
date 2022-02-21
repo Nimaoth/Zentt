@@ -483,8 +483,6 @@ pub const HoveredFlags = packed struct {
     AllowWhenBlockedByActiveItem: bool = false,
     AllowWhenOverlapped: bool = false,
     AllowWhenDisabled: bool = false,
-    __reserved_bit_08: bool = false,
-    __reserved_bit_09: bool = false,
     __reserved_bit_10: bool = false,
     __reserved_bit_11: bool = false,
     __reserved_bit_12: bool = false,
@@ -1403,7 +1401,7 @@ pub const DrawList = extern struct {
     pub const AddRectFilledMultiColor = raw.ImDrawList_AddRectFilledMultiColor;
 
     /// AddTextVec2Ext(self: *DrawList, pos: Vec2, col: u32, text_begin: ?[*]const u8, text_end: ?[*]const u8) void
-    pub const AddTextVec2Ext = raw.ImDrawList_AddTextVec2;
+    pub const AddTextVec2Ext = raw.ImDrawList_AddText_Vec2;
     pub inline fn AddTextVec2(self: *DrawList, pos: Vec2, col: u32, text_begin: ?[*]const u8) void {
         return AddTextVec2Ext(self, pos, col, text_begin, null);
     }
@@ -5171,7 +5169,7 @@ pub const raw = struct {
     pub extern fn ImDrawList_AddRect(self: *DrawList, p_min: Vec2, p_max: Vec2, col: u32, rounding: f32, rounding_corners: DrawCornerFlagsInt, thickness: f32) callconv(.C) void;
     pub extern fn ImDrawList_AddRectFilled(self: *DrawList, p_min: Vec2, p_max: Vec2, col: u32, rounding: f32, rounding_corners: DrawCornerFlagsInt) callconv(.C) void;
     pub extern fn ImDrawList_AddRectFilledMultiColor(self: *DrawList, p_min: Vec2, p_max: Vec2, col_upr_left: u32, col_upr_right: u32, col_bot_right: u32, col_bot_left: u32) callconv(.C) void;
-    pub extern fn ImDrawList_AddTextVec2(self: *DrawList, pos: Vec2, col: u32, text_begin: ?[*]const u8, text_end: ?[*]const u8) callconv(.C) void;
+    pub extern fn ImDrawList_AddText_Vec2(self: *DrawList, pos: Vec2, col: u32, text_begin: ?[*]const u8, text_end: ?[*]const u8) callconv(.C) void;
     pub extern fn ImDrawList_AddTextFontPtr(self: *DrawList, font: ?*const Font, font_size: f32, pos: Vec2, col: u32, text_begin: ?[*]const u8, text_end: ?[*]const u8, wrap_width: f32, cpu_fine_clip_rect: ?*const Vec4) callconv(.C) void;
     pub extern fn ImDrawList_AddTriangle(self: *DrawList, p1: Vec2, p2: Vec2, p3: Vec2, col: u32, thickness: f32) callconv(.C) void;
     pub extern fn ImDrawList_AddTriangleFilled(self: *DrawList, p1: Vec2, p2: Vec2, p3: Vec2, col: u32) callconv(.C) void;

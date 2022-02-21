@@ -66,6 +66,7 @@ const EntityBuilder = @import("entity_builder.zig");
 const Query = @import("query.zig").Query;
 const Tag = @import("tag_component.zig").Tag;
 const Commands = @import("commands.zig");
+const Profiler = @import("profiler.zig");
 
 pub const Position = struct {
     position: [3]f32,
@@ -133,7 +134,10 @@ fn staticVariable(comptime scope: anytype, comptime T: type, comptime name: []co
     return &Scope.staticVar;
 }
 
-pub fn moveSystem(commands: *Commands, time: *Time, query: Query(.{TransformComponent})) !void {
+pub fn moveSystem(profiler: *Profiler, commands: *Commands, time: *const Time, query: Query(.{TransformComponent})) !void {
+    const scope = profiler.beginScope("moveSystem");
+    defer scope.end();
+
     var prng = std.rand.DefaultPrng.init(@floatToInt(u64, time.now));
     var rand = prng.random();
 
@@ -160,15 +164,20 @@ pub fn moveSystem(commands: *Commands, time: *Time, query: Query(.{TransformComp
             try commands.destroyEntity(entity.id);
             _ = (try commands.createEntity())
                 .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                .addComponent(RenderComponent{});
+            // .addComponent(RenderComponent{})
+            ;
             _ = (try commands.createEntity())
                 .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                .addComponent(RenderComponent{});
+            // .addComponent(RenderComponent{})
+            ;
         }
     }
 }
 
-pub fn renderSystem(query: Query(.{ TransformComponent, RenderComponent })) !void {
+pub fn renderSystem(profiler: *Profiler, query: Query(.{ TransformComponent, RenderComponent })) !void {
+    const scope = profiler.beginScope("renderSystem");
+    defer scope.end();
+
     imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
     defer imgui.PopStyleVar();
     _ = imgui.Begin("Viewport");
@@ -430,6 +439,9 @@ pub fn main() !void {
     var commands = try world.addResource(Commands.init(allocator));
     defer commands.deinit();
 
+    var profiler = try world.addResource(Profiler.init(allocator));
+    defer profiler.deinit();
+
     const e = try commands.createEntity();
     _ = try commands.addComponent(e, Tag{ .name = "e" });
     _ = try commands.addComponent(e, C{ .i = 69 });
@@ -447,7 +459,6 @@ pub fn main() !void {
     var frameTimeSmoothed: f64 = 0;
 
     var quit = false;
-    var i: i64 = 0;
     while (!quit) {
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
@@ -485,13 +496,17 @@ pub fn main() !void {
         var h: c_int = undefined;
         sdl.SDL_Vulkan_GetDrawableSize(window, &w, &h);
 
-        try swapchain.prepare();
+        {
+            const scope = profiler.beginScope("prepare + demo");
+            defer scope.end();
+            try swapchain.prepare();
 
-        imgui2.newFrame();
-        imgui2.dockspace();
+            imgui2.newFrame();
+            imgui2.dockspace();
 
-        var b = true;
-        imgui2.showDemoWindow(&b);
+            var b = true;
+            imgui2.showDemoWindow(&b);
+        }
 
         if (imgui.Begin("Stats")) {
             imgui.LabelText("Frame time: ", "%.2f", frameTimeSmoothed);
@@ -500,105 +515,128 @@ pub fn main() !void {
         }
         imgui.End();
 
-        if (imgui.Begin("Entities")) {
-            if (imgui.Button("Create Entity")) {
-                const entt = try commands.createEntity();
-                _ = entt;
-                // _ = try commands.addComponent(e, Tag{ .name = "e" });
-            }
+        try profiler.record("Frame", frameTime);
 
-            var tableFlags = imgui.TableFlags{
-                .Resizable = true,
-                .RowBg = true,
-                .Sortable = true,
-            };
-            tableFlags = tableFlags.with(imgui.TableFlags.Borders);
-            if (imgui.BeginTable("Entities", 4, tableFlags, .{}, 0)) {
-                defer imgui.EndTable();
+        try profiler.record("Entities", @intToFloat(f64, world.entities.count()));
+        {
+            const scope = profiler.beginScope("details and profiler");
+            defer scope.end();
 
-                var entityIter = world.entities.iterator();
-                while (entityIter.next()) |entry| {
-                    const entityId = entry.key_ptr.*;
-                    imgui.PushIDInt64(entityId);
-                    defer imgui.PopID();
+            if (imgui.Begin("Entities")) {
+                if (imgui.Button("Create Entity")) {
+                    const entt = try commands.createEntity();
+                    _ = entt;
+                }
 
-                    imgui.TableNextRow(.{}, 0);
-                    _ = imgui.TableSetColumnIndex(0);
-                    imgui.Text("%d", entityId);
+                var tableFlags = imgui.TableFlags{
+                    .Resizable = true,
+                    .RowBg = true,
+                    .Sortable = true,
+                };
+                tableFlags = tableFlags.with(imgui.TableFlags.Borders);
+                if (imgui.BeginTable("Entities", 4, tableFlags, .{}, 0)) {
+                    defer imgui.EndTable();
 
-                    _ = imgui.TableSetColumnIndex(1);
-                    if (try world.getComponent(entityId, Tag)) |tag| {
-                        imgui.Text("%.*s", tag.name.len, tag.name.ptr);
-                    }
+                    var i: u64 = 0;
+                    var entityIter = world.entities.iterator();
+                    while (entityIter.next()) |entry| : (i += 1) {
+                        if (i > 100) break;
+                        const entityId = entry.key_ptr.*;
+                        imgui.PushIDInt64(entityId);
+                        defer imgui.PopID();
 
-                    _ = imgui.TableSetColumnIndex(2);
-                    if (imgui.Button("Select")) {
-                        // const entt = try commands.getEntity(entityId);
-                        // _ = try commands.addComponent(entt, Tag{ .name = "lol" });
-                        selectedEntity = entityId;
-                    }
+                        imgui.TableNextRow(.{}, 0);
+                        _ = imgui.TableSetColumnIndex(0);
+                        imgui.Text("%d", entityId);
 
-                    _ = imgui.TableSetColumnIndex(3);
-                    if (imgui.Button("Destroy")) {
-                        try commands.destroyEntity(entityId);
+                        _ = imgui.TableSetColumnIndex(1);
+                        if (try world.getComponent(entityId, Tag)) |tag| {
+                            imgui.Text("%.*s", tag.name.len, tag.name.ptr);
+                        }
+
+                        _ = imgui.TableSetColumnIndex(2);
+                        if (imgui.Button("Select")) {
+                            // const entt = try commands.getEntity(entityId);
+                            // _ = try commands.addComponent(entt, Tag{ .name = "lol" });
+                            selectedEntity = entityId;
+                        }
+
+                        _ = imgui.TableSetColumnIndex(3);
+                        if (imgui.Button("Destroy")) {
+                            try commands.destroyEntity(entityId);
+                        }
                     }
                 }
             }
+            imgui.End();
+
+            try details.draw(world, selectedEntity, commands);
+            try profiler.draw();
         }
-        imgui.End();
 
-        try details.draw(world, selectedEntity, commands);
+        {
+            const scope = profiler.beginScope("runFrameSystems");
+            defer scope.end();
+            try world.runFrameSystems();
+        }
 
-        try world.runFrameSystems();
-        _ = commands.applyCommands(world) catch |err| {
-            std.log.err("applyCommands failed: {}", .{err});
-        };
+        {
+            const scope = profiler.beginScope("applyCommands");
+            defer scope.end();
 
-        imgui2.render();
-        imgui2.endFrame();
-        try beginRecordCommandBuffer(
-            &gc,
-            pool,
-            buffer,
-            swapchain.extent,
-            render_pass,
-            pipeline,
-            framebuffers[swapchain.image_index],
-            cmdbuf,
-        );
-        imgui2.ImGui_ImplVulkan_RenderDrawData(imgui2.getDrawData(), cmdbuf, .null_handle);
-        try endRecordCommandBuffer(&gc, cmdbuf);
+            try profiler.record("Num commands", @intToFloat(f64, commands.commands.items.len));
+            _ = commands.applyCommands(world) catch |err| {
+                std.log.err("applyCommands failed: {}", .{err});
+            };
+        }
 
-        const state = swapchain.present(cmdbuf) catch |err| switch (err) {
-            error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
-            else => |narrow| return narrow,
-        };
+        {
+            const scope = profiler.beginScope("render and present");
+            defer scope.end();
 
-        imgui2.updatePlatformWindows();
-
-        if (state == .suboptimal or extent.width != @intCast(u32, w) or extent.height != @intCast(u32, h)) {
-            extent.width = @intCast(u32, w);
-            extent.height = @intCast(u32, h);
-            try swapchain.recreate(extent);
-
-            destroyFramebuffers(&gc, allocator, framebuffers);
-            framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
-
-            destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
-            cmdbufs = try createCommandBuffers(
+            imgui2.render();
+            imgui2.endFrame();
+            try beginRecordCommandBuffer(
                 &gc,
                 pool,
-                allocator,
                 buffer,
                 swapchain.extent,
                 render_pass,
                 pipeline,
-                framebuffers,
+                framebuffers[swapchain.image_index],
+                cmdbuf,
             );
-        }
+            imgui2.ImGui_ImplVulkan_RenderDrawData(imgui2.getDrawData(), cmdbuf, .null_handle);
+            try endRecordCommandBuffer(&gc, cmdbuf);
 
-        i += 1;
-        // if (i >= 5) break;
+            const state = swapchain.present(cmdbuf) catch |err| switch (err) {
+                error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+                else => |narrow| return narrow,
+            };
+
+            imgui2.updatePlatformWindows();
+
+            if (state == .suboptimal or extent.width != @intCast(u32, w) or extent.height != @intCast(u32, h)) {
+                extent.width = @intCast(u32, w);
+                extent.height = @intCast(u32, h);
+                try swapchain.recreate(extent);
+
+                destroyFramebuffers(&gc, allocator, framebuffers);
+                framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
+
+                destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
+                cmdbufs = try createCommandBuffers(
+                    &gc,
+                    pool,
+                    allocator,
+                    buffer,
+                    swapchain.extent,
+                    render_pass,
+                    pipeline,
+                    framebuffers,
+                );
+            }
+        }
     }
 
     try swapchain.waitForAllFences();

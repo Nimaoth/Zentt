@@ -13,7 +13,7 @@ fn structFields(comptime T: type) []const TypeInfoKind.StructField {
         fields[i] = .{
             .name = field.name,
             .field_type = typeInfo(field.field_type),
-            .offset = @offsetOf(T, field.name),
+            .offset = if (@sizeOf(field.field_type) > 0) @offsetOf(T, field.name) else 0,
             // .default_value= anytype,
             .is_comptime = field.is_comptime,
             .alignment = field.alignment,
