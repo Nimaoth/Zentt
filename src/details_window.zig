@@ -52,7 +52,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
             if (imgui.CollapsingHeaderBoolPtrExt(
                 @ptrCast([*:0]const u8, componentName.items),
                 null,
-                imgui.TreeNodeFlags.CollapsingHeader,
+                imgui.TreeNodeFlags.CollapsingHeader.with(.{ .DefaultOpen = true }),
             )) {
                 imgui2.anyDynamic(rtti, components.getRaw(entity.index));
             }
@@ -63,24 +63,14 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
             _ = try commands.addComponent(entityHandle, Tag{ .name = "foo" });
         }
 
-        if (imgui.SmallButton("Add A")) {
+        if (imgui.SmallButton("Add TransformComponent")) {
             const entityHandle = try commands.getEntity(entityId);
-            _ = try commands.addComponent(entityHandle, root.A{ .i = @intCast(i64, entityId) });
+            _ = try commands.addComponent(entityHandle, root.TransformComponent{});
         }
 
-        if (imgui.SmallButton("Add B")) {
+        if (imgui.SmallButton("Add RenderComponent")) {
             const entityHandle = try commands.getEntity(entityId);
-            _ = try commands.addComponent(entityHandle, root.B{ .b = true });
-        }
-
-        if (imgui.SmallButton("Add C")) {
-            const entityHandle = try commands.getEntity(entityId);
-            _ = try commands.addComponent(entityHandle, root.C{});
-        }
-
-        if (imgui.SmallButton("Add D")) {
-            const entityHandle = try commands.getEntity(entityId);
-            _ = try commands.addComponent(entityHandle, root.D{});
+            _ = try commands.addComponent(entityHandle, root.RenderComponent{});
         }
 
         // Check if entity has the specified component.

@@ -6,6 +6,8 @@ const imgui = @import("imgui.zig");
 const imgui2 = @import("imgui2.zig");
 const sdl = @import("sdl.zig");
 
+const Vec2 = imgui.Vec2;
+
 const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
 const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
 const Allocator = std.mem.Allocator;
@@ -110,6 +112,98 @@ pub fn testSystem5(time: *const Time, query: Query(.{ Tag, B })) !void {
     }
 }
 
+pub const TransformComponent = struct {
+    position: Vec2 = .{ .x = 0, .y = 0 },
+    size: Vec2 = .{ .x = 50, .y = 50 },
+};
+
+pub const RenderComponent = struct {};
+
+fn staticVariable(comptime scope: anytype, comptime T: type, comptime name: []const u8, comptime defaultValue: T, editable: bool) *T {
+    _ = scope;
+    _ = name;
+    const Scope = struct {
+        var staticVar: T = defaultValue;
+    };
+    if (editable) {
+        _ = imgui.Begin("Static Variables");
+        imgui2.any(&Scope.staticVar, name);
+        imgui.End();
+    }
+    return &Scope.staticVar;
+}
+
+pub fn moveSystem(commands: *Commands, time: *Time, query: Query(.{TransformComponent})) !void {
+    var prng = std.rand.DefaultPrng.init(@floatToInt(u64, time.now));
+    var rand = prng.random();
+
+    // comptime var i = 0;
+    // inline while (i < 10) : (i += 1) _ = rand.int(u64);
+
+    var speed = staticVariable(moveSystem, f32, "speed", 0.1, true);
+    var radius = staticVariable(moveSystem, f32, "radius", 100, true);
+    var maxEntities = staticVariable(moveSystem, u64, "max_entities", 10, true);
+
+    var iter = query.iter();
+    var i: u64 = 0;
+    while (iter.next()) |entity| : (i += 1) {
+        if (i >= maxEntities.*) {
+            try commands.destroyEntity(entity.id);
+            continue;
+        }
+
+        const velocity = (Vec2{ .x = rand.floatNorm(f32), .y = rand.floatNorm(f32) }).timess(speed.*);
+        _ = entity.TransformComponent.position.add(velocity.timess(@floatCast(f32, time.delta)));
+
+        const pos = entity.TransformComponent.position;
+        if (pos.lenSq() > radius.* * radius.*) {
+            try commands.destroyEntity(entity.id);
+            _ = (try commands.createEntity())
+                .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
+                .addComponent(RenderComponent{});
+            _ = (try commands.createEntity())
+                .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
+                .addComponent(RenderComponent{});
+        }
+    }
+}
+
+pub fn renderSystem(query: Query(.{ TransformComponent, RenderComponent })) !void {
+    imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
+    defer imgui.PopStyleVar();
+    _ = imgui.Begin("Viewport");
+    defer imgui.End();
+
+    var cameraSize = staticVariable(renderSystem, f32, "cameraSize", 100, true);
+    if (cameraSize.* < 0.1) {
+        cameraSize.* = 0.1;
+    }
+
+    const canvas_p0 = imgui.GetCursorScreenPos(); // ImDrawList API uses screen coordinates!
+    var canvas_sz = imgui.GetContentRegionAvail(); // Resize canvas to what's available
+    if (canvas_sz.x < 50) canvas_sz.x = 50;
+    if (canvas_sz.y < 50) canvas_sz.y = 50;
+    const canvas_p1 = Vec2{ .x = canvas_p0.x + canvas_sz.x, .y = canvas_p0.y + canvas_sz.y };
+
+    const aspectRatio = canvas_sz.x / canvas_sz.y;
+    _ = aspectRatio;
+    const scale = canvas_sz.y / cameraSize.*;
+
+    var drawList = imgui.GetWindowDrawList() orelse return;
+    drawList.PushClipRect(canvas_p0, canvas_p1);
+    defer drawList.PopClipRect();
+
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        const renderComponent = entity.RenderComponent;
+        _ = renderComponent;
+
+        const position = entity.TransformComponent.position.timess(scale).plus(canvas_p0).plus(canvas_sz.timess(0.5));
+        const size = entity.TransformComponent.size.timess(scale);
+        drawList.AddRect(position, position.plus(size), 0xff00ffff);
+    }
+}
+
 const Time = struct {
     delta: f64 = 0,
     now: f64 = 0,
@@ -137,7 +231,7 @@ pub fn main() !void {
         sdl.SDL_WINDOWPOS_CENTERED,
         @intCast(c_int, extent.width),
         @intCast(c_int, extent.height),
-        sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_SHOWN | sdl.SDL_WINDOW_RESIZABLE,
+        sdl.SDL_WINDOW_VULKAN | sdl.SDL_WINDOW_SHOWN | sdl.SDL_WINDOW_RESIZABLE | sdl.SDL_WINDOW_MAXIMIZED,
     ) orelse {
         sdl.SDL_Log("Unable to create window: %s", sdl.SDL_GetError());
         return error.SDLInitializationFailed;
@@ -329,6 +423,8 @@ pub fn main() !void {
     try world.addSystem(testSystem3, "{A, B, C}");
     try world.addSystem(testSystem4, "{A, B, C, D}");
     try world.addSystem(testSystem5, "{B}");
+    try world.addSystem(renderSystem, "Render System");
+    try world.addSystem(moveSystem, "Move System");
 
     _ = try world.addResource(Time{});
     var commands = try world.addResource(Commands.init(allocator));
@@ -339,11 +435,13 @@ pub fn main() !void {
     _ = try commands.addComponent(e, C{ .i = 69 });
     _ = try commands.addComponent(e, B{ .b = false });
     _ = try commands.addComponent(e, A{ .i = 31 });
+    _ = try commands.addComponent(e, TransformComponent{});
+    _ = try commands.addComponent(e, RenderComponent{});
     _ = try commands.addComponent(e, D{});
     _ = try commands.applyCommands(world);
 
     var details = Details.init(allocator);
-    var selectedEntity: EntityId = 0;
+    var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
 
     var lastFrameTime = std.time.nanoTimestamp();
     var frameTimeSmoothed: f64 = 0;
@@ -398,6 +496,7 @@ pub fn main() !void {
         if (imgui.Begin("Stats")) {
             imgui.LabelText("Frame time: ", "%.2f", frameTimeSmoothed);
             imgui.LabelText("FPS: ", "%.1f", fps);
+            imgui.LabelText("Entities: ", "%lld", world.entities.count());
         }
         imgui.End();
 
@@ -451,7 +550,9 @@ pub fn main() !void {
         try details.draw(world, selectedEntity, commands);
 
         try world.runFrameSystems();
-        _ = try commands.applyCommands(world);
+        _ = commands.applyCommands(world) catch |err| {
+            std.log.err("applyCommands failed: {}", .{err});
+        };
 
         imgui2.render();
         imgui2.endFrame();

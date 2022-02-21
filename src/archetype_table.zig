@@ -76,8 +76,6 @@ pub fn removeEntity(self: *Self, entity: Entity) ?Chunk.EntityIndexUpdate {
 
 pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
     // @todo: check if the provided components match the archetype
-
-    std.log.info("addEntity({}): {}", .{ entityId, components });
     const entity: Entity = try self.firstChunk.addEntity(entityId);
 
     const typeInfo = @typeInfo(@TypeOf(components)).Struct;
@@ -92,10 +90,6 @@ pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
 
 pub fn copyEntityIntoRaw(self: *Self, entity: Entity, componentType: Rtti.TypeId, componentData: []const u8) !Entity {
     // @todo: check if the provided components match the archetype
-    std.log.err("ArchetypeTable.copyEntityIntoRaw: {any}", .{componentData});
-
-    std.log.info("copyEntityIntoRaw({}): {}", .{ entity, componentType });
-
     // Add entity
     const newEntity: Entity = try self.firstChunk.addEntity(entity.id);
 
@@ -119,8 +113,6 @@ pub fn copyEntityInto(self: *Self, entity: Entity, newComponent: anytype) !Entit
     // @todo: check if the provided components match the archetype
 
     const ComponentType = @TypeOf(newComponent);
-
-    std.log.info("copyEntityInto({}): {}", .{ entity, newComponent });
 
     // Add entity
     const newEntity: Entity = try self.firstChunk.addEntity(entity.id);

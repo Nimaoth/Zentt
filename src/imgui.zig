@@ -1,3 +1,4 @@
+const std = @import("std");
 const assert = @import("std").debug.assert;
 
 pub const DrawListSharedData = opaque {};
@@ -1211,7 +1212,7 @@ pub const Color = extern struct {
 
     pub inline fn HSVExt(self: *Color, h: f32, s: f32, v: f32, a: f32) Color {
         var out: Color = undefined;
-        raw.ImColor_HSV_nonUDT(&out, self, h, s, v, a);
+        raw.ImColor_HSV(&out, self, h, s, v, a);
         return out;
     }
     pub inline fn HSV(self: *Color, h: f32, s: f32, v: f32) Color {
@@ -1442,13 +1443,13 @@ pub const DrawList = extern struct {
 
     pub inline fn GetClipRectMax(self: *const DrawList) Vec2 {
         var out: Vec2 = undefined;
-        raw.ImDrawList_GetClipRectMax_nonUDT(&out, self);
+        raw.ImDrawList_GetClipRectMax(&out, self);
         return out;
     }
 
     pub inline fn GetClipRectMin(self: *const DrawList) Vec2 {
         var out: Vec2 = undefined;
-        raw.ImDrawList_GetClipRectMin_nonUDT(&out, self);
+        raw.ImDrawList_GetClipRectMin(&out, self);
         return out;
     }
 
@@ -1595,7 +1596,7 @@ pub const Font = extern struct {
 
     pub inline fn CalcTextSizeAExt(self: *const Font, size: f32, max_width: f32, wrap_width: f32, text_begin: ?[*]const u8, text_end: ?[*]const u8, remaining: ?*?[*:0]const u8) Vec2 {
         var out: Vec2 = undefined;
-        raw.ImFont_CalcTextSizeA_nonUDT(&out, self, size, max_width, wrap_width, text_begin, text_end, remaining);
+        raw.ImFont_CalcTextSizeA(&out, self, size, max_width, wrap_width, text_begin, text_end, remaining);
         return out;
     }
     pub inline fn CalcTextSizeA(self: *const Font, size: f32, max_width: f32, wrap_width: f32, text_begin: ?[*]const u8) Vec2 {
@@ -2331,6 +2332,52 @@ pub const Vec2 = extern struct {
 
     /// deinit(self: *Vec2) void
     pub const deinit = raw.ImVec2_destroy;
+
+    const Self = @This();
+
+    pub fn add(self: *Self, other: Self) *Self {
+        self.x += other.x;
+        self.y += other.y;
+        return self;
+    }
+
+    pub fn plus(self: Self, other: Self) Self {
+        return .{ .x = self.x + other.x, .y = self.y + other.y };
+    }
+
+    pub fn mul(self: *Self, other: Self) *Self {
+        self.x *= other.x;
+        self.y *= other.y;
+        return self;
+    }
+
+    pub fn muls(self: *Self, other: f32) *Self {
+        self.x *= other;
+        self.y *= other;
+        return self;
+    }
+
+    pub fn times(self: Self, other: Self) Self {
+        return .{ .x = self.x * other.x, .y = self.y * other.y };
+    }
+
+    pub fn timess(self: Self, other: f32) Self {
+        return .{ .x = self.x * other, .y = self.y * other };
+    }
+
+    pub fn clamps(self: *Self, min: f32, max: f32) *Self {
+        self.x = std.math.clamp(self.x, min, max);
+        self.y = std.math.clamp(self.y, min, max);
+        return self;
+    }
+
+    pub fn len(self: Self) f32 {
+        return std.math.sqrt(self.x * self.x + self.y * self.y);
+    }
+
+    pub fn lenSq(self: Self) f32 {
+        return self.x * self.x + self.y * self.y;
+    }
 };
 
 pub const Vec4 = extern struct {
@@ -3663,7 +3710,7 @@ pub const CalcListClipping = raw.igCalcListClipping;
 
 pub inline fn CalcTextSizeExt(text: ?[*]const u8, text_end: ?[*]const u8, hide_text_after_double_hash: bool, wrap_width: f32) Vec2 {
     var out: Vec2 = undefined;
-    raw.igCalcTextSize_nonUDT(&out, text, text_end, hide_text_after_double_hash, wrap_width);
+    raw.igCalcTextSize(&out, text, text_end, hide_text_after_double_hash, wrap_width);
     return out;
 }
 pub inline fn CalcTextSize(text: ?[*]const u8) Vec2 {
@@ -3723,7 +3770,7 @@ pub const ColorConvertRGBtoHSV = raw.igColorConvertRGBtoHSV;
 
 pub inline fn ColorConvertU32ToFloat4(in: u32) Vec4 {
     var out: Vec4 = undefined;
-    raw.igColorConvertU32ToFloat4_nonUDT(&out, in);
+    raw.igColorConvertU32ToFloat4(&out, in);
     return out;
 }
 
@@ -3952,13 +3999,13 @@ pub const GetColumnsCount = raw.igGetColumnsCount;
 
 pub inline fn GetContentRegionAvail() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetContentRegionAvail_nonUDT(&out);
+    raw.igGetContentRegionAvail(&out);
     return out;
 }
 
 pub inline fn GetContentRegionMax() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetContentRegionMax_nonUDT(&out);
+    raw.igGetContentRegionMax(&out);
     return out;
 }
 
@@ -3967,7 +4014,7 @@ pub const GetCurrentContext = raw.igGetCurrentContext;
 
 pub inline fn GetCursorPos() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetCursorPos_nonUDT(&out);
+    raw.igGetCursorPos(&out);
     return out;
 }
 
@@ -3979,13 +4026,13 @@ pub const GetCursorPosY = raw.igGetCursorPosY;
 
 pub inline fn GetCursorScreenPos() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetCursorScreenPos_nonUDT(&out);
+    raw.igGetCursorScreenPos(&out);
     return out;
 }
 
 pub inline fn GetCursorStartPos() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetCursorStartPos_nonUDT(&out);
+    raw.igGetCursorStartPos(&out);
     return out;
 }
 
@@ -4006,7 +4053,7 @@ pub const GetFontSize = raw.igGetFontSize;
 
 pub inline fn GetFontTexUvWhitePixel() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetFontTexUvWhitePixel_nonUDT(&out);
+    raw.igGetFontTexUvWhitePixel(&out);
     return out;
 }
 
@@ -4036,19 +4083,19 @@ pub const GetIO = raw.igGetIO;
 
 pub inline fn GetItemRectMax() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetItemRectMax_nonUDT(&out);
+    raw.igGetItemRectMax(&out);
     return out;
 }
 
 pub inline fn GetItemRectMin() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetItemRectMin_nonUDT(&out);
+    raw.igGetItemRectMin(&out);
     return out;
 }
 
 pub inline fn GetItemRectSize() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetItemRectSize_nonUDT(&out);
+    raw.igGetItemRectSize(&out);
     return out;
 }
 
@@ -4063,7 +4110,7 @@ pub const GetMouseCursor = raw.igGetMouseCursor;
 
 pub inline fn GetMouseDragDeltaExt(button: MouseButton, lock_threshold: f32) Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetMouseDragDelta_nonUDT(&out, button, lock_threshold);
+    raw.igGetMouseDragDelta(&out, button, lock_threshold);
     return out;
 }
 pub inline fn GetMouseDragDelta() Vec2 {
@@ -4072,13 +4119,13 @@ pub inline fn GetMouseDragDelta() Vec2 {
 
 pub inline fn GetMousePos() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetMousePos_nonUDT(&out);
+    raw.igGetMousePos(&out);
     return out;
 }
 
 pub inline fn GetMousePosOnOpeningCurrentPopup() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetMousePosOnOpeningCurrentPopup_nonUDT(&out);
+    raw.igGetMousePosOnOpeningCurrentPopup(&out);
     return out;
 }
 
@@ -4123,13 +4170,13 @@ pub const GetVersion = raw.igGetVersion;
 
 pub inline fn GetWindowContentRegionMax() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetWindowContentRegionMax_nonUDT(&out);
+    raw.igGetWindowContentRegionMax(&out);
     return out;
 }
 
 pub inline fn GetWindowContentRegionMin() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetWindowContentRegionMin_nonUDT(&out);
+    raw.igGetWindowContentRegionMin(&out);
     return out;
 }
 
@@ -4144,13 +4191,13 @@ pub const GetWindowHeight = raw.igGetWindowHeight;
 
 pub inline fn GetWindowPos() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetWindowPos_nonUDT(&out);
+    raw.igGetWindowPos(&out);
     return out;
 }
 
 pub inline fn GetWindowSize() Vec2 {
     var out: Vec2 = undefined;
-    raw.igGetWindowSize_nonUDT(&out);
+    raw.igGetWindowSize(&out);
     return out;
 }
 
@@ -5084,7 +5131,7 @@ pub const TableHeadersRow = raw.igTableHeadersRow;
 pub const TableHeader = raw.igTableHeader;
 
 pub const raw = struct {
-    pub extern fn ImColor_HSV_nonUDT(pOut: *Color, self: *Color, h: f32, s: f32, v: f32, a: f32) callconv(.C) void;
+    pub extern fn ImColor_HSV(pOut: *Color, self: *Color, h: f32, s: f32, v: f32, a: f32) callconv(.C) void;
     pub extern fn ImColor_ImColor(self: *Color) callconv(.C) void;
     pub extern fn ImColor_ImColorInt(self: *Color, r: i32, g: i32, b: i32, a: i32) callconv(.C) void;
     pub extern fn ImColor_ImColorU32(self: *Color, rgba: u32) callconv(.C) void;
@@ -5134,8 +5181,8 @@ pub const raw = struct {
     pub extern fn ImDrawList_Clear(self: *DrawList) callconv(.C) void;
     pub extern fn ImDrawList_ClearFreeMemory(self: *DrawList) callconv(.C) void;
     pub extern fn ImDrawList_CloneOutput(self: *const DrawList) callconv(.C) ?*DrawList;
-    pub extern fn ImDrawList_GetClipRectMax_nonUDT(pOut: *Vec2, self: *const DrawList) callconv(.C) void;
-    pub extern fn ImDrawList_GetClipRectMin_nonUDT(pOut: *Vec2, self: *const DrawList) callconv(.C) void;
+    pub extern fn ImDrawList_GetClipRectMax(pOut: *Vec2, self: *const DrawList) callconv(.C) void;
+    pub extern fn ImDrawList_GetClipRectMin(pOut: *Vec2, self: *const DrawList) callconv(.C) void;
     pub extern fn ImDrawList_ImDrawList(self: *DrawList, shared_data: ?*const DrawListSharedData) callconv(.C) void;
     pub extern fn ImDrawList_PathArcTo(self: *DrawList, center: Vec2, radius: f32, a_min: f32, a_max: f32, num_segments: i32) callconv(.C) void;
     pub extern fn ImDrawList_PathArcToFast(self: *DrawList, center: Vec2, radius: f32, a_min_of_12: i32, a_max_of_12: i32) callconv(.C) void;
@@ -5209,7 +5256,7 @@ pub const raw = struct {
     pub extern fn ImFont_AddGlyph(self: *Font, c: Wchar, x0: f32, y0: f32, x1: f32, y1: f32, u0: f32, v0: f32, u1: f32, v1: f32, advance_x: f32) callconv(.C) void;
     pub extern fn ImFont_AddRemapChar(self: *Font, dst: Wchar, src: Wchar, overwrite_dst: bool) callconv(.C) void;
     pub extern fn ImFont_BuildLookupTable(self: *Font) callconv(.C) void;
-    pub extern fn ImFont_CalcTextSizeA_nonUDT(pOut: *Vec2, self: *const Font, size: f32, max_width: f32, wrap_width: f32, text_begin: ?[*]const u8, text_end: ?[*]const u8, remaining: ?*?[*:0]const u8) callconv(.C) void;
+    pub extern fn ImFont_CalcTextSizeA(pOut: *Vec2, self: *const Font, size: f32, max_width: f32, wrap_width: f32, text_begin: ?[*]const u8, text_end: ?[*]const u8, remaining: ?*?[*:0]const u8) callconv(.C) void;
     pub extern fn ImFont_CalcWordWrapPositionA(self: *const Font, scale: f32, text: ?[*]const u8, text_end: ?[*]const u8, wrap_width: f32) callconv(.C) ?[*]const u8;
     pub extern fn ImFont_ClearOutputData(self: *Font) callconv(.C) void;
     pub extern fn ImFont_FindGlyph(self: *const Font, c: Wchar) callconv(.C) ?*const FontGlyph;
@@ -5869,7 +5916,7 @@ pub const raw = struct {
     pub extern fn igButton(label: ?[*:0]const u8, size: Vec2) callconv(.C) bool;
     pub extern fn igCalcItemWidth() callconv(.C) f32;
     pub extern fn igCalcListClipping(items_count: i32, items_height: f32, out_items_display_start: *i32, out_items_display_end: *i32) callconv(.C) void;
-    pub extern fn igCalcTextSize_nonUDT(pOut: *Vec2, text: ?[*]const u8, text_end: ?[*]const u8, hide_text_after_double_hash: bool, wrap_width: f32) callconv(.C) void;
+    pub extern fn igCalcTextSize(pOut: *Vec2, text: ?[*]const u8, text_end: ?[*]const u8, hide_text_after_double_hash: bool, wrap_width: f32) callconv(.C) void;
     pub extern fn igCaptureKeyboardFromApp(want_capture_keyboard_value: bool) callconv(.C) void;
     pub extern fn igCaptureMouseFromApp(want_capture_mouse_value: bool) callconv(.C) void;
     pub extern fn igCheckbox(label: ?[*:0]const u8, v: *bool) callconv(.C) bool;
@@ -5881,7 +5928,7 @@ pub const raw = struct {
     pub extern fn igColorConvertFloat4ToU32(in: Vec4) callconv(.C) u32;
     pub extern fn igColorConvertHSVtoRGB(h: f32, s: f32, v: f32, out_r: *f32, out_g: *f32, out_b: *f32) callconv(.C) void;
     pub extern fn igColorConvertRGBtoHSV(r: f32, g: f32, b: f32, out_h: *f32, out_s: *f32, out_v: *f32) callconv(.C) void;
-    pub extern fn igColorConvertU32ToFloat4_nonUDT(pOut: *Vec4, in: u32) callconv(.C) void;
+    pub extern fn igColorConvertU32ToFloat4(pOut: *Vec4, in: u32) callconv(.C) void;
     pub extern fn igColorEdit3(label: ?[*:0]const u8, col: *[3]f32, flags: ColorEditFlagsInt) callconv(.C) bool;
     pub extern fn igColorEdit4(label: ?[*:0]const u8, col: *[4]f32, flags: ColorEditFlagsInt) callconv(.C) bool;
     pub extern fn igColorPicker3(label: ?[*:0]const u8, col: *[3]f32, flags: ColorEditFlagsInt) callconv(.C) bool;
@@ -5930,20 +5977,20 @@ pub const raw = struct {
     pub extern fn igGetColumnOffset(column_index: i32) callconv(.C) f32;
     pub extern fn igGetColumnWidth(column_index: i32) callconv(.C) f32;
     pub extern fn igGetColumnsCount() callconv(.C) i32;
-    pub extern fn igGetContentRegionAvail_nonUDT(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetContentRegionMax_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetContentRegionAvail(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetContentRegionMax(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetCurrentContext() callconv(.C) ?*Context;
-    pub extern fn igGetCursorPos_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetCursorPos(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetCursorPosX() callconv(.C) f32;
     pub extern fn igGetCursorPosY() callconv(.C) f32;
-    pub extern fn igGetCursorScreenPos_nonUDT(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetCursorStartPos_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetCursorScreenPos(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetCursorStartPos(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetDragDropPayload() callconv(.C) ?*const Payload;
     pub extern fn igGetDrawData() callconv(.C) *DrawData;
     pub extern fn igGetDrawListSharedData() callconv(.C) ?*DrawListSharedData;
     pub extern fn igGetFont() callconv(.C) ?*Font;
     pub extern fn igGetFontSize() callconv(.C) f32;
-    pub extern fn igGetFontTexUvWhitePixel_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetFontTexUvWhitePixel(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetForegroundDrawList() callconv(.C) ?*DrawList;
     pub extern fn igGetFrameCount() callconv(.C) i32;
     pub extern fn igGetFrameHeight() callconv(.C) f32;
@@ -5952,15 +5999,15 @@ pub const raw = struct {
     pub extern fn igGetIDRange(str_id_begin: ?[*]const u8, str_id_end: ?[*]const u8) callconv(.C) ID;
     pub extern fn igGetIDPtr(ptr_id: ?*const anyopaque) callconv(.C) ID;
     pub extern fn igGetIO() callconv(.C) *IO;
-    pub extern fn igGetItemRectMax_nonUDT(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetItemRectMin_nonUDT(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetItemRectSize_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetItemRectMax(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetItemRectMin(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetItemRectSize(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetKeyIndex(imgui_key: Key) callconv(.C) i32;
     pub extern fn igGetKeyPressedAmount(key_index: i32, repeat_delay: f32, rate: f32) callconv(.C) i32;
     pub extern fn igGetMouseCursor() callconv(.C) MouseCursor;
-    pub extern fn igGetMouseDragDelta_nonUDT(pOut: *Vec2, button: MouseButton, lock_threshold: f32) callconv(.C) void;
-    pub extern fn igGetMousePos_nonUDT(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetMousePosOnOpeningCurrentPopup_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetMouseDragDelta(pOut: *Vec2, button: MouseButton, lock_threshold: f32) callconv(.C) void;
+    pub extern fn igGetMousePos(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetMousePosOnOpeningCurrentPopup(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetScrollMaxX() callconv(.C) f32;
     pub extern fn igGetScrollMaxY() callconv(.C) f32;
     pub extern fn igGetScrollX() callconv(.C) f32;
@@ -5974,13 +6021,13 @@ pub const raw = struct {
     pub extern fn igGetTime() callconv(.C) f64;
     pub extern fn igGetTreeNodeToLabelSpacing() callconv(.C) f32;
     pub extern fn igGetVersion() callconv(.C) ?[*:0]const u8;
-    pub extern fn igGetWindowContentRegionMax_nonUDT(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetWindowContentRegionMin_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetWindowContentRegionMax(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetWindowContentRegionMin(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetWindowContentRegionWidth() callconv(.C) f32;
     pub extern fn igGetWindowDrawList() callconv(.C) ?*DrawList;
     pub extern fn igGetWindowHeight() callconv(.C) f32;
-    pub extern fn igGetWindowPos_nonUDT(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetWindowSize_nonUDT(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetWindowPos(pOut: *Vec2) callconv(.C) void;
+    pub extern fn igGetWindowSize(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetWindowWidth() callconv(.C) f32;
     pub extern fn igImage(user_texture_id: TextureID, size: Vec2, uv0: Vec2, uv1: Vec2, tint_col: Vec4, border_col: Vec4) callconv(.C) void;
     pub extern fn igImageButton(user_texture_id: TextureID, size: Vec2, uv0: Vec2, uv1: Vec2, frame_padding: i32, bg_col: Vec4, tint_col: Vec4) callconv(.C) bool;

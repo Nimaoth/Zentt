@@ -10,7 +10,16 @@ const Tag = @import("tag_component.zig").Tag;
 
 const Self = @This();
 
-const TempEntityId = struct { index: usize };
+const TempEntityId = struct {
+    commands: ?*Self = null,
+    index: usize = 0,
+
+    pub fn addComponent(self: TempEntityId, component: anytype) TempEntityId {
+        if (self.commands == null)
+            return self;
+        return self.commands.?.addComponent(self, component) catch return .{};
+    }
+};
 
 const Commands = union(enum) {
     CreateEntity: usize,
@@ -52,13 +61,13 @@ pub fn getComponentData(self: *const Self, index: usize, len: usize) []const u8 
 pub fn getEntity(self: *Self, entityId: EntityId) !TempEntityId {
     const index = self.entityIdMap.items.len;
     try self.entityIdMap.append(entityId);
-    return TempEntityId{ .index = index };
+    return TempEntityId{ .commands = self, .index = index };
 }
 
 pub fn createEntity(self: *Self) !TempEntityId {
     const index = self.entityIdMap.items.len;
     try self.entityIdMap.append(0);
-    const entity = TempEntityId{ .index = index };
+    const entity = TempEntityId{ .commands = self, .index = index };
     try self.commands.append(.{ .CreateEntity = index });
     return entity;
 }
@@ -76,7 +85,6 @@ pub fn addComponent(self: *Self, entity: TempEntityId, component: anytype) !Temp
         .componentDataIndex = dataStartIndex,
         .componentDataLen = @sizeOf(@TypeOf(component)),
     } });
-    std.log.err("Command.addComponent: {any}", .{self.getComponentData(dataStartIndex, @sizeOf(@TypeOf(component)))});
     return entity;
 }
 
@@ -85,29 +93,32 @@ pub fn removeComponent(self: *Self, entityId: EntityId, comptime ComponentType: 
         .entityId = entityId,
         .componentType = Rtti.init(ComponentType),
     } });
-    std.log.err("Command.removeComponent: {s}", .{@typeName(ComponentType)});
 }
 
 pub fn applyCommands(self: *Self, world: *World) !void {
+    defer {
+        self.commands.clearRetainingCapacity();
+        self.componentData.clearRetainingCapacity();
+        self.entityIdMap.clearRetainingCapacity();
+    }
+
     if (self.commands.items.len > 0) {
         std.log.debug("applyCommands: {}", .{self.commands.items.len});
     }
+
     for (self.commands.items) |command| {
         switch (command) {
             .CreateEntity => |index| {
                 const entity = try world.createEntity();
-                std.log.debug("Commands.CreateEntity({}) = {}", .{ index, entity.id });
                 self.entityIdMap.items[index] = entity.id;
             },
 
             .DestroyEntity => |entityId| {
-                std.log.debug("Commands.DestroyEntity({})", .{entityId});
                 try world.deleteEntity(entityId);
             },
 
             .AddComponent => |data| {
                 const entityId = self.entityIdMap.items[data.index];
-                std.log.debug("Commands.AddComponent({}, {}) = {}, {} bytes", .{ data.index, data.componentType, entityId, data.componentDataLen });
                 const componentData = self.getComponentData(data.componentDataIndex, data.componentDataLen);
                 _ = try world.addComponentRaw(entityId, data.componentType, componentData);
             },
@@ -117,8 +128,8 @@ pub fn applyCommands(self: *Self, world: *World) !void {
             },
         }
     }
+}
 
-    self.commands.clearRetainingCapacity();
-    self.componentData.clearRetainingCapacity();
-    self.entityIdMap.clearRetainingCapacity();
+pub fn imguiDetails(self: *Self) void {
+    _ = self;
 }

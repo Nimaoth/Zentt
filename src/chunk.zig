@@ -148,7 +148,7 @@ pub fn addEntity(self: *Self, entityId: EntityId) !Entity {
     }
 
     const index = chunk.count;
-    self.entityIds[index] = entityId;
+    chunk.entityIds[index] = entityId;
     chunk.count += 1;
     return Entity{ .id = entityId, .chunk = chunk, .index = index };
 }

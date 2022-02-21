@@ -136,12 +136,12 @@ pub fn getResource(self: *Self, comptime ResourceType: type) !*ResourceType {
 
 pub fn runFrameSystems(self: *Self) !void {
     for (self.frameSystems.items) |*system| {
-        _ = imgui.Begin(system.name);
-        _ = imgui.Checkbox("Enabled", &system.enabled);
+        // _ = imgui.Begin(system.name);
+        // _ = imgui.Checkbox("Enabled", &system.enabled);
         if (system.enabled) {
             try system.invoke(self);
         }
-        imgui.End();
+        // imgui.End();
     }
 }
 
@@ -205,7 +205,7 @@ fn handleResource(world: *Self, queryArg: anytype, comptime ParamType: type) !vo
     const resource = try world.getResource(ResourceType);
     queryArg.* = @ptrCast(ParamType, resource);
 
-    imgui2.any(resource, @typeName(ResourceType));
+    // imgui2.any(resource, @typeName(ResourceType));
 }
 
 fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void {
@@ -216,49 +216,53 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
     var tables = try world.getDirectSupersetTables(archetype);
     queryArg.* = ParamType.init(tables.items, true);
 
-    {
-        var iter = queryArg.iter();
+    // {
+    //     var iter = queryArg.iter();
 
-        var tableFlags = imgui.TableFlags{
-            .Resizable = true,
-            .RowBg = true,
-            .Sortable = true,
-        };
-        tableFlags = tableFlags.with(imgui.TableFlags.Borders);
-        if (imgui.BeginTable("Entities", @intCast(i32, ParamType.ComponentCount + 1), tableFlags, .{}, 0)) {
-            const componentsTypeInfo = @typeInfo(@TypeOf(ParamType.ComponentTypes)).Struct;
-            imgui.TableSetupColumn("ID", .{ .WidthFixed = true }, 5, 0);
-            inline for (componentsTypeInfo.fields) |componentInfo| {
-                const ComponentType = componentInfo.default_value orelse unreachable;
-                imgui.TableSetupColumn(@typeName(ComponentType), .{}, 0, 0);
-            }
-            imgui.TableHeadersRow();
+    //     var tableFlags = imgui.TableFlags{
+    //         .Resizable = true,
+    //         .RowBg = true,
+    //         .Sortable = true,
+    //     };
+    //     tableFlags = tableFlags.with(imgui.TableFlags.Borders);
+    //     if (imgui.BeginTable("Entities", @intCast(i32, ParamType.ComponentCount + 1), tableFlags, .{}, 0)) {
+    //         const componentsTypeInfo = @typeInfo(@TypeOf(ParamType.ComponentTypes)).Struct;
+    //         imgui.TableSetupColumn("ID", .{ .WidthFixed = true }, 5, 0);
+    //         inline for (componentsTypeInfo.fields) |componentInfo| {
+    //             const ComponentType = componentInfo.default_value orelse unreachable;
+    //             imgui.TableSetupColumn(@typeName(ComponentType), .{}, 0, 0);
+    //         }
+    //         imgui.TableHeadersRow();
 
-            defer imgui.EndTable();
-            while (iter.next()) |entity| {
-                imgui.TableNextRow(.{}, 0);
-                _ = imgui.TableSetColumnIndex(0);
-                imgui.Text("%d", entity.id);
-                inline for (componentsTypeInfo.fields) |componentInfo, i| {
-                    const ComponentType = componentInfo.default_value orelse unreachable;
-                    _ = ComponentType;
-                    _ = imgui.TableSetColumnIndex(@intCast(i32, i + 1));
+    //         defer imgui.EndTable();
+    //         while (iter.next()) |entity| {
+    //             imgui.TableNextRow(.{}, 0);
+    //             _ = imgui.TableSetColumnIndex(0);
+    //             imgui.Text("%d", entity.id);
+    //             inline for (componentsTypeInfo.fields) |componentInfo, i| {
+    //                 const ComponentType = componentInfo.default_value orelse unreachable;
+    //                 _ = ComponentType;
+    //                 _ = imgui.TableSetColumnIndex(@intCast(i32, i + 1));
 
-                    const field = @typeInfo(@TypeOf(entity)).Struct.fields[i + 1];
-                    if (field.field_type != u8) {
-                        const fieldName = field.name;
-                        imgui2.any(@field(entity, fieldName), "");
-                    }
-                }
-            }
-        }
-    }
+    //                 const field = @typeInfo(@TypeOf(entity)).Struct.fields[i + 1];
+    //                 if (field.field_type != u8) {
+    //                     const fieldName = field.name;
+    //                     imgui2.any(@field(entity, fieldName), "");
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 }
 
 pub fn createEntity(self: *Self) !Entity {
+    if (self.entities.count() > 1000) {
+        return error.TooManyEntities;
+    }
+
     const entityId = self.nextEntityId;
     self.nextEntityId += 1;
-    std.log.info("createEntity {}", .{entityId});
+    std.log.debug("createEntity {}", .{entityId});
 
     const entity = try self.baseArchetypeTable.addEntity(entityId, .{});
     try self.entities.put(entityId, entity);
@@ -270,13 +274,14 @@ pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
 }
 
 pub fn deleteEntity(self: *Self, entityId: EntityId) !void {
+    std.log.debug("deleteEntity {}", .{entityId});
     if (self.entities.get(entityId)) |entity| {
+        _ = self.entities.remove(entityId);
         if (entity.chunk.removeEntity(entity.index)) |update| {
             // Another entity moved while removing oldEntity, so update the index.
             var otherEntity = self.entities.getEntry(update.entityId) orelse unreachable;
             otherEntity.value_ptr.index = update.newIndex;
         }
-        _ = self.entities.remove(entityId);
     } else {
         return error.InvalidEntityId;
     }
@@ -293,18 +298,15 @@ pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !Entity
         var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
 
         // copy existing entity to new table
-        // std.log.debug("add entity {} to table {}", .{ oldEntity, newArchetype });
         var newEntity = try newTable.copyEntityInto(oldEntity, component);
 
         // Update entities map
         try self.entities.put(newEntity.id, newEntity);
 
         // Remove old entity
-        // std.log.debug("remove entity {} from table {}", .{ entityId, oldEntity });
         if (oldEntity.chunk.table.removeEntity(oldEntity)) |update| {
             // Another entity moved while removing oldEntity, so update the index.
             var entity = self.entities.getEntry(update.entityId) orelse unreachable;
-            // std.log.debug("update index of {} from {} to {}", .{ entity.key_ptr.*, entity.value_ptr.index, update.newIndex });
             entity.value_ptr.index = update.newIndex;
         }
 
@@ -315,7 +317,6 @@ pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !Entity
 }
 
 pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.TypeId, componentData: []const u8) !Entity {
-    std.log.err("World.addComponentRaw: {*}", .{componentData.ptr});
     if (self.entities.get(entityId)) |oldEntity| {
         const componentId: u64 = try self.getComponentIdForRtti(componentType);
         var newComponents = BitSet.initEmpty();
@@ -325,18 +326,15 @@ pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.Type
         var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
 
         // copy existing entity to new table
-        // std.log.debug("add entity {} to table {}", .{ oldEntity, newArchetype });
         var newEntity = try newTable.copyEntityIntoRaw(oldEntity, componentType, componentData);
 
         // Update entities map
         try self.entities.put(newEntity.id, newEntity);
 
         // Remove old entity
-        // std.log.debug("remove entity {} from table {}", .{ entityId, oldEntity });
         if (oldEntity.chunk.table.removeEntity(oldEntity)) |update| {
             // Another entity moved while removing oldEntity, so update the index.
             var entity = self.entities.getEntry(update.entityId) orelse unreachable;
-            // std.log.debug("update index of {} from {} to {}", .{ entity.key_ptr.*, entity.value_ptr.index, update.newIndex });
             entity.value_ptr.index = update.newIndex;
         }
 
@@ -423,19 +421,16 @@ fn createArchetypeStruct(self: *Self, comptime T: anytype) !Archetype {
 
 /// Creates an archetype table for the given archetype.
 fn createArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable {
-    std.log.info("Creating new archetype table based on {}", .{archetype});
     var table = try self.globalPool.allocator().create(ArchetypeTable);
     try table.init(archetype, self.allocator);
 
     var tableIter = self.archetypeTables.valueIterator();
     while (tableIter.next()) |otherTable| {
         if (table.archetype.components.isSubSetOf(otherTable.*.archetype.components)) {
-            std.log.debug("add subset {} < {}", .{ table.archetype, otherTable.*.archetype });
             try table.subsets.put(otherTable.*.archetype.components.subtract(table.archetype.components), otherTable.*);
             try otherTable.*.supersets.put(otherTable.*.archetype.components.subtract(table.archetype.components), table);
         }
         if (table.archetype.components.isSuperSetOf(otherTable.*.archetype.components)) {
-            std.log.debug("add superset {} > {}", .{ table.archetype, otherTable.*.archetype });
             try table.supersets.put(table.archetype.components.subtract(otherTable.*.archetype.components), otherTable.*);
             try otherTable.*.subsets.put(table.archetype.components.subtract(otherTable.*.archetype.components), table);
         }

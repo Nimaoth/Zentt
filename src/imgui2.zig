@@ -52,6 +52,7 @@ pub extern fn ImGui_ImplVulkan_CreateFontsTexture(command_buffer: vk.CommandBuff
 pub extern fn ImGui_ImplVulkan_DestroyFontUploadObjects() void;
 pub extern fn ImGui_ImplVulkan_SetMinImageCount(min_image_count: u32) void;
 pub extern fn ImGui_ImplVulkan_LoadFunctions(loader_func: *const anyopaque, user_data: ?*const anyopaque) bool;
+pub extern fn ImGui_ImplVulkan_AddTexture(sampler: vk.Sampler, image_view: vk.ImageView, image_layout: vk.ImageLayout) vk.DescriptorSet;
 
 pub fn createContext(shared_font_atlas: ?*ImFontAtlas) !*ImGuiContext {
     const result = @ptrCast(?*C.ImGuiContext, C.igCreateContext(shared_font_atlas));
@@ -137,6 +138,10 @@ pub fn any(value: anytype, name: []const u8) void {
     const typeInfoOuter = @typeInfo(@TypeOf(value));
 
     const actualType = typeInfoOuter.Pointer.child;
+
+    if (comptime std.meta.trait.hasFn("imguiDetails")(actualType)) {
+        return value.imguiDetails();
+    }
 
     // Special case: string
     if (actualType == []const u8) {
