@@ -22,6 +22,10 @@ pub fn init(allocator: std.mem.Allocator) Self {
 }
 
 pub fn deinit(self: *Self) void {
+    var iter = self.timings.valueIterator();
+    while (iter.next()) |fifo| {
+        fifo.deinit();
+    }
     self.timings.deinit();
 }
 

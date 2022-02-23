@@ -189,7 +189,6 @@ pub fn main() !void {
                 break :blk (1000.0 / frameTimeSmoothed);
             }
         };
-        _ = fps;
 
         var timeResource = try world.getResource(Time);
         timeResource.delta = @intToFloat(f64, frameTimeNs) / std.time.ns_per_s;

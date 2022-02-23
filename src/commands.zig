@@ -102,10 +102,6 @@ pub fn applyCommands(self: *Self, world: *World, maxCommands: u64) !u64 {
         self.entityIdMap.clearRetainingCapacity();
     }
 
-    if (self.commands.items.len > 0) {
-        std.log.debug("applyCommands: {}", .{self.commands.items.len});
-    }
-
     var i: u64 = 0;
     for (self.commands.items) |command| {
         defer i += 1;
@@ -113,22 +109,22 @@ pub fn applyCommands(self: *Self, world: *World, maxCommands: u64) !u64 {
             break;
         switch (command) {
             .CreateEntity => |index| {
-                const entity = world.createEntity() catch continue;
+                const entity = try world.createEntity();
                 self.entityIdMap.items[index] = entity.id;
             },
 
             .DestroyEntity => |entityId| {
-                world.deleteEntity(entityId) catch continue;
+                try world.deleteEntity(entityId);
             },
 
             .AddComponent => |data| {
                 const entityId = self.entityIdMap.items[data.index];
                 const componentData = self.getComponentData(data.componentDataIndex, data.componentDataLen);
-                _ = world.addComponentRaw(entityId, data.componentType, componentData) catch continue;
+                _ = try world.addComponentRaw(entityId, data.componentType, componentData);
             },
 
             .RemoveComponent => |data| {
-                world.removeComponent(data.entityId, data.componentType) catch continue;
+                try world.removeComponent(data.entityId, data.componentType);
             },
         }
     }

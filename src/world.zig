@@ -38,6 +38,11 @@ nextEntityId: EntityId = 1,
 components: std.AutoHashMap(Rtti.TypeId, ComponentInfo),
 componentIdToComponentType: std.ArrayList(Rtti.TypeId),
 frameSystems: std.ArrayList(System),
+
+//  We store pointers to external resources (managed outside of world)
+// and internal resources (managed by this world) in here.
+// Internal resources are allocated using .resourceAllocator
+// and are not freed individually, so this is fine.
 resources: std.AutoHashMap(Rtti.TypeId, *u8),
 
 const Self = @This();
@@ -70,6 +75,7 @@ pub fn deinit(self: *Self) void {
     while (iter.next()) |table| {
         table.*.deinit();
     }
+    self.frameSystems.deinit();
     self.archetypeTables.deinit();
     self.globalPool.deinit();
     self.resourceAllocator.deinit();
@@ -121,7 +127,6 @@ pub fn addResourcePtr(self: *Self, resource: anytype) !void {
     }
 
     try self.resources.put(rtti, @ptrCast(*u8, resource));
-    // @todo: these resources should not be freed by the world.
 }
 
 pub fn addResource(self: *Self, resource: anytype) !*@TypeOf(resource) {
