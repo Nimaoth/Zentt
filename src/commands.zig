@@ -95,7 +95,7 @@ pub fn removeComponent(self: *Self, entityId: EntityId, comptime ComponentType: 
     } });
 }
 
-pub fn applyCommands(self: *Self, world: *World) !void {
+pub fn applyCommands(self: *Self, world: *World, maxCommands: u64) !u64 {
     defer {
         self.commands.clearRetainingCapacity();
         self.componentData.clearRetainingCapacity();
@@ -106,28 +106,34 @@ pub fn applyCommands(self: *Self, world: *World) !void {
         std.log.debug("applyCommands: {}", .{self.commands.items.len});
     }
 
+    var i: u64 = 0;
     for (self.commands.items) |command| {
+        defer i += 1;
+        if (i >= maxCommands)
+            break;
         switch (command) {
             .CreateEntity => |index| {
-                const entity = try world.createEntity();
+                const entity = world.createEntity() catch continue;
                 self.entityIdMap.items[index] = entity.id;
             },
 
             .DestroyEntity => |entityId| {
-                try world.deleteEntity(entityId);
+                world.deleteEntity(entityId) catch continue;
             },
 
             .AddComponent => |data| {
                 const entityId = self.entityIdMap.items[data.index];
                 const componentData = self.getComponentData(data.componentDataIndex, data.componentDataLen);
-                _ = try world.addComponentRaw(entityId, data.componentType, componentData);
+                _ = world.addComponentRaw(entityId, data.componentType, componentData) catch continue;
             },
 
             .RemoveComponent => |data| {
-                try world.removeComponent(data.entityId, data.componentType);
+                world.removeComponent(data.entityId, data.componentType) catch continue;
             },
         }
     }
+
+    return i;
 }
 
 pub fn imguiDetails(self: *Self) void {

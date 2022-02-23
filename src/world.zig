@@ -112,6 +112,18 @@ pub fn dumpGraph(self: *Self) !void {
     try dotPrinter.printGraph(graphFile.writer(), self);
 }
 
+pub fn addResourcePtr(self: *Self, resource: anytype) !void {
+    const ResourceType = @TypeOf(resource.*);
+    const rtti = Rtti.typeId(ResourceType);
+
+    if (self.resources.contains(rtti)) {
+        return error.ResourceAlreadyExists;
+    }
+
+    try self.resources.put(rtti, @ptrCast(*u8, resource));
+    // @todo: these resources should not be freed by the world.
+}
+
 pub fn addResource(self: *Self, resource: anytype) !*@TypeOf(resource) {
     const ResourceType = @TypeOf(resource);
     const rtti = Rtti.typeId(ResourceType);
@@ -256,13 +268,12 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
 }
 
 pub fn createEntity(self: *Self) !Entity {
-    if (self.entities.count() > 50000) {
+    if (self.entities.count() > 100_000) {
         return error.TooManyEntities;
     }
 
     const entityId = self.nextEntityId;
     self.nextEntityId += 1;
-    std.log.debug("createEntity {}", .{entityId});
 
     const entity = try self.baseArchetypeTable.addEntity(entityId, .{});
     try self.entities.put(entityId, entity);
@@ -274,7 +285,6 @@ pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
 }
 
 pub fn deleteEntity(self: *Self, entityId: EntityId) !void {
-    std.log.debug("deleteEntity {}", .{entityId});
     if (self.entities.get(entityId)) |entity| {
         _ = self.entities.remove(entityId);
         if (entity.chunk.removeEntity(entity.index)) |update| {

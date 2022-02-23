@@ -9,6 +9,8 @@ const C = @cImport({
 const imgui = @import("imgui.zig");
 const sdl = @import("sdl.zig");
 
+const Renderer = @import("renderer.zig");
+
 const Rtti = @import("rtti.zig");
 
 pub const ImGui_ImplVulkan_InitInfo = extern struct {
@@ -124,6 +126,122 @@ pub fn dockspace() void {
     }
 
     C.igEnd();
+}
+
+var descriptor_pool: vk.DescriptorPool = .null_handle;
+
+pub fn initForWindow(window: *sdl.SDL_Window) !void {
+    _ = imgui.CreateContext();
+    var io = imgui.GetIO();
+    io.ConfigFlags = io.ConfigFlags.with(.{ .DockingEnable = true, .ViewportsEnable = true });
+    _ = ImGui_ImplSDL2_InitForVulkan(window);
+}
+
+export fn vulkan_loader(function_name: [*:0]const u8, user_data: ?*anyopaque) vk.PfnVoidFunction {
+    const instance = @ptrCast(*vk.Instance, @alignCast(@alignOf(vk.Instance), user_data orelse unreachable)).*;
+    return sdl.SDL_Vulkan_GetVkGetInstanceProcAddrZig()(instance, function_name);
+}
+
+export fn check_vk_result(err: vk.Result) callconv(vk.vulkan_call_conv) void {
+    if (err != .success) {
+        std.log.err("check_vk_result: {}", .{err});
+    }
+}
+
+pub fn initForRenderer(renderer: *Renderer) !void {
+    const POOL_SIZE = 1000;
+    const pool_sizes = [_]vk.DescriptorPoolSize{
+        .{ .@"type" = .sampler, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .combined_image_sampler, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .sampled_image, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .storage_image, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .uniform_texel_buffer, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .storage_texel_buffer, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .uniform_buffer, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .storage_buffer, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .storage_buffer_dynamic, .descriptor_count = POOL_SIZE },
+        .{ .@"type" = .input_attachment, .descriptor_count = POOL_SIZE },
+    };
+    const pool_info = vk.DescriptorPoolCreateInfo{
+        .flags = vk.DescriptorPoolCreateFlags{ .free_descriptor_set_bit = true },
+        .max_sets = POOL_SIZE * pool_sizes.len,
+        .pool_size_count = pool_sizes.len,
+        .p_pool_sizes = &pool_sizes,
+    };
+    descriptor_pool = try renderer.gc.vkd.createDescriptorPool(renderer.gc.dev, &pool_info, null);
+    errdefer renderer.gc.vkd.destroyDescriptorPool(renderer.gc.dev, descriptor_pool, null);
+
+    {
+        var instance = renderer.gc.instance;
+        if (!ImGui_ImplVulkan_LoadFunctions(vulkan_loader, &instance)) {
+            return error.ImguiFailedToLoadVulkanFunctions;
+        }
+    }
+
+    const info = ImGui_ImplVulkan_InitInfo{
+        .Instance = renderer.gc.instance,
+        .PhysicalDevice = renderer.gc.pdev,
+        .Device = renderer.gc.dev,
+        .QueueFamily = renderer.gc.graphics_queue.family,
+        .Queue = renderer.gc.graphics_queue.handle,
+        .PipelineCache = null,
+        .DescriptorPool = descriptor_pool,
+        .Subpass = 0,
+        .MinImageCount = @intCast(u32, renderer.swapchain.swap_images.len),
+        .ImageCount = @intCast(u32, renderer.swapchain.swap_images.len),
+        .MSAASamples = (vk.SampleCountFlags{ .@"1_bit" = true }).toInt(),
+        .Allocator = null,
+        .CheckVkResultFn = check_vk_result,
+    };
+    _ = ImGui_ImplVulkan_Init(&info, renderer.renderPass);
+    errdefer ImGui_ImplVulkan_Shutdown();
+
+    // Upload Fonts
+    {
+        // Use any command queue
+        var cmdbuf: vk.CommandBuffer = undefined;
+
+        try renderer.gc.vkd.allocateCommandBuffers(renderer.gc.dev, &.{
+            .command_pool = renderer.commandPool,
+            .level = .primary,
+            .command_buffer_count = 1,
+        }, @ptrCast([*]vk.CommandBuffer, &cmdbuf));
+        defer renderer.gc.vkd.freeCommandBuffers(renderer.gc.dev, renderer.commandPool, 1, @ptrCast([*]const vk.CommandBuffer, &cmdbuf));
+
+        try renderer.gc.vkd.beginCommandBuffer(cmdbuf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+            .p_inheritance_info = null,
+        });
+
+        if (!ImGui_ImplVulkan_CreateFontsTexture(cmdbuf)) {
+            return error.ImguiFailedToCreateFontsTexture;
+        }
+        defer ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+        try renderer.gc.vkd.endCommandBuffer(cmdbuf);
+
+        const si = vk.SubmitInfo{
+            .wait_semaphore_count = 0,
+            .p_wait_semaphores = undefined,
+            .p_wait_dst_stage_mask = undefined,
+            .command_buffer_count = 1,
+            .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &cmdbuf),
+            .signal_semaphore_count = 0,
+            .p_signal_semaphores = undefined,
+        };
+        try renderer.gc.vkd.queueSubmit(renderer.gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &si), .null_handle);
+        try renderer.gc.vkd.queueWaitIdle(renderer.gc.graphics_queue.handle);
+    }
+}
+
+pub fn deinitWindow() void {
+    ImGui_ImplSDL2_Shutdown();
+}
+
+pub fn deinitRenderer(renderer: *Renderer) void {
+    renderer.gc.vkd.destroyDescriptorPool(renderer.gc.dev, descriptor_pool, null);
+    ImGui_ImplVulkan_Shutdown();
 }
 
 pub fn property(name: []const u8) void {
