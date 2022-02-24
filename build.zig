@@ -110,6 +110,24 @@ pub fn build(b: *std.build.Builder) void {
     // imgui
     exe.addIncludeDir("libs/cimgui");
     exe.addIncludeDir("libs/cimgui/imgui");
+
+    const imguiFlags: []const []const u8 = if (mode == .Debug) &.{
+        "-Wall",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-g",
+        "-fno-threadsafe-statics",
+        "-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES",
+        "-DIMGUI_IMPL_API=extern\"C\"",
+    } else &.{
+        "-Wall",
+        "-fno-exceptions",
+        "-fno-rtti",
+        "-O3",
+        "-fno-threadsafe-statics",
+        "-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES",
+        "-DIMGUI_IMPL_API=extern\"C\"",
+    };
     exe.addCSourceFiles(
         &.{
             "libs/cimgui/cimgui.cpp",
@@ -121,15 +139,7 @@ pub fn build(b: *std.build.Builder) void {
             "libs/cimgui/imgui/backends/imgui_impl_sdl.cpp",
             "libs/cimgui/imgui/backends/imgui_impl_vulkan.cpp",
         },
-        &.{
-            "-Wall",
-            "-fno-exceptions",
-            "-fno-rtti",
-            "-g",
-            "-fno-threadsafe-statics",
-            "-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES",
-            "-DIMGUI_IMPL_API=extern\"C\"",
-        },
+        imguiFlags,
     );
 
     exe.linkLibC();

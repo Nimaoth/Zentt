@@ -111,7 +111,7 @@ pub fn draw(self: *Self) !void {
                     var sum: f64 = 0;
                     var i: usize = 0;
                     while (i < self.smoothCount and i < entry.value_ptr.count) : (i += 1) {
-                        sum += entry.value_ptr.peekItem(i);
+                        sum += entry.value_ptr.peekItem(entry.value_ptr.count - i - 1);
                     }
 
                     const avg = sum / @intToFloat(f64, i);

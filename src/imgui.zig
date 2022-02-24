@@ -2369,6 +2369,27 @@ pub const Vec2 = extern struct {
         return self;
     }
 
+    pub fn normalize(self: *Self) *Self {
+        const l = self.lenSq();
+        if (l != 0) {
+            const lenInv = 1 / std.math.sqrt(l);
+            self.x *= lenInv;
+            self.y *= lenInv;
+        }
+        return self;
+    }
+
+    pub fn normalized(self: Self) Self {
+        var result = self;
+        const l = result.lenSq();
+        if (l != 0) {
+            const lenInv = 1 / std.math.sqrt(l);
+            result.x *= lenInv;
+            result.y *= lenInv;
+        }
+        return result;
+    }
+
     pub fn len(self: Self) f32 {
         return std.math.sqrt(self.x * self.x + self.y * self.y);
     }
@@ -4179,7 +4200,9 @@ pub inline fn GetWindowContentRegionMin() Vec2 {
 }
 
 /// GetWindowContentRegionWidth() f32
-pub const GetWindowContentRegionWidth = raw.igGetWindowContentRegionWidth;
+pub fn GetWindowContentRegionWidth() f32 {
+    return GetWindowContentRegionMax().x - GetWindowContentRegionMin().x;
+}
 
 /// GetWindowDrawList() ?*DrawList
 pub const GetWindowDrawList = raw.igGetWindowDrawList;
@@ -6021,7 +6044,6 @@ pub const raw = struct {
     pub extern fn igGetVersion() callconv(.C) ?[*:0]const u8;
     pub extern fn igGetWindowContentRegionMax(pOut: *Vec2) callconv(.C) void;
     pub extern fn igGetWindowContentRegionMin(pOut: *Vec2) callconv(.C) void;
-    pub extern fn igGetWindowContentRegionWidth() callconv(.C) f32;
     pub extern fn igGetWindowDrawList() callconv(.C) ?*DrawList;
     pub extern fn igGetWindowHeight() callconv(.C) f32;
     pub extern fn igGetWindowPos(pOut: *Vec2) callconv(.C) void;

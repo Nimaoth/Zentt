@@ -17,6 +17,7 @@ const app_name = "vulkan-zig triangle example";
 const Renderer = @import("renderer.zig");
 const App = @import("app.zig");
 const Details = @import("details_window.zig");
+const ChunkDebugger = @import("editor/chunk_debugger.zig");
 
 const EntityId = @import("entity.zig").EntityId;
 const ComponentId = @import("entity.zig").ComponentId;
@@ -29,10 +30,13 @@ const Profiler = @import("profiler.zig");
 
 pub const TransformComponent = struct {
     position: Vec2 = .{ .x = 0, .y = 0 },
+    vel: Vec2 = .{ .x = 0, .y = 0 },
     size: Vec2 = .{ .x = 50, .y = 50 },
 };
 
-pub const RenderComponent = struct {};
+pub const RenderComponent = struct {
+    color: u32 = 0xff00ffff,
+};
 
 pub fn staticVariable(comptime scope: anytype, comptime T: type, comptime name: []const u8, comptime defaultValue: T, editable: bool) *T {
     _ = scope;
@@ -48,20 +52,68 @@ pub fn staticVariable(comptime scope: anytype, comptime T: type, comptime name: 
     return &Scope.staticVar;
 }
 
-pub fn moveSystem(profiler: *Profiler, commands: *Commands, time: *const Time, query: Query(.{TransformComponent})) !void {
-    const scope = profiler.beginScope("moveSystem");
+pub fn moveSystemPlayer(
+    profiler: *Profiler,
+    time: *const Time,
+    input: *const Input,
+    query: Query(.{ Player, TransformComponent }),
+) !void {
+    const scope = profiler.beginScope("moveSystemPlayer");
+    defer scope.end();
+
+    var maxSpeed = std.math.clamp(staticVariable(moveSystemPlayer, f32, "Player Max Speed", 150, true).*, 0, 100000);
+    var acceleration = staticVariable(moveSystemPlayer, f32, "Player Acc", 1300, true).*;
+
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        var dir = Vec2{};
+        if (input.left) dir.x -= 1;
+        if (input.right) dir.x += 1;
+        if (input.up) dir.y -= 1;
+        if (input.down) dir.y += 1;
+
+        if (dir.lenSq() == 0) {
+            dir = entity.TransformComponent.vel.timess(-1);
+        }
+        _ = dir.normalize();
+        _ = entity.TransformComponent.vel.add(dir.timess(acceleration * @floatCast(f32, time.delta)));
+
+        const len = entity.TransformComponent.vel.len();
+        _ = entity.TransformComponent.vel.normalize();
+        _ = entity.TransformComponent.vel.muls(std.math.clamp(len, 0, maxSpeed));
+
+        _ = entity.TransformComponent.position.add(entity.TransformComponent.vel.timess(@floatCast(f32, time.delta)));
+    }
+}
+
+pub fn moveSystemQuad(
+    profiler: *Profiler,
+    commands: *Commands,
+    time: *const Time,
+    players: Query(.{ Player, TransformComponent }),
+    query: Query(.{ Quad, TransformComponent }),
+) !void {
+    const scope = profiler.beginScope("moveSystemQuad");
     defer scope.end();
 
     var prng = std.rand.DefaultPrng.init(@floatToInt(u64, time.now));
     var rand = prng.random();
 
+    var player = players.iter().next() orelse return error.NoPlayerFound;
+
     // comptime var i = 0;
     // inline while (i < 10) : (i += 1) _ = rand.int(u64);
 
-    var speed = staticVariable(moveSystem, f32, "speed", 0.1, true);
-    var radius = staticVariable(moveSystem, f32, "radius", 100, true);
-    var maxEntities = staticVariable(moveSystem, u64, "max_entities", 10, true);
-    var addRenderComponent = staticVariable(moveSystem, bool, "add render component", true, true).*;
+    var speed = staticVariable(moveSystemQuad, f32, "speed", 0.1, true);
+    var radius = staticVariable(moveSystemQuad, f32, "radius", 100, true);
+    var maxEntities = staticVariable(moveSystemQuad, u64, "max_entities", 10, true);
+    var addRenderComponent = staticVariable(moveSystemQuad, bool, "add render component", true, true).*;
+    var maxEntitiesSpawnedPerFrame = staticVariable(moveSystemQuad, u64, "Max spawnrate", 100, true).*;
+    var antiGravity = staticVariable(moveSystemQuad, f32, "Anti Gravity", 5000, true).*;
+
+    var entitiesSpawned: u64 = 0;
+
+    const sizeSq = player.TransformComponent.size.x * player.TransformComponent.size.x;
 
     var iter = query.iter();
     var i: u64 = 0;
@@ -71,24 +123,37 @@ pub fn moveSystem(profiler: *Profiler, commands: *Commands, time: *const Time, q
             continue;
         }
 
-        const velocity = (Vec2{ .x = rand.floatNorm(f32), .y = rand.floatNorm(f32) }).timess(speed.*);
+        var velocity = (Vec2{ .x = rand.floatNorm(f32), .y = rand.floatNorm(f32) }).timess(speed.*);
+        const toPlayer = entity.TransformComponent.position.plus(player.TransformComponent.position.timess(-1));
+        const distSq = toPlayer.lenSq();
+        if (distSq < sizeSq) {
+            _ = velocity.add(toPlayer.normalized().timess(antiGravity / std.math.max(distSq, 0.1)));
+        }
+
         _ = entity.TransformComponent.position.add(velocity.timess(@floatCast(f32, time.delta)));
 
         const pos = entity.TransformComponent.position;
         if (pos.lenSq() > radius.* * radius.*) {
             try commands.destroyEntity(entity.id);
-            if (addRenderComponent) {
-                _ = (try commands.createEntity())
-                    .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                    .addComponent(RenderComponent{});
-                _ = (try commands.createEntity())
-                    .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                    .addComponent(RenderComponent{});
-            } else {
-                _ = (try commands.createEntity())
-                    .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
-                _ = (try commands.createEntity())
-                    .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
+            if (entitiesSpawned < maxEntitiesSpawnedPerFrame) {
+                entitiesSpawned += 1;
+                if (addRenderComponent) {
+                    _ = (try commands.createEntity())
+                        .addComponent(Quad{})
+                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
+                        .addComponent(RenderComponent{ .color = 0xff00ffff });
+                    _ = (try commands.createEntity())
+                        .addComponent(Quad{})
+                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
+                        .addComponent(RenderComponent{ .color = 0xff00ffff });
+                } else {
+                    _ = (try commands.createEntity())
+                        .addComponent(Quad{})
+                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
+                    _ = (try commands.createEntity())
+                        .addComponent(Quad{})
+                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
+                }
             }
         }
     }
@@ -131,13 +196,23 @@ pub fn renderSystem(profiler: *Profiler, query: Query(.{ TransformComponent, Ren
 
         const position = entity.TransformComponent.position.timess(scale).plus(canvas_p0).plus(canvas_sz.timess(0.5));
         const size = entity.TransformComponent.size.timess(scale);
-        drawList.AddRect(position, position.plus(size), 0xff00ffff);
+        drawList.AddCircle(position, size.x, entity.RenderComponent.color);
     }
 }
+
+const Player = struct {};
+const Quad = struct {};
 
 const Time = struct {
     delta: f64 = 0,
     now: f64 = 0,
+};
+
+const Input = struct {
+    left: bool = false,
+    right: bool = false,
+    up: bool = false,
+    down: bool = false,
 };
 
 pub fn main() !void {
@@ -153,28 +228,69 @@ pub fn main() !void {
     defer world.deinit();
     defer world.dumpGraph() catch {};
     try world.addSystem(renderSystem, "Render System");
-    try world.addSystem(moveSystem, "Move System");
+    try world.addSystem(moveSystemQuad, "Move System Quad");
+    try world.addSystem(moveSystemPlayer, "Move System Player");
 
     _ = try world.addResource(Time{});
     var commands = try world.addResource(Commands.init(allocator));
     defer commands.deinit();
 
+    var input = try world.addResource(Input{});
+
     var profiler = &app.profiler;
     try world.addResourcePtr(profiler);
 
     const e = try commands.createEntity();
-    _ = try commands.addComponent(e, Tag{ .name = "e" });
+    _ = try commands.addComponent(e, Quad{});
     _ = try commands.addComponent(e, TransformComponent{});
     _ = try commands.addComponent(e, RenderComponent{});
+
+    const player = (try commands.createEntity())
+        .addComponent(Player{})
+        .addComponent(TransformComponent{ .size = .{ .x = 100, .y = 100 } })
+        .addComponent(RenderComponent{ .color = 0xff0000ff });
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
+    _ = player;
 
     var details = Details.init(allocator);
     var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
+
+    var chunkDebugger = ChunkDebugger.init(allocator);
+    defer chunkDebugger.deinit();
 
     var lastFrameTime = std.time.nanoTimestamp();
     var frameTimeSmoothed: f64 = 0;
 
     while (app.isRunning) {
+        var event: sdl.SDL_Event = undefined;
+        while (sdl.SDL_PollEvent(&event) != 0) {
+            _ = imgui2.ImGui_ImplSDL2_ProcessEvent(event);
+            switch (event.@"type") {
+                sdl.SDL_QUIT => {
+                    app.isRunning = false;
+                },
+                sdl.SDL_KEYDOWN => {
+                    switch (event.key.keysym.sym) {
+                        sdl.SDLK_u => input.left = true,
+                        sdl.SDLK_a => input.right = true,
+                        sdl.SDLK_v => input.up = true,
+                        sdl.SDLK_i => input.down = true,
+                        else => {},
+                    }
+                },
+                sdl.SDL_KEYUP => {
+                    switch (event.key.keysym.sym) {
+                        sdl.SDLK_u => input.left = false,
+                        sdl.SDLK_a => input.right = false,
+                        sdl.SDLK_v => input.up = false,
+                        sdl.SDLK_i => input.down = false,
+                        else => {},
+                    }
+                },
+                else => {},
+            }
+        }
+
         try app.beginFrame();
 
         const currentFrameTime = std.time.nanoTimestamp();
@@ -208,7 +324,7 @@ pub fn main() !void {
 
         try profiler.record("Entities", @intToFloat(f64, world.entities.count()));
         {
-            const scope = profiler.beginScope("details and profiler");
+            const scope = profiler.beginScope("Entity list");
             defer scope.end();
 
             if (imgui.Begin("Entities")) {
@@ -245,8 +361,6 @@ pub fn main() !void {
 
                         _ = imgui.TableSetColumnIndex(2);
                         if (imgui.Button("Select")) {
-                            // const entt = try commands.getEntity(entityId);
-                            // _ = try commands.addComponent(entt, Tag{ .name = "lol" });
                             selectedEntity = entityId;
                         }
 
@@ -258,9 +372,22 @@ pub fn main() !void {
                 }
             }
             imgui.End();
+        }
 
+        {
+            const scope = profiler.beginScope("Details");
+            defer scope.end();
             try details.draw(world, selectedEntity, commands);
+        }
+        {
+            const scope = profiler.beginScope("Profiler");
+            defer scope.end();
             try profiler.draw();
+        }
+        {
+            const scope = profiler.beginScope("Chunk Debugger");
+            defer scope.end();
+            try chunkDebugger.draw(world);
         }
 
         {

@@ -96,17 +96,6 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn beginFrame(self: *Self) !void {
-    var event: sdl.SDL_Event = undefined;
-    while (sdl.SDL_PollEvent(&event) != 0) {
-        _ = imgui2.ImGui_ImplSDL2_ProcessEvent(event);
-        switch (event.@"type") {
-            sdl.SDL_QUIT => {
-                self.isRunning = false;
-            },
-            else => {},
-        }
-    }
-
     var w: c_int = undefined;
     var h: c_int = undefined;
     sdl.SDL_Vulkan_GetDrawableSize(self.window, &w, &h);
