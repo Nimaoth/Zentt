@@ -116,10 +116,32 @@ pub fn endFrame(self: *Self) !void {
     const scope = self.profiler.beginScope("App.endFrame");
     defer scope.end();
 
+    const contentSize = blk: {
+        imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
+        defer imgui.PopStyleVar();
+
+        const open = imgui.Begin("Viewport");
+        defer imgui.End();
+
+        const size = imgui.GetContentRegionAvail();
+        if (open) {
+            imgui.ImageExt(
+                @ptrCast(**anyopaque, &self.renderer.getSceneImageDescriptor()).*,
+                size,
+                .{ .x = 0, .y = 0 },
+                .{ .x = size.x / 1920, .y = size.y / 1080 },
+                .{ .x = 1, .y = 1, .z = 1, .w = 1 },
+                .{ .x = 0, .y = 0, .z = 0, .w = 0 },
+            );
+        }
+
+        break :blk size;
+    };
+
     imgui2.render();
     imgui2.endFrame();
 
-    try self.renderer.beginRender();
+    try self.renderer.beginRender(.{ .width = @floatToInt(u32, std.math.max(contentSize.x, 1)), .height = @floatToInt(u32, std.math.max(contentSize.y, 1)) });
     imgui2.ImGui_ImplVulkan_RenderDrawData(imgui2.getDrawData(), self.renderer.getCommandBuffer(), .null_handle);
     imgui2.updatePlatformWindows();
     try self.renderer.endRender(self.windowSize);

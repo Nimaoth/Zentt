@@ -167,7 +167,7 @@ pub fn renderSystem(profiler: *Profiler, query: Query(.{ TransformComponent, Ren
 
     imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
     defer imgui.PopStyleVar();
-    _ = imgui.Begin("Viewport");
+    _ = imgui.Begin("renderSystem");
     defer imgui.End();
 
     var cameraSize = staticVariable(renderSystem, f32, "cameraSize", 100, true);

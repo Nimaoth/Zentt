@@ -194,7 +194,7 @@ pub fn initForRenderer(renderer: *Renderer) !void {
         .Allocator = null,
         .CheckVkResultFn = check_vk_result,
     };
-    _ = ImGui_ImplVulkan_Init(&info, renderer.renderPass);
+    _ = ImGui_ImplVulkan_Init(&info, renderer.mainRenderPass);
     errdefer ImGui_ImplVulkan_Shutdown();
 
     // Upload Fonts

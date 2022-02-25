@@ -33,6 +33,8 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .createFence = true,
     .createImageView = true,
     .destroyImageView = true,
+    .createImage = true,
+    .destroyImage = true,
     .destroySemaphore = true,
     .destroyFence = true,
     .getSwapchainImagesKHR = true,
@@ -80,6 +82,14 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .createDescriptorPool = true,
     .destroyDescriptorPool = true,
     .resetCommandPool = true,
+    .getImageMemoryRequirements = true,
+    .bindImageMemory = true,
+    .allocateDescriptorSets = true,
+    .createDescriptorSetLayout = true,
+    .destroyDescriptorSetLayout = true,
+    .updateDescriptorSets = true,
+    .createSampler = true,
+    .destroySampler = true,
 });
 
 pub const GraphicsContext = struct {
