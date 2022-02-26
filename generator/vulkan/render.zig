@@ -107,6 +107,13 @@ const foreign_types = std.ComptimeStringMap([]const u8, .{
     .{ "_screen_window", "opaque {}" },
 });
 
+const optional_pointers = std.ComptimeStringMap(void, .{
+    .{ "VkWriteDescriptorSet.pImageInfo", .{} },
+    .{ "VkWriteDescriptorSet.pBufferInfo", .{} },
+    .{ "VkWriteDescriptorSet.pTexelBufferView", .{} },
+    .{ "VkImageCreateInfo.pQueueFamilyIndices", .{} },
+});
+
 fn eqlIgnoreCase(lhs: []const u8, rhs: []const u8) bool {
     if (lhs.len != rhs.len) {
         return false;
@@ -710,6 +717,10 @@ fn Renderer(comptime WriterType: type) type {
         }
 
         fn renderContainer(self: *Self, name: []const u8, container: reg.Container) !void {
+            var buffer = [_]u8{0} ** 1024;
+            var bufferAllocator = std.heap.FixedBufferAllocator.init(buffer[0..]);
+            var stringBuffer = std.ArrayList(u8).initCapacity(bufferAllocator.allocator(), buffer.len) catch unreachable;
+
             try self.writer.writeAll("pub const ");
             try self.renderName(name);
             try self.writer.writeAll(" = ");
@@ -729,7 +740,7 @@ fn Renderer(comptime WriterType: type) type {
                 try self.writer.writeAll("struct {");
             }
 
-            for (container.fields) |field| {
+            for (container.fields) |*field| {
                 try self.writeIdentifierWithCase(.snake, field.name);
                 try self.writer.writeAll(": ");
                 if (field.bits) |bits| {
@@ -740,8 +751,15 @@ fn Renderer(comptime WriterType: type) type {
                         try self.writer.writeByte('\n');
                     }
                 } else {
+                    stringBuffer.clearRetainingCapacity();
+                    try std.fmt.format(stringBuffer.writer(), "{s}.{s}", .{ name, field.name });
+                    if (optional_pointers.get(stringBuffer.items)) |_| {
+                        if (field.field_type == .pointer) {
+                            field.field_type.pointer.is_optional = true;
+                        }
+                    }
                     try self.renderTypeInfo(field.field_type);
-                    try self.renderContainerDefaultField(name, container, field);
+                    try self.renderContainerDefaultField(name, container, field.*);
                     try self.writer.writeAll(", ");
                 }
             }

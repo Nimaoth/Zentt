@@ -11,6 +11,8 @@ const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
 const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
 const resources = @import("resources");
 
+const zal = @import("zalgebra");
+
 const Self = @This();
 const Renderer = @This();
 
@@ -41,9 +43,17 @@ const Vertex = struct {
 };
 
 const vertices = [_]Vertex{
-    .{ .pos = .{ 0, -0.5 }, .color = .{ 1, 0, 0 } },
-    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 0, 1, 0 } },
-    .{ .pos = .{ -0.5, 0.5 }, .color = .{ 0, 0, 1 } },
+    .{ .pos = .{ -0.5, -0.5 }, .color = .{ 1, 0, 0 } },
+    .{ .pos = .{ 0.5, -0.5 }, .color = .{ 0, 1, 0 } },
+    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 0, 0, 1 } },
+    .{ .pos = .{ -0.5, -0.5 }, .color = .{ 1, 0, 0 } },
+    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 0, 0, 1 } },
+    .{ .pos = .{ -0.5, 0.5 }, .color = .{ 0, 1, 0 } },
+};
+
+pub const SceneMatricesUbo = struct {
+    view: zal.Mat4,
+    proj: zal.Mat4,
 };
 
 const Image = struct {
@@ -65,9 +75,14 @@ commandBuffers: []vk.CommandBuffer,
 sceneRenderPass: vk.RenderPass,
 sceneImages: []Image,
 sceneFrameBuffers: []vk.Framebuffer,
+
 sceneDescriptorSetLayout: vk.DescriptorSetLayout,
 sceneDescriptorSets: []vk.DescriptorSet,
-sceneImageSampler: vk.Sampler,
+
+// main render pass
+mainDescriptorSetLayout: vk.DescriptorSetLayout,
+mainDescriptorSets: []vk.DescriptorSet,
+mainImageSampler: vk.Sampler,
 
 mainRenderPass: vk.RenderPass,
 
@@ -77,6 +92,8 @@ pipeline: vk.Pipeline,
 
 triangleBuffer: vk.Buffer,
 triangleMemory: vk.DeviceMemory,
+
+sceneMatricesUbo: []Buffer,
 
 pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) !*Self {
     var self = try allocator.create(Self);
@@ -91,22 +108,6 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
 
     self.swapchain = try Swapchain.init(&self.gc, allocator, extent);
     errdefer self.swapchain.deinit();
-
-    const push_constants = [_]vk.PushConstantRange{
-        .{
-            .stage_flags = .{ .vertex_bit = true },
-            .offset = 0,
-            .size = @sizeOf(f32) * 4,
-        },
-    };
-    self.pipelineLayout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &.{
-        .flags = .{},
-        .set_layout_count = 0,
-        .p_set_layouts = undefined,
-        .push_constant_range_count = 0,
-        .p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constants),
-    }, null);
-    errdefer self.gc.vkd.destroyPipelineLayout(self.gc.dev, self.pipelineLayout, null);
 
     // main render pass
     self.mainRenderPass = try createRenderPass(&self.gc, self.swapchain.surface_format.format, .present_src_khr);
@@ -129,16 +130,41 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
     self.descriptorPool = try createDescriptorPool(&self.gc);
     errdefer self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptorPool, null);
 
-    self.sceneImageSampler = try createSceneImageSampler(&self.gc);
-    errdefer self.gc.vkd.destroySampler(self.gc.dev, self.sceneImageSampler, null);
+    self.mainImageSampler = try createMainImageSampler(&self.gc);
+    errdefer self.gc.vkd.destroySampler(self.gc.dev, self.mainImageSampler, null);
+
+    self.mainDescriptorSetLayout = try createMainDescriptorSetLayout(&self.gc);
+    errdefer self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.mainDescriptorSetLayout, null);
+
+    self.mainDescriptorSets = try createMainDescriptorSets(&self.gc, allocator, self.sceneImages, self.descriptorPool, self.mainDescriptorSetLayout, self.mainImageSampler);
+    errdefer allocator.free(self.mainDescriptorSets);
+
+    // scene stuff
+    self.sceneMatricesUbo = try createUniformBuffers(&self.gc, self.swapchain.swap_images.len, allocator);
+    errdefer destroyBuffers(&self.gc, self.allocator, self.sceneMatricesUbo);
 
     self.sceneDescriptorSetLayout = try createSceneDescriptorSetLayout(&self.gc);
     errdefer self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.sceneDescriptorSetLayout, null);
 
-    self.sceneDescriptorSets = try createSceneDescriptorSets(&self.gc, allocator, self.sceneImages, self.descriptorPool, self.sceneDescriptorSetLayout, self.sceneImageSampler);
+    self.sceneDescriptorSets = try createSceneDescriptorSets(&self.gc, allocator, self.sceneMatricesUbo, self.descriptorPool, self.sceneDescriptorSetLayout);
     errdefer allocator.free(self.sceneDescriptorSets);
 
-    // other stuff
+    // pipeline
+    const push_constants = [_]vk.PushConstantRange{
+        .{
+            .stage_flags = .{ .vertex_bit = true },
+            .offset = 0,
+            .size = @sizeOf(f32) * 4,
+        },
+    };
+    self.pipelineLayout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &.{
+        .flags = .{},
+        .set_layout_count = 1,
+        .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.sceneDescriptorSetLayout),
+        .push_constant_range_count = 1,
+        .p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constants),
+    }, null);
+    errdefer self.gc.vkd.destroyPipelineLayout(self.gc.dev, self.pipelineLayout, null);
 
     self.pipeline = try createPipeline(&self.gc, self.pipelineLayout, self.mainRenderPass);
     errdefer self.gc.vkd.destroyPipeline(self.gc.dev, self.pipeline, null);
@@ -182,16 +208,20 @@ pub fn waitIdle(self: *const Self) void {
 }
 
 pub fn deinit(self: *Self) void {
+    destroyBuffers(&self.gc, self.allocator, self.sceneMatricesUbo);
+
     destroyCommandBuffers(&self.gc, self.commandPool, self.allocator, self.commandBuffers);
     self.gc.vkd.destroyBuffer(self.gc.dev, self.triangleBuffer, null);
     self.gc.vkd.freeMemory(self.gc.dev, self.triangleMemory, null);
     self.gc.vkd.destroyCommandPool(self.gc.dev, self.commandPool, null);
 
+    self.allocator.free(self.mainDescriptorSets);
     self.allocator.free(self.sceneDescriptorSets);
 
     self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptorPool, null);
+    self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.mainDescriptorSetLayout, null);
     self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.sceneDescriptorSetLayout, null);
-    self.gc.vkd.destroySampler(self.gc.dev, self.sceneImageSampler, null);
+    self.gc.vkd.destroySampler(self.gc.dev, self.mainImageSampler, null);
 
     // scene
     destroySceneFramebuffers(&self.gc, self.allocator, self.sceneFrameBuffers);
@@ -239,6 +269,82 @@ fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.B
     }
 
     try copyBuffer(gc, pool, buffer, staging_buffer, @sizeOf(@TypeOf(vertices)));
+}
+
+const Buffer = struct {
+    buffer: vk.Buffer,
+    memory: vk.DeviceMemory,
+    size: vk.DeviceSize,
+
+    pub fn deinit(self: *const @This(), gc: *const GraphicsContext) void {
+        gc.vkd.destroyBuffer(gc.dev, self.buffer, null);
+        gc.vkd.freeMemory(gc.dev, self.memory, null);
+    }
+};
+
+fn createUniformBuffers(gc: *const GraphicsContext, num: u64, allocator: Allocator) ![]Buffer {
+    const buffers = try allocator.alloc(Buffer, num);
+    errdefer allocator.free(buffers);
+    for (buffers) |*buffer| {
+        buffer.* = try createBuffer(gc, @sizeOf(SceneMatricesUbo), .{ .uniform_buffer_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+    }
+    return buffers;
+}
+
+fn destroyBuffers(gc: *const GraphicsContext, allocator: Allocator, buffers: []Buffer) void {
+    for (buffers) |buffer| buffer.deinit(gc);
+    allocator.free(buffers);
+}
+
+fn createBuffer(
+    gc: *const GraphicsContext,
+    size: u64,
+    usage: vk.BufferUsageFlags,
+    properties: vk.MemoryPropertyFlags,
+) !Buffer {
+    const buffer = try gc.vkd.createBuffer(gc.dev, &.{
+        .flags = .{},
+        .size = size,
+        .usage = usage,
+        .sharing_mode = .exclusive,
+        .queue_family_index_count = 0,
+        .p_queue_family_indices = undefined,
+    }, null);
+    errdefer gc.vkd.destroyBuffer(gc.dev, buffer, null);
+
+    const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, buffer);
+    const memory = try gc.allocate(mem_reqs, properties);
+    errdefer gc.vkd.freeMemory(gc.dev, memory, null);
+
+    try gc.vkd.bindBufferMemory(gc.dev, buffer, memory, 0);
+
+    return Buffer{ .buffer = buffer, .memory = memory, .size = size };
+}
+
+fn uploadBufferData(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: Buffer, data: []const u8, use_staging_buffer: bool) !void {
+    if (use_staging_buffer) {
+        const staging_buffer = try createBuffer(gc, data.len, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+        defer staging_buffer.deinit(gc);
+
+        const mem_raw = try gc.vkd.mapMemory(gc.dev, staging_buffer.memory, 0, vk.WHOLE_SIZE, .{});
+        const mem = @ptrCast([*]u8, mem_raw)[0..data.len];
+        defer gc.vkd.unmapMemory(gc.dev, staging_buffer.memory);
+
+        std.mem.copy(u8, mem, data);
+
+        try copyBuffer(gc, pool, buffer.buffer, staging_buffer.buffer, data.len);
+    } else {
+        const mem_raw = try gc.vkd.mapMemory(gc.dev, buffer.memory, 0, vk.WHOLE_SIZE, .{});
+        const mem = @ptrCast([*]u8, mem_raw)[0..data.len];
+        defer gc.vkd.unmapMemory(gc.dev, buffer.memory);
+
+        if (mem.len < data.len) {
+            std.log.err("uploadBufferData: data of size {} bytes does not fit in buffer with size {} bytes", .{ data.len, mem.len });
+            return error.DataDoesNotFitInBuffer;
+        }
+
+        std.mem.copy(u8, mem, data);
+    }
 }
 
 fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, src: vk.Buffer, size: vk.DeviceSize) !void {
@@ -306,56 +412,17 @@ fn beginRecordCommandBuffer(
     });
 }
 
-fn drawTriangle(
-    gc: *const GraphicsContext,
-    buffer: vk.Buffer,
-    extent: vk.Extent2D,
-    render_pass: vk.RenderPass,
-    pipeline: vk.Pipeline,
-    framebuffer: vk.Framebuffer,
-    cmdbuf: vk.CommandBuffer,
-) void {
-    const viewport = vk.Viewport{
-        .x = 0,
-        .y = 0,
-        .width = @intToFloat(f32, extent.width),
-        .height = @intToFloat(f32, extent.height),
-        .min_depth = 0,
-        .max_depth = 1,
-    };
-
-    const scissor = vk.Rect2D{
-        .offset = .{ .x = 0, .y = 0 },
-        .extent = extent,
-    };
-
-    gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
-    gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &scissor));
-
-    // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
-    const render_area = vk.Rect2D{
-        .offset = .{ .x = 0, .y = 0 },
-        .extent = extent,
-    };
-    const clear = vk.ClearValue{
-        .color = .{ .float_32 = .{ 1, 0, 1, 1 } },
-    };
-
-    gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
-        .render_pass = render_pass,
-        .framebuffer = framebuffer,
-        .render_area = render_area,
-        .clear_value_count = 1,
-        .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
-    }, .@"inline");
-
-    _ = pipeline;
-    _ = buffer;
-    gc.vkd.cmdBindPipeline(cmdbuf, .graphics, pipeline);
+fn bindTrianglePipeline(self: *Self) void {
+    const cmdbuf = self.getCommandBuffer();
+    self.gc.vkd.cmdBindPipeline(cmdbuf, .graphics, self.pipeline);
     const offset = [_]vk.DeviceSize{0};
-    gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &buffer), &offset);
-    gc.vkd.cmdDraw(cmdbuf, vertices.len, 1, 0, 0);
-    gc.vkd.cmdEndRenderPass(cmdbuf);
+    self.gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &self.triangleBuffer), &offset);
+}
+
+pub fn drawTriangle(self: *Self, transform: zal.Vec4) void {
+    const cmdbuf = self.getCommandBuffer();
+    self.gc.vkd.cmdPushConstants(cmdbuf, self.pipelineLayout, .{ .vertex_bit = true }, 0, @sizeOf(zal.Vec4), &transform);
+    self.gc.vkd.cmdDraw(cmdbuf, vertices.len, 1, 0, 0);
 }
 
 fn prepareImgui(
@@ -401,11 +468,6 @@ fn prepareImgui(
     }, .@"inline");
 }
 
-fn endRecordCommandBuffer(gc: *const GraphicsContext, cmdbuf: vk.CommandBuffer) !void {
-    gc.vkd.cmdEndRenderPass(cmdbuf);
-    try gc.vkd.endCommandBuffer(cmdbuf);
-}
-
 fn destroyCommandBuffers(gc: *const GraphicsContext, pool: vk.CommandPool, allocator: Allocator, commandBuffers: []vk.CommandBuffer) void {
     gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, commandBuffers.len), commandBuffers.ptr);
     allocator.free(commandBuffers);
@@ -421,8 +483,6 @@ fn createSceneImage(gc: *const GraphicsContext, allocator: Allocator, amount: us
         gc.vkd.destroyImage(gc.dev, img.image, null);
         gc.vkd.freeMemory(gc.dev, img.memory, null);
     };
-
-    const queue_family_indices: [1]u32 = .{0};
 
     for (images) |*iv| {
         // This triggers the following compiler bug: generating const value for struct field 'format'
@@ -456,7 +516,7 @@ fn createSceneImage(gc: *const GraphicsContext, allocator: Allocator, amount: us
         createInfo.usage = .{ .sampled_bit = true, .color_attachment_bit = true };
         createInfo.sharing_mode = .exclusive;
         createInfo.queue_family_index_count = 0;
-        createInfo.p_queue_family_indices = @ptrCast([*]const u32, &queue_family_indices[0]);
+        createInfo.p_queue_family_indices = null;
         createInfo.initial_layout = .@"undefined";
 
         iv.image = try gc.vkd.createImage(gc.dev, &createInfo, null);
@@ -555,6 +615,55 @@ fn createDescriptorPool(gc: *const GraphicsContext) !vk.DescriptorPool {
 fn createSceneDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetLayout {
     const binding = vk.DescriptorSetLayoutBinding{
         .binding = 0,
+        .descriptor_type = .uniform_buffer,
+        .descriptor_count = 1,
+        .stage_flags = .{ .vertex_bit = true },
+        .p_immutable_samplers = null,
+    };
+
+    return try gc.vkd.createDescriptorSetLayout(gc.dev, &.{
+        .flags = .{},
+        .binding_count = 1,
+        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &binding),
+    }, null);
+}
+
+fn createSceneDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, buffers: []Buffer, descriptorPool: vk.DescriptorPool, descriptorSetLayout: vk.DescriptorSetLayout) ![]vk.DescriptorSet {
+    const descriptorSets = try allocator.alloc(vk.DescriptorSet, buffers.len);
+    errdefer allocator.free(descriptorSets);
+
+    for (buffers) |*buffer, i| {
+        try gc.vkd.allocateDescriptorSets(gc.dev, &.{
+            .descriptor_pool = descriptorPool,
+            .descriptor_set_count = 1,
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptorSetLayout),
+        }, @ptrCast([*]vk.DescriptorSet, &descriptorSets[i]));
+
+        const desc = vk.DescriptorBufferInfo{
+            .buffer = buffer.buffer,
+            .offset = 0,
+            .range = buffer.size,
+        };
+
+        var write_desc: vk.WriteDescriptorSet = undefined;
+        std.mem.set(u8, std.mem.asBytes(&write_desc), 0);
+        write_desc.s_type = .write_descriptor_set;
+        write_desc.dst_set = descriptorSets[i];
+        write_desc.dst_binding = 0;
+        write_desc.dst_array_element = 0;
+        write_desc.descriptor_count = 1;
+        write_desc.descriptor_type = .uniform_buffer;
+        write_desc.p_buffer_info = @ptrCast([*]const vk.DescriptorBufferInfo, &desc);
+
+        gc.vkd.updateDescriptorSets(gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &write_desc), 0, undefined);
+    }
+
+    return descriptorSets;
+}
+
+fn createMainDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetLayout {
+    const binding = vk.DescriptorSetLayoutBinding{
+        .binding = 0,
         .descriptor_type = .combined_image_sampler,
         .descriptor_count = 1,
         .stage_flags = .{ .fragment_bit = true },
@@ -568,7 +677,7 @@ fn createSceneDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetL
     }, null);
 }
 
-fn createSceneImageSampler(gc: *const GraphicsContext) !vk.Sampler {
+fn createMainImageSampler(gc: *const GraphicsContext) !vk.Sampler {
     return try gc.vkd.createSampler(gc.dev, &.{
         .flags = .{},
         .mag_filter = .linear,
@@ -589,7 +698,7 @@ fn createSceneImageSampler(gc: *const GraphicsContext) !vk.Sampler {
     }, null);
 }
 
-fn createSceneDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, images: []Image, descriptorPool: vk.DescriptorPool, descriptorSetLayout: vk.DescriptorSetLayout, sampler: vk.Sampler) ![]vk.DescriptorSet {
+fn createMainDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, images: []Image, descriptorPool: vk.DescriptorPool, descriptorSetLayout: vk.DescriptorSetLayout, sampler: vk.Sampler) ![]vk.DescriptorSet {
     const descriptorSets = try allocator.alloc(vk.DescriptorSet, images.len);
     errdefer allocator.free(descriptorSets);
 
@@ -606,8 +715,6 @@ fn createSceneDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, i
             .image_layout = .shader_read_only_optimal,
         };
 
-        // const buffer_info: vk.DescriptorBufferInfo = undefined;
-
         var write_desc: vk.WriteDescriptorSet = undefined;
         std.mem.set(u8, std.mem.asBytes(&write_desc), 0);
         write_desc.s_type = .write_descriptor_set;
@@ -618,7 +725,7 @@ fn createSceneDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, i
         write_desc.descriptor_type = .combined_image_sampler;
         write_desc.p_image_info = @ptrCast([*]const vk.DescriptorImageInfo, &desc_image);
 
-        gc.vkd.updateDescriptorSets(gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &write_desc), 0, @ptrCast([*]const vk.CopyDescriptorSet, &std.mem.zeroes(vk.CopyDescriptorSet)));
+        gc.vkd.updateDescriptorSets(gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &write_desc), 0, undefined);
     }
 
     return descriptorSets;
@@ -898,21 +1005,66 @@ fn createPipeline(
 }
 
 pub fn getSceneImageDescriptor(self: *const Self) vk.DescriptorSet {
-    return self.sceneDescriptorSets[self.swapchain.image_index];
+    return self.mainDescriptorSets[self.swapchain.image_index];
 }
 
-pub fn beginRender(self: *Self, sceneExtent: vk.Extent2D) !void {
-    try beginRecordCommandBuffer(&self.gc, self.getCommandBuffer());
+pub fn beginSceneRender(
+    self: *Self,
+    sceneExtent: vk.Extent2D,
+    matrices: *SceneMatricesUbo,
+) !void {
+    const ubo = std.mem.asBytes(matrices);
+    try uploadBufferData(&self.gc, .null_handle, self.sceneMatricesUbo[self.swapchain.image_index], ubo, false);
 
-    drawTriangle(
-        &self.gc,
-        self.triangleBuffer,
-        sceneExtent,
-        self.sceneRenderPass,
-        self.pipeline,
-        self.sceneFrameBuffers[self.swapchain.image_index],
-        self.getCommandBuffer(),
-    );
+    const cmdbuf = self.getCommandBuffer();
+    try beginRecordCommandBuffer(&self.gc, cmdbuf);
+
+    const viewport = vk.Viewport{
+        .x = 0,
+        .y = 0,
+        .width = @intToFloat(f32, sceneExtent.width),
+        .height = @intToFloat(f32, sceneExtent.height),
+        .min_depth = 0,
+        .max_depth = 1,
+    };
+
+    const scissor = vk.Rect2D{
+        .offset = .{ .x = 0, .y = 0 },
+        .extent = sceneExtent,
+    };
+
+    self.gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+    self.gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &scissor));
+
+    // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
+    const render_area = vk.Rect2D{
+        .offset = .{ .x = 0, .y = 0 },
+        .extent = sceneExtent,
+    };
+    const clear = vk.ClearValue{
+        .color = .{ .float_32 = .{ 1, 0, 1, 1 } },
+    };
+
+    self.gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
+        .render_pass = self.sceneRenderPass,
+        .framebuffer = self.sceneFrameBuffers[self.swapchain.image_index],
+        .render_area = render_area,
+        .clear_value_count = 1,
+        .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
+    }, .@"inline");
+
+    self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, self.pipelineLayout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.sceneDescriptorSets[self.swapchain.image_index]), 0, undefined);
+
+    self.bindTrianglePipeline();
+    // self.drawTriangle(transform);
+}
+
+pub fn endSceneRender(self: *Self) !void {
+    const cmdbuf = self.getCommandBuffer();
+    self.gc.vkd.cmdEndRenderPass(cmdbuf);
+}
+
+pub fn beginMainRender(self: *Self) !void {
     prepareImgui(
         &self.gc,
         self.swapchain.extent,
@@ -922,9 +1074,10 @@ pub fn beginRender(self: *Self, sceneExtent: vk.Extent2D) !void {
     );
 }
 
-pub fn endRender(self: *Self, newExtent: vk.Extent2D) !void {
+pub fn endMainRender(self: *Self, newExtent: vk.Extent2D) !void {
     const cmdbuf = self.commandBuffers[self.swapchain.image_index];
-    try endRecordCommandBuffer(&self.gc, cmdbuf);
+    self.gc.vkd.cmdEndRenderPass(cmdbuf);
+    try self.gc.vkd.endCommandBuffer(cmdbuf);
 
     const state = self.swapchain.present(cmdbuf) catch |err| switch (err) {
         error.OutOfDateKHR => Swapchain.PresentState.suboptimal,

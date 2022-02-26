@@ -12,6 +12,7 @@ const sdl = @import("sdl.zig");
 const Renderer = @import("renderer.zig");
 
 const Rtti = @import("rtti.zig");
+const zal = @import("zalgebra");
 
 pub const ImGui_ImplVulkan_InitInfo = extern struct {
     Instance: vk.Instance,
@@ -249,26 +250,82 @@ pub fn property(name: []const u8) void {
     imgui.SameLine();
 }
 
-pub fn any(value: anytype, name: []const u8) void {
+// fn getOr(options: anytype, comptime field: anytype, default: anytype) void {
+//     _ = default;
+//     _ = options;
+//     std.log.info("{s}", .{@tagName(field)});
+// }
+
+fn getOrReturnType(comptime Options: type, comptime field: anytype, comptime Default: type) type {
+    if (@hasField(Options, @tagName(field))) {
+        return std.meta.fieldInfo(Options, field).field_type;
+    } else {
+        return Default;
+    }
+}
+
+fn getOr(options: anytype, comptime field: anytype, comptime default: anytype) getOrReturnType(@TypeOf(options), field, @TypeOf(default)) {
+    if (@hasField(@TypeOf(options), @tagName(field))) {
+        return @field(options, @tagName(field));
+    } else {
+        return default;
+    }
+}
+
+fn getOrPtrNull(comptime T: type, options: anytype, comptime field: anytype) ?*anyopaque {
+    if (@hasField(@TypeOf(options.*), @tagName(field))) {
+        const Scope = struct {
+            var x: T = undefined;
+        };
+        Scope.x = @field(options.*, @tagName(field));
+        return &Scope.x;
+    } else {
+        return null;
+    }
+}
+
+pub fn any(value: anytype, name: []const u8, options: anytype) void {
     imgui.PushIDInt64(@ptrToInt(value));
     defer imgui.PopID();
 
     const typeInfoOuter = @typeInfo(@TypeOf(value));
 
-    const actualType = typeInfoOuter.Pointer.child;
+    const ValueType = typeInfoOuter.Pointer.child;
 
-    if (comptime std.meta.trait.hasFn("imguiDetails")(actualType)) {
+    if (comptime std.meta.trait.hasFn("imguiDetails")(ValueType)) {
         return value.imguiDetails();
     }
 
     // Special case: string
-    if (actualType == []const u8) {
+    if (ValueType == []const u8) {
         property(name);
         imgui.Text("%.*s", value.*.len, value.*.ptr);
         return;
     }
 
-    const typeInfo = @typeInfo(actualType);
+    if (ValueType == zal.Vec4) {
+        property(name);
+        const as_color = getOr(options, .color, false);
+        if (as_color) {
+            const flags = getOr(options, .flags, imgui.ColorEditFlags{});
+            var as_array = value.toArray();
+            if (imgui.ColorEdit4Ext("", &as_array, flags)) {
+                value.* = zal.Vec4.fromSlice(as_array[0..]);
+            }
+        } else {
+            const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+            const min = getOr(options, .min, @floatCast(f32, 0.0));
+            const max = getOr(options, .max, @floatCast(f32, 0.0));
+
+            var as_array = value.toArray();
+            if (imgui.DragFloat4Ext("", &as_array, speed, min, max, "%.3f", .{})) {
+                value.* = zal.Vec4.fromSlice(as_array[0..]);
+            }
+        }
+        return;
+    }
+
+    const typeInfo = @typeInfo(ValueType);
     switch (typeInfo) {
         .Int => |ti| {
             const dataType: imgui.DataType = blk: {
@@ -278,7 +335,7 @@ pub fn any(value: anytype, name: []const u8) void {
                         16 => break :blk .S16,
                         32 => break :blk .S32,
                         64 => break :blk .S64,
-                        else => @compileError("Unsupported type " ++ @typeName(@TypeOf(actualType))),
+                        else => @compileError("Unsupported type " ++ @typeName(@TypeOf(ValueType))),
                     }
                 } else {
                     switch (ti.bits) {
@@ -286,7 +343,7 @@ pub fn any(value: anytype, name: []const u8) void {
                         16 => break :blk .U16,
                         32 => break :blk .U32,
                         64 => break :blk .U64,
-                        else => @compileError("Unsupported type " ++ @typeName(@TypeOf(actualType))),
+                        else => @compileError("Unsupported type " ++ @typeName(@TypeOf(ValueType))),
                     }
                 }
             };
@@ -300,12 +357,15 @@ pub fn any(value: anytype, name: []const u8) void {
                 switch (ti.bits) {
                     32 => break :blk .Float,
                     64 => break :blk .Double,
-                    else => @compileError("Unsupported type " ++ @typeName(@TypeOf(actualType))),
+                    else => @compileError("Unsupported type " ++ @typeName(@TypeOf(ValueType))),
                 }
             };
 
+            const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+            const min = getOrPtrNull(ValueType, &options, .min);
+            const max = getOrPtrNull(ValueType, &options, .max);
             property(name);
-            _ = imgui.DragScalar("", dataType, value, 1);
+            _ = imgui.DragScalarExt("", dataType, value, speed, min, max, null, imgui.SliderFlags.None.toInt());
         },
 
         .Bool => {
@@ -318,7 +378,7 @@ pub fn any(value: anytype, name: []const u8) void {
             if (imgui.TreeNodeExPtr(value, flags.toInt(), "")) {
                 defer imgui.TreePop();
                 inline for (ti.fields) |field| {
-                    any(&@field(value, field.name), field.name);
+                    any(&@field(value, field.name), field.name, .{});
                 }
             }
         },
@@ -327,19 +387,19 @@ pub fn any(value: anytype, name: []const u8) void {
             switch (ti.size) {
                 .Slice => {
                     @compileLog(typeInfo);
-                    @compileError("Can't display value of type " ++ @typeName(actualType));
+                    @compileError("Can't display value of type " ++ @typeName(ValueType));
                 },
 
                 else => {
                     @compileLog(typeInfo);
-                    @compileError("Can't display value of type " ++ @typeName(actualType));
+                    @compileError("Can't display value of type " ++ @typeName(ValueType));
                 },
             }
         },
 
         else => {
             @compileLog(typeInfo);
-            @compileError("Can't display value of type " ++ @typeName(actualType));
+            @compileError("Can't display value of type " ++ @typeName(ValueType));
         },
     }
 }
@@ -428,4 +488,18 @@ pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
 
         else => {},
     }
+}
+
+pub fn variable(comptime scope: anytype, comptime T: type, comptime name: []const u8, comptime defaultValue: T, editable: bool, options: anytype) *T {
+    _ = scope;
+    _ = name;
+    const Scope = struct {
+        var staticVar: T = defaultValue;
+    };
+    if (editable) {
+        _ = imgui.Begin("Variables");
+        any(&Scope.staticVar, name, options);
+        imgui.End();
+    }
+    return &Scope.staticVar;
 }

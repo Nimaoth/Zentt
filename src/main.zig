@@ -6,6 +6,8 @@ const imgui = @import("imgui.zig");
 const imgui2 = @import("imgui2.zig");
 const sdl = @import("sdl.zig");
 
+const zal = @import("zalgebra");
+
 const Vec2 = imgui.Vec2;
 const Allocator = std.mem.Allocator;
 
@@ -38,20 +40,6 @@ pub const RenderComponent = struct {
     color: u32 = 0xff00ffff,
 };
 
-pub fn staticVariable(comptime scope: anytype, comptime T: type, comptime name: []const u8, comptime defaultValue: T, editable: bool) *T {
-    _ = scope;
-    _ = name;
-    const Scope = struct {
-        var staticVar: T = defaultValue;
-    };
-    if (editable) {
-        _ = imgui.Begin("Static Variables");
-        imgui2.any(&Scope.staticVar, name);
-        imgui.End();
-    }
-    return &Scope.staticVar;
-}
-
 pub fn moveSystemPlayer(
     profiler: *Profiler,
     time: *const Time,
@@ -61,8 +49,10 @@ pub fn moveSystemPlayer(
     const scope = profiler.beginScope("moveSystemPlayer");
     defer scope.end();
 
-    var maxSpeed = std.math.clamp(staticVariable(moveSystemPlayer, f32, "Player Max Speed", 150, true).*, 0, 100000);
-    var acceleration = staticVariable(moveSystemPlayer, f32, "Player Acc", 1300, true).*;
+    _ = zal.toRadians(5.0);
+
+    var maxSpeed = std.math.clamp(imgui2.variable(moveSystemPlayer, f32, "Player Max Speed", 150, true, .{}).*, 0, 100000);
+    var acceleration = imgui2.variable(moveSystemPlayer, f32, "Player Acc", 1300, true, .{}).*;
 
     var iter = query.iter();
     while (iter.next()) |entity| {
@@ -104,12 +94,12 @@ pub fn moveSystemQuad(
     // comptime var i = 0;
     // inline while (i < 10) : (i += 1) _ = rand.int(u64);
 
-    var speed = staticVariable(moveSystemQuad, f32, "speed", 0.1, true);
-    var radius = staticVariable(moveSystemQuad, f32, "radius", 100, true);
-    var maxEntities = staticVariable(moveSystemQuad, u64, "max_entities", 10, true);
-    var addRenderComponent = staticVariable(moveSystemQuad, bool, "add render component", true, true).*;
-    var maxEntitiesSpawnedPerFrame = staticVariable(moveSystemQuad, u64, "Max spawnrate", 100, true).*;
-    var antiGravity = staticVariable(moveSystemQuad, f32, "Anti Gravity", 5000, true).*;
+    var speed = imgui2.variable(moveSystemQuad, f32, "speed", 0.1, true, .{});
+    var radius = imgui2.variable(moveSystemQuad, f32, "radius", 100, true, .{});
+    var maxEntities = imgui2.variable(moveSystemQuad, u64, "max_entities", 10, true, .{});
+    var addRenderComponent = imgui2.variable(moveSystemQuad, bool, "add render component", true, true, .{}).*;
+    var maxEntitiesSpawnedPerFrame = imgui2.variable(moveSystemQuad, u64, "Max spawnrate", 100, true, .{}).*;
+    var antiGravity = imgui2.variable(moveSystemQuad, f32, "Anti Gravity", 5000, true, .{}).*;
 
     var entitiesSpawned: u64 = 0;
 
@@ -161,16 +151,16 @@ pub fn moveSystemQuad(
     try profiler.record("moveSystemEntities", @intToFloat(f64, i));
 }
 
-pub fn renderSystem(profiler: *Profiler, query: Query(.{ TransformComponent, RenderComponent })) !void {
-    const scope = profiler.beginScope("renderSystem");
+pub fn renderSystemImgui(profiler: *Profiler, query: Query(.{ TransformComponent, RenderComponent })) !void {
+    const scope = profiler.beginScope("renderSystemImgui");
     defer scope.end();
 
     imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
     defer imgui.PopStyleVar();
-    _ = imgui.Begin("renderSystem");
+    _ = imgui.Begin("renderSystemImgui");
     defer imgui.End();
 
-    var cameraSize = staticVariable(renderSystem, f32, "cameraSize", 100, true);
+    var cameraSize = imgui2.variable(renderSystemImgui, f32, "cameraSize", 500, true, .{});
     if (cameraSize.* < 0.1) {
         cameraSize.* = 0.1;
     }
@@ -196,7 +186,22 @@ pub fn renderSystem(profiler: *Profiler, query: Query(.{ TransformComponent, Ren
 
         const position = entity.TransformComponent.position.timess(scale).plus(canvas_p0).plus(canvas_sz.timess(0.5));
         const size = entity.TransformComponent.size.timess(scale);
-        drawList.AddCircle(position, size.x, entity.RenderComponent.color);
+        // drawList.AddCircle(position, size.x, entity.RenderComponent.color);
+        drawList.AddRect(position.plus(size.timess(-0.5)), position.plus(size.timess(0.5)), entity.RenderComponent.color);
+    }
+}
+
+pub fn renderSystemVulkan(profiler: *Profiler, renderer: *Renderer, query: Query(.{ TransformComponent, RenderComponent })) !void {
+    const scope = profiler.beginScope("renderSystemVulkan");
+    defer scope.end();
+
+    _ = renderer;
+
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        const position = entity.TransformComponent.position;
+        const size = entity.TransformComponent.size;
+        renderer.drawTriangle(zal.Vec4.new(position.x, position.y, size.x, size.y));
     }
 }
 
@@ -227,9 +232,11 @@ pub fn main() !void {
     var world = try World.init(allocator);
     defer world.deinit();
     defer world.dumpGraph() catch {};
-    try world.addSystem(renderSystem, "Render System");
     try world.addSystem(moveSystemQuad, "Move System Quad");
     try world.addSystem(moveSystemPlayer, "Move System Player");
+
+    try world.addRenderSystem(renderSystemImgui, "Render System Imgui");
+    try world.addRenderSystem(renderSystemVulkan, "Render System Vulkan");
 
     _ = try world.addResource(Time{});
     var commands = try world.addResource(Commands.init(allocator));
@@ -239,6 +246,8 @@ pub fn main() !void {
 
     var profiler = &app.profiler;
     try world.addResourcePtr(profiler);
+
+    try world.addResourcePtr(app.renderer);
 
     const e = try commands.createEntity();
     _ = try commands.addComponent(e, Quad{});
@@ -397,12 +406,21 @@ pub fn main() !void {
         }
 
         {
+            const scope = profiler.beginScope("runRenderSystems");
+            defer scope.end();
+
+            try app.beginRender();
+            try world.runRenderSystems();
+            try app.endRender();
+        }
+
+        {
             const scope = profiler.beginScope("applyCommands");
             defer scope.end();
 
             try profiler.record("Num commands (req)", @intToFloat(f64, commands.commands.items.len));
 
-            var maxCommands = staticVariable(main, u64, "max_commands", 1000, true).*;
+            var maxCommands = imgui2.variable(main, u64, "max_commands", 1000, true, .{}).*;
             const count = commands.applyCommands(world, maxCommands) catch |err| blk: {
                 std.log.err("applyCommands failed: {}", .{err});
                 break :blk 0;

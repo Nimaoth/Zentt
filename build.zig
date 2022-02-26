@@ -153,6 +153,8 @@ pub fn build(b: *std.build.Builder) void {
     const gen = vkgen.VkGenerateStep.init(b, vk_xml_path, "vk.zig");
     exe.addPackage(gen.package);
 
+    exe.addPackagePath("zalgebra", "libs/zalgebra/src/main.zig");
+
     const res = ResourceGenStep.init(b, "resources.zig");
     res.addShader("triangle_vert", "src/vulkan/shaders/triangle.vert");
     res.addShader("triangle_frag", "src/vulkan/shaders/triangle.frag");

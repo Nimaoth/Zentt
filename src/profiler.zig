@@ -68,7 +68,7 @@ pub fn draw(self: *Self) !void {
                 imgui.Text("N frames to smooth");
 
                 _ = imgui.TableSetColumnIndex(1);
-                imgui2.any(&self.smoothCount, "");
+                imgui2.any(&self.smoothCount, "", .{});
                 if (self.smoothCount < 1) self.smoothCount = 1;
             }
 
@@ -78,7 +78,7 @@ pub fn draw(self: *Self) !void {
                 imgui.Text("History Length");
 
                 _ = imgui.TableSetColumnIndex(1);
-                imgui2.any(&self.maxRecordBufferCount, "");
+                imgui2.any(&self.maxRecordBufferCount, "", .{});
                 if (self.maxRecordBufferCount < 5) self.maxRecordBufferCount = 5;
                 if (self.maxRecordBufferCount > 500) self.maxRecordBufferCount = 500;
             }
@@ -89,7 +89,7 @@ pub fn draw(self: *Self) !void {
                 imgui.Text("Scale");
 
                 _ = imgui.TableSetColumnIndex(1);
-                imgui2.any(&self.scale, "");
+                imgui2.any(&self.scale, "", .{});
                 if (self.scale < 0.1) self.scale = 0.1;
                 if (self.scale > 1000) self.scale = 1000;
             }

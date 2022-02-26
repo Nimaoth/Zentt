@@ -3860,28 +3860,31 @@ pub inline fn DestroyContext() void {
     return DestroyContextExt(null);
 }
 
-/// DragFloatExt(label: ?[*:0]const u8, v: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) bool
+/// DragFloatExt(label: ?[*:0]const u8, v: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool
 pub const DragFloatExt = raw.igDragFloat;
 pub inline fn DragFloat(label: ?[*:0]const u8, v: *f32) bool {
-    return DragFloatExt(label, v, 1.0, 0.0, 0.0, "%.3f", 1.0);
+    return DragFloatExt(label, v, 1.0, 0.0, 0.0, "%.3f", SliderFlags.None.toInt());
 }
 
-/// DragFloat2Ext(label: ?[*:0]const u8, v: *[2]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) bool
+/// DragFloat2Ext(label: ?[*:0]const u8, v: *[2]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool
 pub const DragFloat2Ext = raw.igDragFloat2;
 pub inline fn DragFloat2(label: ?[*:0]const u8, v: *[2]f32) bool {
-    return DragFloat2Ext(label, v, 1.0, 0.0, 0.0, "%.3f", 1.0);
+    return DragFloat2Ext(label, v, 1.0, 0.0, 0.0, "%.3f", SliderFlags.None.toInt());
 }
 
-/// DragFloat3Ext(label: ?[*:0]const u8, v: *[3]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) bool
+/// DragFloat3Ext(label: ?[*:0]const u8, v: *[3]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool
 pub const DragFloat3Ext = raw.igDragFloat3;
 pub inline fn DragFloat3(label: ?[*:0]const u8, v: *[3]f32) bool {
-    return DragFloat3Ext(label, v, 1.0, 0.0, 0.0, "%.3f", 1.0);
+    return DragFloat3Ext(label, v, 1.0, 0.0, 0.0, "%.3f", SliderFlags.None.toInt());
 }
 
-/// DragFloat4Ext(label: ?[*:0]const u8, v: *[4]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) bool
-pub const DragFloat4Ext = raw.igDragFloat4;
+/// DragFloat4Ext(label: ?[*:0]const u8, v: *[4]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool
+pub inline fn DragFloat4Ext(label: ?[*:0]const u8, v: *[4]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool {
+    return raw.igDragFloat4(label, v, v_speed, v_min, v_max, format, flags.toInt());
+}
+
 pub inline fn DragFloat4(label: ?[*:0]const u8, v: *[4]f32) bool {
-    return DragFloat4Ext(label, v, 1.0, 0.0, 0.0, "%.3f", 1.0);
+    return DragFloat4Ext(label, v, 1.0, 0.0, 0.0, "%.3f", SliderFlags.None.toInt());
 }
 
 /// DragFloatRange2Ext(label: ?[*:0]const u8, v_current_min: *f32, v_current_max: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, format_max: ?[*:0]const u8, power: f32) bool
@@ -5961,10 +5964,10 @@ pub const raw = struct {
     pub extern fn igCreateContext(shared_font_atlas: ?*FontAtlas) callconv(.C) ?*Context;
     pub extern fn igDebugCheckVersionAndDataLayout(version_str: ?[*:0]const u8, sz_io: usize, sz_style: usize, sz_vec2: usize, sz_vec4: usize, sz_drawvert: usize, sz_drawidx: usize) callconv(.C) bool;
     pub extern fn igDestroyContext(ctx: ?*Context) callconv(.C) void;
-    pub extern fn igDragFloat(label: ?[*:0]const u8, v: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) callconv(.C) bool;
-    pub extern fn igDragFloat2(label: ?[*:0]const u8, v: *[2]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) callconv(.C) bool;
-    pub extern fn igDragFloat3(label: ?[*:0]const u8, v: *[3]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) callconv(.C) bool;
-    pub extern fn igDragFloat4(label: ?[*:0]const u8, v: *[4]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, power: f32) callconv(.C) bool;
+    pub extern fn igDragFloat(label: ?[*:0]const u8, v: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlagsInt) callconv(.C) bool;
+    pub extern fn igDragFloat2(label: ?[*:0]const u8, v: *[2]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlagsInt) callconv(.C) bool;
+    pub extern fn igDragFloat3(label: ?[*:0]const u8, v: *[3]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlagsInt) callconv(.C) bool;
+    pub extern fn igDragFloat4(label: ?[*:0]const u8, v: *[4]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlagsInt) callconv(.C) bool;
     pub extern fn igDragFloatRange2(label: ?[*:0]const u8, v_current_min: *f32, v_current_max: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, format_max: ?[*:0]const u8, power: f32) callconv(.C) bool;
     pub extern fn igDragInt(label: ?[*:0]const u8, v: *i32, v_speed: f32, v_min: i32, v_max: i32, format: ?[*:0]const u8) callconv(.C) bool;
     pub extern fn igDragInt2(label: ?[*:0]const u8, v: *[2]i32, v_speed: f32, v_min: i32, v_max: i32, format: ?[*:0]const u8) callconv(.C) bool;

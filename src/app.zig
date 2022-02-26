@@ -8,6 +8,7 @@ const sdl = @import("sdl.zig");
 
 const Vec2 = imgui.Vec2;
 const Allocator = std.mem.Allocator;
+const zal = @import("zalgebra");
 
 const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
 const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
@@ -37,6 +38,8 @@ renderer: *Renderer,
 profiler: Profiler,
 
 windowSize: vk.Extent2D,
+
+matrices: Renderer.SceneMatricesUbo,
 
 pub fn init(allocator: std.mem.Allocator) !*Self {
     const self = try allocator.create(Self);
@@ -78,6 +81,10 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .renderer = renderer,
         .profiler = Profiler.init(allocator),
         .windowSize = extent,
+        .matrices = .{
+            .view = zal.Mat4.identity(),
+            .proj = zal.Mat4.orthographic(-100, 100, -100, 100, 1, -1),
+        },
     };
     return self;
 }
@@ -116,6 +123,16 @@ pub fn endFrame(self: *Self) !void {
     const scope = self.profiler.beginScope("App.endFrame");
     defer scope.end();
 
+    imgui2.render();
+    imgui2.endFrame();
+
+    try self.renderer.beginMainRender();
+    imgui2.ImGui_ImplVulkan_RenderDrawData(imgui2.getDrawData(), self.renderer.getCommandBuffer(), .null_handle);
+    imgui2.updatePlatformWindows();
+    try self.renderer.endMainRender(self.windowSize);
+}
+
+pub fn beginRender(self: *Self) !void {
     const contentSize = blk: {
         imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
         defer imgui.PopStyleVar();
@@ -124,12 +141,17 @@ pub fn endFrame(self: *Self) !void {
         defer imgui.End();
 
         const size = imgui.GetContentRegionAvail();
+
+        const aspect_ratio = size.x / size.y;
+        const height = imgui2.variable(endFrame, f32, "Camera Size", 500, true, .{ .min = 1, .max = 1000, .speed = 0.01 }).*;
+
+        self.matrices.proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1);
         if (open) {
             imgui.ImageExt(
                 @ptrCast(**anyopaque, &self.renderer.getSceneImageDescriptor()).*,
                 size,
                 .{ .x = 0, .y = 0 },
-                .{ .x = size.x / 1920, .y = size.y / 1080 },
+                .{ .x = size.x / 1920, .y = size.y / 1080 }, // the size is the size of the scene frame buffer which doesn't get resized.
                 .{ .x = 1, .y = 1, .z = 1, .w = 1 },
                 .{ .x = 0, .y = 0, .z = 0, .w = 0 },
             );
@@ -137,12 +159,17 @@ pub fn endFrame(self: *Self) !void {
 
         break :blk size;
     };
+    // const hdr = imgui2.variable(endFrame, bool, "HDR", true, true, .{}).*;
+    // const options = struct { color: bool = true, flags: imgui.ColorEditFlags }{ .flags = .{ .HDR = hdr } };
+    // const color = imgui2.variable(endFrame, zal.Vec4, "Tint", .{ .data = [4]f32{ 1, 1, 0, 1 } }, true, options).*;
+    // const transform = imgui2.variable(endFrame, zal.Vec4, "Transform", .{ .data = [4]f32{ 0, 0, 1, 1 } }, true, .{}).*;
 
-    imgui2.render();
-    imgui2.endFrame();
+    try self.renderer.beginSceneRender(
+        .{ .width = @floatToInt(u32, std.math.max(contentSize.x, 1)), .height = @floatToInt(u32, std.math.max(contentSize.y, 1)) },
+        &self.matrices,
+    );
+}
 
-    try self.renderer.beginRender(.{ .width = @floatToInt(u32, std.math.max(contentSize.x, 1)), .height = @floatToInt(u32, std.math.max(contentSize.y, 1)) });
-    imgui2.ImGui_ImplVulkan_RenderDrawData(imgui2.getDrawData(), self.renderer.getCommandBuffer(), .null_handle);
-    imgui2.updatePlatformWindows();
-    try self.renderer.endRender(self.windowSize);
+pub fn endRender(self: *Self) !void {
+    try self.renderer.endSceneRender();
 }

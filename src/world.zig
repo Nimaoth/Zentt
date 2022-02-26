@@ -38,6 +38,7 @@ nextEntityId: EntityId = 1,
 components: std.AutoHashMap(Rtti.TypeId, ComponentInfo),
 componentIdToComponentType: std.ArrayList(Rtti.TypeId),
 frameSystems: std.ArrayList(System),
+renderSystems: std.ArrayList(System),
 
 //  We store pointers to external resources (managed outside of world)
 // and internal resources (managed by this world) in here.
@@ -60,6 +61,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .components = @TypeOf(world.components).init(allocator),
         .componentIdToComponentType = @TypeOf(world.componentIdToComponentType).init(allocator),
         .frameSystems = @TypeOf(world.frameSystems).init(allocator),
+        .renderSystems = @TypeOf(world.renderSystems).init(allocator),
         .resources = @TypeOf(world.resources).init(allocator),
     };
 
@@ -76,6 +78,7 @@ pub fn deinit(self: *Self) void {
         table.*.deinit();
     }
     self.frameSystems.deinit();
+    self.renderSystems.deinit();
     self.archetypeTables.deinit();
     self.globalPool.deinit();
     self.resourceAllocator.deinit();
@@ -153,18 +156,32 @@ pub fn getResource(self: *Self, comptime ResourceType: type) !*ResourceType {
 
 pub fn runFrameSystems(self: *Self) !void {
     for (self.frameSystems.items) |*system| {
-        // _ = imgui.Begin(system.name);
-        // _ = imgui.Checkbox("Enabled", &system.enabled);
         if (system.enabled) {
             try system.invoke(self);
         }
-        // imgui.End();
+    }
+}
+
+pub fn runRenderSystems(self: *Self) !void {
+    for (self.renderSystems.items) |*system| {
+        if (system.enabled) {
+            try system.invoke(self);
+        }
     }
 }
 
 pub fn addSystem(self: *Self, comptime system: anytype, name: [*:0]const u8) !void {
     const wrapper = try createSystemInvokeFunction(system);
     try self.frameSystems.append(.{
+        .name = name,
+        .invoke = wrapper,
+        .enabled = true,
+    });
+}
+
+pub fn addRenderSystem(self: *Self, comptime system: anytype, name: [*:0]const u8) !void {
+    const wrapper = try createSystemInvokeFunction(system);
+    try self.renderSystems.append(.{
         .name = name,
         .invoke = wrapper,
         .enabled = true,

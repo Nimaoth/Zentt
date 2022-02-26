@@ -90,6 +90,8 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .updateDescriptorSets = true,
     .createSampler = true,
     .destroySampler = true,
+    .cmdBindDescriptorSets = true,
+    .cmdPushConstants = true,
 });
 
 pub const GraphicsContext = struct {
