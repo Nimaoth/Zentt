@@ -290,7 +290,7 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
 }
 
 pub fn createEntity(self: *Self) !Entity {
-    if (self.entities.count() > 100_000) {
+    if (self.entities.count() > 1_000_000) {
         return error.TooManyEntities;
     }
 

@@ -131,12 +131,17 @@ pub const GraphicsContext = struct {
             .api_version = vk.API_VERSION_1_2,
         };
 
-        const layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
+        var layers = try std.ArrayList([*:0]const u8).initCapacity(allocator, 1);
+        defer layers.deinit();
+        if (@import("build_options").vulkan_validation) {
+            std.log.info("Enabling vulkan validation layer.", .{});
+            try layers.append("VK_LAYER_KHRONOS_validation");
+        }
         self.instance = try self.vkb.createInstance(&.{
             .flags = .{},
             .p_application_info = &app_info,
-            .enabled_layer_count = @intCast(u32, layers.len),
-            .pp_enabled_layer_names = @ptrCast([*]const [*:0]const u8, &layers),
+            .enabled_layer_count = @intCast(u32, layers.items.len),
+            .pp_enabled_layer_names = @ptrCast([*]const [*:0]const u8, layers.items.ptr),
             .enabled_extension_count = glfw_exts_count,
             .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, glfw_exts.ptr),
         }, null);

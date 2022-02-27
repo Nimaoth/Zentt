@@ -19,7 +19,7 @@ pub fn init(self: *Self, archetype: Archetype, allocator: std.mem.Allocator) !vo
     self.supersets = std.AutoHashMap(BitSet, *Self).init(allocator);
     self.subsets = std.AutoHashMap(BitSet, *Self).init(allocator);
     self.archetype = archetype;
-    self.firstChunk = try Chunk.init(self, 1000, allocator);
+    self.firstChunk = try Chunk.init(self, 100, allocator);
     self.typeToList = std.AutoHashMap(Rtti.TypeId, u64).init(allocator);
     var iter = archetype.components.iterator();
     while (iter.next()) |componentId| {

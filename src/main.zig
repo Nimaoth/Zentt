@@ -86,7 +86,7 @@ pub fn moveSystemQuad(
     const scope = profiler.beginScope("moveSystemQuad");
     defer scope.end();
 
-    var prng = std.rand.DefaultPrng.init(@floatToInt(u64, time.now));
+    var prng = std.rand.DefaultPrng.init(@floatToInt(u64, time.now * 10000));
     var rand = prng.random();
 
     var player = players.iter().next() orelse return error.NoPlayerFound;
@@ -113,7 +113,8 @@ pub fn moveSystemQuad(
             continue;
         }
 
-        var velocity = (Vec2{ .x = rand.floatNorm(f32), .y = rand.floatNorm(f32) }).timess(speed.*);
+        // var velocity = (Vec2{ .x = rand.floatNorm(f32), .y = rand.floatNorm(f32) }).timess(speed.*);
+        var velocity = entity.TransformComponent.vel.timess(speed.*);
         const toPlayer = entity.TransformComponent.position.plus(player.TransformComponent.position.timess(-1));
         const distSq = toPlayer.lenSq();
         if (distSq < sizeSq) {
@@ -130,19 +131,19 @@ pub fn moveSystemQuad(
                 if (addRenderComponent) {
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
-                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
+                        .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
                         .addComponent(RenderComponent{ .color = 0xff00ffff });
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
-                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
+                        .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
                         .addComponent(RenderComponent{ .color = 0xff00ffff });
                 } else {
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
-                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
+                        .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
-                        .addComponent(TransformComponent{ .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
+                        .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } });
                 }
             }
         }
@@ -235,7 +236,7 @@ pub fn main() !void {
     try world.addSystem(moveSystemQuad, "Move System Quad");
     try world.addSystem(moveSystemPlayer, "Move System Player");
 
-    try world.addRenderSystem(renderSystemImgui, "Render System Imgui");
+    // try world.addRenderSystem(renderSystemImgui, "Render System Imgui");
     try world.addRenderSystem(renderSystemVulkan, "Render System Vulkan");
 
     _ = try world.addResource(Time{});
@@ -251,12 +252,12 @@ pub fn main() !void {
 
     const e = try commands.createEntity();
     _ = try commands.addComponent(e, Quad{});
-    _ = try commands.addComponent(e, TransformComponent{});
+    _ = try commands.addComponent(e, TransformComponent{ .position = .{ .x = -50 }, .vel = .{ .x = -1 } });
     _ = try commands.addComponent(e, RenderComponent{});
 
     const player = (try commands.createEntity())
         .addComponent(Player{})
-        .addComponent(TransformComponent{ .size = .{ .x = 100, .y = 100 } })
+        .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = .{ .x = 50, .y = 50 } })
         .addComponent(RenderComponent{ .color = 0xff0000ff });
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
     _ = player;

@@ -1042,7 +1042,7 @@ pub fn beginSceneRender(
         .extent = sceneExtent,
     };
     const clear = vk.ClearValue{
-        .color = .{ .float_32 = .{ 1, 0, 1, 1 } },
+        .color = .{ .float_32 = .{ 0.1, 0.1, 0.1, 1 } },
     };
 
     self.gc.vkd.cmdBeginRenderPass(cmdbuf, &.{

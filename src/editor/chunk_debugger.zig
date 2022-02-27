@@ -81,7 +81,7 @@ pub fn draw(self: *Self, world: *World) !void {
                 .Resizable = true,
                 .RowBg = true,
             };
-            if (imgui.BeginTable("Info", 2, tableFlags, .{}, 0)) {
+            if (imgui.BeginTable("Info", 3, tableFlags, .{}, 0)) {
                 defer imgui.EndTable();
 
                 // Entity count
@@ -102,6 +102,10 @@ pub fn draw(self: *Self, world: *World) !void {
 
                     _ = imgui.TableSetColumnIndex(1);
                     imgui.Text("%llu", chunk.count);
+                    nextChunk = chunk.next;
+
+                    _ = imgui.TableSetColumnIndex(2);
+                    imgui.Text("%llu", chunk.capacity);
                     nextChunk = chunk.next;
                 }
             }

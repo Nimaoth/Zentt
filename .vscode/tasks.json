@@ -2,11 +2,10 @@
     // See https://go.microsoft.com/fwlink/?LinkId=733558
     // for the documentation about the tasks.json format
     "version": "2.0.0",
-    "tasks": [
-        {
+    "tasks": [{
             "label": "build",
             "type": "shell",
-            "command": "zig build",
+            "command": "zig build -Dvulkan-validation",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
@@ -16,7 +15,7 @@
         {
             "label": "build_and_run",
             "type": "shell",
-            "command": "zig build run",
+            "command": "zig build run -Dvulkan-validation",
             "problemMatcher": [],
             "group": {
                 "kind": "build",
@@ -26,7 +25,7 @@
         {
             "label": "run",
             "type": "shell",
-            "command": "zig build run",
+            "command": "zig build run -Dvulkan-validation",
             "problemMatcher": [],
             "group": {
                 "kind": "build",

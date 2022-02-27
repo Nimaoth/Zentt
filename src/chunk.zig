@@ -122,7 +122,7 @@ pub fn getOrCreateNext(self: *Self) !*Self {
     if (self.next) |n| {
         return n;
     }
-    self.next = try Self.init(self.table, self.capacity, self.allocator);
+    self.next = try Self.init(self.table, self.capacity * 2, self.allocator);
     return self.next.?;
 }
 

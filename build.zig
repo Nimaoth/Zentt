@@ -91,9 +91,12 @@ pub fn build(b: *std.build.Builder) void {
     generator_exe.setBuildMode(mode);
     generator_exe.install();
 
+    const vulkan_validation = b.option(bool, "vulkan-validation", "Enable the validation layer in Vulkan") orelse false;
+
     const exe = b.addExecutable("zentt", "src/main.zig");
     const options = b.addOptions();
     options.addOption(std.Target.Os.Tag, "os", target.getOsTag());
+    options.addOption(bool, "vulkan_validation", vulkan_validation);
     exe.addOptions("build_options", options);
 
     // vulkan
