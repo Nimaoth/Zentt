@@ -145,6 +145,13 @@ pub fn build(b: *std.build.Builder) void {
         imguiFlags,
     );
 
+    // stb
+    exe.addIncludeDir("libs/stb");
+    exe.addCSourceFiles(
+        &.{"libs/stb/stb_image.c"},
+        &.{},
+    );
+
     exe.linkLibC();
     exe.linkLibCpp();
     exe.setTarget(target);

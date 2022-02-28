@@ -30,6 +30,8 @@ const Tag = @import("tag_component.zig").Tag;
 const Commands = @import("commands.zig");
 const Profiler = @import("profiler.zig");
 
+const AssetDB = @import("assetdb.zig");
+
 pub const TransformComponent = struct {
     position: Vec2 = .{ .x = 0, .y = 0 },
     vel: Vec2 = .{ .x = 0, .y = 0 },
@@ -37,7 +39,7 @@ pub const TransformComponent = struct {
 };
 
 pub const RenderComponent = struct {
-    color: u32 = 0xff00ffff,
+    // texture: *AssetDB.TextureAsset,
 };
 
 pub fn moveSystemPlayer(
@@ -81,7 +83,7 @@ pub fn moveSystemQuad(
     commands: *Commands,
     time: *const Time,
     players: Query(.{ Player, TransformComponent }),
-    query: Query(.{ Quad, TransformComponent }),
+    query: Query(.{ Quad, TransformComponent, RenderComponent }),
 ) !void {
     const scope = profiler.beginScope("moveSystemQuad");
     defer scope.end();
@@ -132,11 +134,13 @@ pub fn moveSystemQuad(
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                        .addComponent(RenderComponent{ .color = 0xff00ffff });
+                    // .addComponent(RenderComponent{ .texture = entity.RenderComponent.texture });
+                        .addComponent(RenderComponent{});
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                        .addComponent(RenderComponent{ .color = 0xff00ffff });
+                    // .addComponent(RenderComponent{ .texture = entity.RenderComponent.texture });
+                        .addComponent(RenderComponent{});
                 } else {
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
@@ -187,8 +191,7 @@ pub fn renderSystemImgui(profiler: *Profiler, query: Query(.{ TransformComponent
 
         const position = entity.TransformComponent.position.timess(scale).plus(canvas_p0).plus(canvas_sz.timess(0.5));
         const size = entity.TransformComponent.size.timess(scale);
-        // drawList.AddCircle(position, size.x, entity.RenderComponent.color);
-        drawList.AddRect(position.plus(size.timess(-0.5)), position.plus(size.timess(0.5)), entity.RenderComponent.color);
+        drawList.AddRect(position.plus(size.timess(-0.5)), position.plus(size.timess(0.5)), 0xff00ffff);
     }
 }
 
@@ -196,13 +199,18 @@ pub fn renderSystemVulkan(profiler: *Profiler, renderer: *Renderer, query: Query
     const scope = profiler.beginScope("renderSystemVulkan");
     defer scope.end();
 
-    _ = renderer;
-
     var iter = query.iter();
     while (iter.next()) |entity| {
         const position = entity.TransformComponent.position;
         const size = entity.TransformComponent.size;
-        renderer.drawTriangle(zal.Vec4.new(position.x, position.y, size.x, size.y));
+        _ = position;
+        _ = size;
+        _ = renderer;
+
+        // if (entity.RenderComponent.texture) |tex| {
+        // renderer.bindTexture(entity.RenderComponent.texture.descriptor);
+        // }
+        renderer.drawTriangle(zal.Vec4.new(position.x, position.y, size.x, size.y), .null_handle);
     }
 }
 
@@ -245,6 +253,9 @@ pub fn main() !void {
 
     var input = try world.addResource(Input{});
 
+    var assetdb = try world.addResource(try AssetDB.init(allocator, &app.renderer.gc));
+    defer assetdb.deinit();
+
     var profiler = &app.profiler;
     try world.addResourcePtr(profiler);
 
@@ -254,11 +265,13 @@ pub fn main() !void {
     _ = try commands.addComponent(e, Quad{});
     _ = try commands.addComponent(e, TransformComponent{ .position = .{ .x = -50 }, .vel = .{ .x = -1 } });
     _ = try commands.addComponent(e, RenderComponent{});
+    // _ = try commands.addComponent(e, RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
 
     const player = (try commands.createEntity())
         .addComponent(Player{})
         .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = .{ .x = 50, .y = 50 } })
-        .addComponent(RenderComponent{ .color = 0xff0000ff });
+        .addComponent(RenderComponent{});
+    // .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
     _ = player;
 
@@ -430,5 +443,9 @@ pub fn main() !void {
         }
 
         try app.endFrame();
+
+        if (timeResource.now > 0.02) {
+            // return;
+        }
     }
 }

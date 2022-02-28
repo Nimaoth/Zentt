@@ -4,10 +4,12 @@ const Allocator = std.mem.Allocator;
 const vk = @import("vulkan");
 
 const sdl = @import("sdl.zig");
+const stb = @import("stb_image.zig");
 
 const imgui2 = @import("imgui2.zig");
 
 const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
+const Image2 = @import("vulkan/graphics_context.zig").Image;
 const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
 const resources = @import("resources");
 
@@ -36,19 +38,26 @@ const Vertex = struct {
             .format = .r32g32b32_sfloat,
             .offset = @offsetOf(Vertex, "color"),
         },
+        .{
+            .binding = 0,
+            .location = 2,
+            .format = .r32g32_sfloat,
+            .offset = @offsetOf(Vertex, "uv"),
+        },
     };
 
     pos: [2]f32,
     color: [3]f32,
+    uv: [2]f32,
 };
 
 const vertices = [_]Vertex{
-    .{ .pos = .{ -0.5, -0.5 }, .color = .{ 1, 0, 0 } },
-    .{ .pos = .{ 0.5, -0.5 }, .color = .{ 0, 1, 0 } },
-    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 0, 0, 1 } },
-    .{ .pos = .{ -0.5, -0.5 }, .color = .{ 1, 0, 0 } },
-    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 0, 0, 1 } },
-    .{ .pos = .{ -0.5, 0.5 }, .color = .{ 0, 1, 0 } },
+    .{ .pos = .{ -0.5, -0.5 }, .color = .{ 1, 1, 1 }, .uv = .{ 0, 0 } },
+    .{ .pos = .{ 0.5, -0.5 }, .color = .{ 1, 1, 1 }, .uv = .{ 1, 0 } },
+    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 1, 1, 1 }, .uv = .{ 1, 1 } },
+    .{ .pos = .{ -0.5, -0.5 }, .color = .{ 1, 1, 1 }, .uv = .{ 0, 0 } },
+    .{ .pos = .{ 0.5, 0.5 }, .color = .{ 1, 1, 1 }, .uv = .{ 1, 1 } },
+    .{ .pos = .{ -0.5, 0.5 }, .color = .{ 1, 1, 1 }, .uv = .{ 0, 1 } },
 };
 
 pub const SceneMatricesUbo = struct {
@@ -60,6 +69,17 @@ const Image = struct {
     image: vk.Image,
     imageView: vk.ImageView,
     memory: vk.DeviceMemory,
+};
+
+pub const TextureAsset = struct {
+    image: Image2,
+    image_view: vk.ImageView,
+    descriptor: vk.DescriptorSet,
+
+    pub fn deinit(self: *const @This(), gc: *GraphicsContext) void {
+        gc.vkd.destroyImageView(gc.dev, self.image_view, null);
+        self.image.deinit(gc);
+    }
 };
 
 allocator: Allocator,
@@ -76,7 +96,7 @@ sceneRenderPass: vk.RenderPass,
 sceneImages: []Image,
 sceneFrameBuffers: []vk.Framebuffer,
 
-sceneDescriptorSetLayout: vk.DescriptorSetLayout,
+sceneDescriptorSetLayouts: []vk.DescriptorSetLayout,
 sceneDescriptorSets: []vk.DescriptorSet,
 
 // main render pass
@@ -94,6 +114,8 @@ triangleBuffer: vk.Buffer,
 triangleMemory: vk.DeviceMemory,
 
 sceneMatricesUbo: []Buffer,
+
+texture: *TextureAsset,
 
 pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) !*Self {
     var self = try allocator.create(Self);
@@ -143,10 +165,13 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
     self.sceneMatricesUbo = try createUniformBuffers(&self.gc, self.swapchain.swap_images.len, allocator);
     errdefer destroyBuffers(&self.gc, self.allocator, self.sceneMatricesUbo);
 
-    self.sceneDescriptorSetLayout = try createSceneDescriptorSetLayout(&self.gc);
-    errdefer self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.sceneDescriptorSetLayout, null);
+    self.sceneDescriptorSetLayouts = try createSceneDescriptorSetLayout(&self.gc, allocator);
+    errdefer {
+        for (self.sceneDescriptorSetLayouts) |sceneDescriptorSetLayout| self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, sceneDescriptorSetLayout, null);
+        allocator.free(self.sceneDescriptorSetLayouts);
+    }
 
-    self.sceneDescriptorSets = try createSceneDescriptorSets(&self.gc, allocator, self.sceneMatricesUbo, self.descriptorPool, self.sceneDescriptorSetLayout);
+    self.sceneDescriptorSets = try createSceneDescriptorSets(&self.gc, allocator, self.sceneMatricesUbo, self.descriptorPool, self.sceneDescriptorSetLayouts[0]);
     errdefer allocator.free(self.sceneDescriptorSets);
 
     // pipeline
@@ -159,8 +184,8 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
     };
     self.pipelineLayout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &.{
         .flags = .{},
-        .set_layout_count = 1,
-        .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.sceneDescriptorSetLayout),
+        .set_layout_count = @intCast(u32, self.sceneDescriptorSetLayouts.len),
+        .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, self.sceneDescriptorSetLayouts.ptr),
         .push_constant_range_count = 1,
         .p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constants),
     }, null);
@@ -198,6 +223,8 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
     );
     errdefer destroyCommandBuffers(&self.gc, self.commandPool, allocator, self.commandBuffers);
 
+    self.texture = try self.getTextureByPath("assets/img.jpg");
+
     return self;
 }
 
@@ -220,7 +247,8 @@ pub fn deinit(self: *Self) void {
 
     self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptorPool, null);
     self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.mainDescriptorSetLayout, null);
-    self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.sceneDescriptorSetLayout, null);
+    for (self.sceneDescriptorSetLayouts) |sceneDescriptorSetLayout| self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, sceneDescriptorSetLayout, null);
+    self.allocator.free(self.sceneDescriptorSetLayouts);
     self.gc.vkd.destroySampler(self.gc.dev, self.mainImageSampler, null);
 
     // scene
@@ -239,11 +267,115 @@ pub fn deinit(self: *Self) void {
     self.allocator.destroy(self);
 }
 
+pub fn getTextureByPath(self: *Self, asset_path: [:0]const u8) !*TextureAsset {
+    std.log.info("getTextureByPath({s})", .{asset_path});
+
+    var width: c_int = -1;
+    var height: c_int = -1;
+    var channels: c_int = -1;
+    const pixels = stb.stbi_load(asset_path.ptr, &width, &height, &channels, stb.STBI_rgb_alpha);
+    defer stb.stbi_image_free(pixels);
+    if (pixels != null) {
+        const image_size = @intCast(u64, width) * @intCast(u64, height) * 4;
+        std.log.debug("loaded texture with size {}x{} and {} channels, {} bytes", .{ width, height, channels, image_size });
+
+        var buffer = try self.gc.createBuffer(image_size, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+        defer buffer.deinit(&self.gc);
+
+        try self.gc.uploadBufferData(buffer, pixels[0..image_size]);
+
+        const format = .b8g8r8a8_srgb;
+        const image = try self.gc.createImage(@intCast(u32, width), @intCast(u32, height), .b8g8r8a8_srgb, .optimal, .{ .sampled_bit = true, .transfer_dst_bit = true }, .{ .device_local_bit = true });
+        errdefer image.deinit(&self.gc);
+
+        try self.gc.transitionImageToLayout(image, format, .@"undefined", .transfer_dst_optimal);
+        try self.gc.copyBufferToImage(buffer, image, @intCast(u32, width), @intCast(u32, height));
+        try self.gc.transitionImageToLayout(image, format, .transfer_dst_optimal, .shader_read_only_optimal);
+
+        const image_view = try self.gc.vkd.createImageView(self.gc.dev, &.{
+            .flags = .{},
+            .image = image.image,
+            .view_type = .@"2d",
+            .format = format,
+            .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+            .subresource_range = .{
+                .aspect_mask = .{ .color_bit = true },
+                .base_mip_level = 0,
+                .level_count = 1,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+        }, null);
+        errdefer self.gc.vkd.destroyImageView(self.gc.dev, image_view, null);
+
+        // creat descriptor set
+        var descriptor: vk.DescriptorSet = .null_handle;
+        try self.gc.vkd.allocateDescriptorSets(self.gc.dev, &.{
+            .descriptor_pool = self.descriptorPool,
+            .descriptor_set_count = 1,
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.sceneDescriptorSetLayouts[1]),
+        }, @ptrCast([*]vk.DescriptorSet, &descriptor));
+        std.log.debug("getTexture({x})", .{descriptor});
+
+        var sampler = try self.gc.vkd.createSampler(self.gc.dev, &.{
+            .flags = .{},
+            .mag_filter = .linear,
+            .min_filter = .linear,
+            .mipmap_mode = .linear,
+            .address_mode_u = .repeat,
+            .address_mode_v = .repeat,
+            .address_mode_w = .repeat,
+            .mip_lod_bias = 0,
+            .anisotropy_enable = 0,
+            .max_anisotropy = 1,
+            .compare_enable = 0,
+            .compare_op = .never,
+            .min_lod = -1000,
+            .max_lod = 1000,
+            .border_color = .float_transparent_black,
+            .unnormalized_coordinates = 0,
+        }, null);
+
+        const desc = vk.DescriptorImageInfo{
+            .sampler = sampler,
+            .image_view = image_view,
+            .image_layout = .shader_read_only_optimal, // from last transitionImageToLayout
+        };
+
+        var write_desc: vk.WriteDescriptorSet = undefined;
+        std.mem.set(u8, std.mem.asBytes(&write_desc), 0);
+        write_desc.s_type = .write_descriptor_set;
+        write_desc.dst_set = descriptor;
+        write_desc.dst_binding = 0;
+        write_desc.dst_array_element = 0;
+        write_desc.descriptor_count = 1;
+        write_desc.descriptor_type = .combined_image_sampler;
+        write_desc.p_image_info = @ptrCast([*]const vk.DescriptorImageInfo, &desc);
+
+        std.log.debug("updateDescriptorSet", .{});
+        self.gc.vkd.updateDescriptorSets(self.gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &write_desc), 0, undefined);
+
+        // store asset
+        var asset = try self.allocator.create(TextureAsset);
+        errdefer self.allocator.destroy(asset);
+
+        asset.* = TextureAsset{
+            .image = image,
+            .image_view = image_view,
+            .descriptor = descriptor,
+        };
+        return asset;
+    } else {
+        std.log.err("AssetDB.getTexture({s}): Failed to load file", .{asset_path});
+        return error.FailedToLoadFile;
+    }
+}
+
 pub fn getCommandBuffer(self: *const Self) vk.CommandBuffer {
     return self.commandBuffers[self.swapchain.image_index];
 }
 
-fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer) !void {
+fn uploadVertices(gc: *GraphicsContext, pool: vk.CommandPool, buffer: vk.Buffer) !void {
     const staging_buffer = try gc.vkd.createBuffer(gc.dev, &.{
         .flags = .{},
         .size = @sizeOf(@TypeOf(vertices)),
@@ -276,13 +408,13 @@ const Buffer = struct {
     memory: vk.DeviceMemory,
     size: vk.DeviceSize,
 
-    pub fn deinit(self: *const @This(), gc: *const GraphicsContext) void {
+    pub fn deinit(self: *const @This(), gc: *GraphicsContext) void {
         gc.vkd.destroyBuffer(gc.dev, self.buffer, null);
         gc.vkd.freeMemory(gc.dev, self.memory, null);
     }
 };
 
-fn createUniformBuffers(gc: *const GraphicsContext, num: u64, allocator: Allocator) ![]Buffer {
+fn createUniformBuffers(gc: *GraphicsContext, num: u64, allocator: Allocator) ![]Buffer {
     const buffers = try allocator.alloc(Buffer, num);
     errdefer allocator.free(buffers);
     for (buffers) |*buffer| {
@@ -291,13 +423,13 @@ fn createUniformBuffers(gc: *const GraphicsContext, num: u64, allocator: Allocat
     return buffers;
 }
 
-fn destroyBuffers(gc: *const GraphicsContext, allocator: Allocator, buffers: []Buffer) void {
+fn destroyBuffers(gc: *GraphicsContext, allocator: Allocator, buffers: []Buffer) void {
     for (buffers) |buffer| buffer.deinit(gc);
     allocator.free(buffers);
 }
 
 fn createBuffer(
-    gc: *const GraphicsContext,
+    gc: *GraphicsContext,
     size: u64,
     usage: vk.BufferUsageFlags,
     properties: vk.MemoryPropertyFlags,
@@ -321,7 +453,7 @@ fn createBuffer(
     return Buffer{ .buffer = buffer, .memory = memory, .size = size };
 }
 
-fn uploadBufferData(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: Buffer, data: []const u8, use_staging_buffer: bool) !void {
+fn uploadBufferData(gc: *GraphicsContext, pool: vk.CommandPool, buffer: Buffer, data: []const u8, use_staging_buffer: bool) !void {
     if (use_staging_buffer) {
         const staging_buffer = try createBuffer(gc, data.len, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
         defer staging_buffer.deinit(gc);
@@ -347,7 +479,7 @@ fn uploadBufferData(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: Bu
     }
 }
 
-fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, src: vk.Buffer, size: vk.DeviceSize) !void {
+fn copyBuffer(gc: *GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, src: vk.Buffer, size: vk.DeviceSize) !void {
     var cmdbuf: vk.CommandBuffer = undefined;
     try gc.vkd.allocateCommandBuffers(gc.dev, &.{
         .command_pool = pool,
@@ -384,7 +516,7 @@ fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, 
 }
 
 fn createCommandBuffers(
-    gc: *const GraphicsContext,
+    gc: *GraphicsContext,
     pool: vk.CommandPool,
     allocator: Allocator,
     framebuffers: []vk.Framebuffer,
@@ -403,7 +535,7 @@ fn createCommandBuffers(
 }
 
 fn beginRecordCommandBuffer(
-    gc: *const GraphicsContext,
+    gc: *GraphicsContext,
     cmdbuf: vk.CommandBuffer,
 ) !void {
     try gc.vkd.beginCommandBuffer(cmdbuf, &.{
@@ -419,14 +551,24 @@ fn bindTrianglePipeline(self: *Self) void {
     self.gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &self.triangleBuffer), &offset);
 }
 
-pub fn drawTriangle(self: *Self, transform: zal.Vec4) void {
+pub fn bindTexture(self: *Self, descriptor_set: vk.DescriptorSet) void {
+    _ = descriptor_set;
     const cmdbuf = self.getCommandBuffer();
+    _ = cmdbuf;
+    // self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, self.pipelineLayout, 1, 1, @ptrCast([*]const vk.DescriptorSet, &descriptor_set), 0, undefined);
+}
+
+pub fn drawTriangle(self: *Self, transform: zal.Vec4, descriptor_set: vk.DescriptorSet) void {
+    const cmdbuf = self.getCommandBuffer();
+    _ = descriptor_set;
+    // std.log.debug("drawTriangle({x})", .{descriptor_set});
+    self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, self.pipelineLayout, 1, 1, @ptrCast([*]const vk.DescriptorSet, &self.texture.descriptor), 0, undefined);
     self.gc.vkd.cmdPushConstants(cmdbuf, self.pipelineLayout, .{ .vertex_bit = true }, 0, @sizeOf(zal.Vec4), &transform);
     self.gc.vkd.cmdDraw(cmdbuf, vertices.len, 1, 0, 0);
 }
 
 fn prepareImgui(
-    gc: *const GraphicsContext,
+    gc: *GraphicsContext,
     extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     framebuffer: vk.Framebuffer,
@@ -468,12 +610,12 @@ fn prepareImgui(
     }, .@"inline");
 }
 
-fn destroyCommandBuffers(gc: *const GraphicsContext, pool: vk.CommandPool, allocator: Allocator, commandBuffers: []vk.CommandBuffer) void {
+fn destroyCommandBuffers(gc: *GraphicsContext, pool: vk.CommandPool, allocator: Allocator, commandBuffers: []vk.CommandBuffer) void {
     gc.vkd.freeCommandBuffers(gc.dev, pool, @truncate(u32, commandBuffers.len), commandBuffers.ptr);
     allocator.free(commandBuffers);
 }
 
-fn createSceneImage(gc: *const GraphicsContext, allocator: Allocator, amount: usize, format: vk.Format, extent: vk.Extent2D) ![]Image {
+fn createSceneImage(gc: *GraphicsContext, allocator: Allocator, amount: usize, format: vk.Format, extent: vk.Extent2D) ![]Image {
     const images = try allocator.alloc(Image, amount);
     errdefer allocator.free(images);
 
@@ -551,7 +693,7 @@ fn createSceneImage(gc: *const GraphicsContext, allocator: Allocator, amount: us
     return images;
 }
 
-fn destroySceneImages(gc: *const GraphicsContext, allocator: Allocator, images: []const Image) void {
+fn destroySceneImages(gc: *GraphicsContext, allocator: Allocator, images: []const Image) void {
     for (images) |img| {
         gc.vkd.destroyImageView(gc.dev, img.imageView, null);
         gc.vkd.destroyImage(gc.dev, img.image, null);
@@ -560,7 +702,7 @@ fn destroySceneImages(gc: *const GraphicsContext, allocator: Allocator, images: 
     allocator.free(images);
 }
 
-fn createSceneFrameBuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, images: []Image, extent: vk.Extent2D) ![]vk.Framebuffer {
+fn createSceneFrameBuffers(gc: *GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, images: []Image, extent: vk.Extent2D) ![]vk.Framebuffer {
     const framebuffers = try allocator.alloc(vk.Framebuffer, images.len);
     errdefer allocator.free(framebuffers);
 
@@ -583,13 +725,13 @@ fn createSceneFrameBuffers(gc: *const GraphicsContext, allocator: Allocator, ren
     return framebuffers;
 }
 
-fn destroySceneFramebuffers(gc: *const GraphicsContext, allocator: Allocator, framebuffers: []const vk.Framebuffer) void {
+fn destroySceneFramebuffers(gc: *GraphicsContext, allocator: Allocator, framebuffers: []const vk.Framebuffer) void {
     for (framebuffers) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
     allocator.free(framebuffers);
 }
 
-fn createDescriptorPool(gc: *const GraphicsContext) !vk.DescriptorPool {
-    const POOL_SIZE = 1000;
+fn createDescriptorPool(gc: *GraphicsContext) !vk.DescriptorPool {
+    const POOL_SIZE = 100;
     const pool_sizes = [_]vk.DescriptorPoolSize{
         .{ .@"type" = .sampler, .descriptor_count = POOL_SIZE },
         .{ .@"type" = .combined_image_sampler, .descriptor_count = POOL_SIZE },
@@ -612,23 +754,53 @@ fn createDescriptorPool(gc: *const GraphicsContext) !vk.DescriptorPool {
     return try gc.vkd.createDescriptorPool(gc.dev, &pool_info, null);
 }
 
-fn createSceneDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetLayout {
-    const binding = vk.DescriptorSetLayoutBinding{
-        .binding = 0,
-        .descriptor_type = .uniform_buffer,
-        .descriptor_count = 1,
-        .stage_flags = .{ .vertex_bit = true },
-        .p_immutable_samplers = null,
+fn createSceneDescriptorSetLayout(gc: *GraphicsContext, allocator: Allocator) ![]vk.DescriptorSetLayout {
+    const result = try allocator.alloc(vk.DescriptorSetLayout, 2);
+    errdefer allocator.free(result);
+
+    const global_bindings = [_]vk.DescriptorSetLayoutBinding{
+        .{
+            .binding = 0,
+            .descriptor_type = .uniform_buffer,
+            .descriptor_count = 1,
+            .stage_flags = .{ .vertex_bit = true },
+            .p_immutable_samplers = null,
+        },
+        // .{
+        //     .binding = 1,
+        //     .descriptor_type = .combined_image_sampler,
+        //     .descriptor_count = 1,
+        //     .stage_flags = .{ .fragment_bit = true },
+        //     .p_immutable_samplers = null,
+        // },
     };
 
-    return try gc.vkd.createDescriptorSetLayout(gc.dev, &.{
+    result[0] = try gc.vkd.createDescriptorSetLayout(gc.dev, &.{
         .flags = .{},
-        .binding_count = 1,
-        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &binding),
+        .binding_count = global_bindings.len,
+        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &global_bindings),
     }, null);
+
+    const object_bindings = [_]vk.DescriptorSetLayoutBinding{
+        .{
+            .binding = 0,
+            .descriptor_type = .combined_image_sampler,
+            .descriptor_count = 1,
+            .stage_flags = .{ .fragment_bit = true },
+            .p_immutable_samplers = null,
+        },
+    };
+
+    result[1] = try gc.vkd.createDescriptorSetLayout(gc.dev, &.{
+        .flags = .{},
+        .binding_count = object_bindings.len,
+        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &object_bindings),
+    }, null);
+
+    return result;
 }
 
-fn createSceneDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, buffers: []Buffer, descriptorPool: vk.DescriptorPool, descriptorSetLayout: vk.DescriptorSetLayout) ![]vk.DescriptorSet {
+fn createSceneDescriptorSets(gc: *GraphicsContext, allocator: Allocator, buffers: []Buffer, descriptorPool: vk.DescriptorPool, descriptorSetLayout: vk.DescriptorSetLayout) ![]vk.DescriptorSet {
     const descriptorSets = try allocator.alloc(vk.DescriptorSet, buffers.len);
     errdefer allocator.free(descriptorSets);
 
@@ -661,7 +833,7 @@ fn createSceneDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, b
     return descriptorSets;
 }
 
-fn createMainDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetLayout {
+fn createMainDescriptorSetLayout(gc: *GraphicsContext) !vk.DescriptorSetLayout {
     const binding = vk.DescriptorSetLayoutBinding{
         .binding = 0,
         .descriptor_type = .combined_image_sampler,
@@ -677,7 +849,7 @@ fn createMainDescriptorSetLayout(gc: *const GraphicsContext) !vk.DescriptorSetLa
     }, null);
 }
 
-fn createMainImageSampler(gc: *const GraphicsContext) !vk.Sampler {
+fn createMainImageSampler(gc: *GraphicsContext) !vk.Sampler {
     return try gc.vkd.createSampler(gc.dev, &.{
         .flags = .{},
         .mag_filter = .linear,
@@ -698,7 +870,7 @@ fn createMainImageSampler(gc: *const GraphicsContext) !vk.Sampler {
     }, null);
 }
 
-fn createMainDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, images: []Image, descriptorPool: vk.DescriptorPool, descriptorSetLayout: vk.DescriptorSetLayout, sampler: vk.Sampler) ![]vk.DescriptorSet {
+fn createMainDescriptorSets(gc: *GraphicsContext, allocator: Allocator, images: []Image, descriptorPool: vk.DescriptorPool, descriptorSetLayout: vk.DescriptorSetLayout, sampler: vk.Sampler) ![]vk.DescriptorSet {
     const descriptorSets = try allocator.alloc(vk.DescriptorSet, images.len);
     errdefer allocator.free(descriptorSets);
 
@@ -731,7 +903,7 @@ fn createMainDescriptorSets(gc: *const GraphicsContext, allocator: Allocator, im
     return descriptorSets;
 }
 
-fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
+fn createFramebuffers(gc: *GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
     const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
     errdefer allocator.free(framebuffers);
 
@@ -754,12 +926,12 @@ fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_p
     return framebuffers;
 }
 
-fn destroyFramebuffers(gc: *const GraphicsContext, allocator: Allocator, framebuffers: []const vk.Framebuffer) void {
+fn destroyFramebuffers(gc: *GraphicsContext, allocator: Allocator, framebuffers: []const vk.Framebuffer) void {
     for (framebuffers) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
     allocator.free(framebuffers);
 }
 
-fn createSceneRenderPass(gc: *const GraphicsContext, format: vk.Format, finalImageLayout: vk.ImageLayout) !vk.RenderPass {
+fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format, finalImageLayout: vk.ImageLayout) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
         .format = format,
@@ -811,7 +983,7 @@ fn createSceneRenderPass(gc: *const GraphicsContext, format: vk.Format, finalIma
     }, null);
 }
 
-fn createRenderPass(gc: *const GraphicsContext, format: vk.Format, finalImageLayout: vk.ImageLayout) !vk.RenderPass {
+fn createRenderPass(gc: *GraphicsContext, format: vk.Format, finalImageLayout: vk.ImageLayout) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
         .format = format,
@@ -864,7 +1036,7 @@ fn createRenderPass(gc: *const GraphicsContext, format: vk.Format, finalImageLay
 }
 
 fn createPipeline(
-    gc: *const GraphicsContext,
+    gc: *GraphicsContext,
     layout: vk.PipelineLayout,
     render_pass: vk.RenderPass,
 ) !vk.Pipeline {

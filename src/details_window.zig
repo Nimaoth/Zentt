@@ -68,10 +68,10 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
             _ = try commands.addComponent(entityHandle, root.TransformComponent{});
         }
 
-        if (imgui.SmallButton("Add RenderComponent")) {
-            const entityHandle = try commands.getEntity(entityId);
-            _ = try commands.addComponent(entityHandle, root.RenderComponent{});
-        }
+        // if (imgui.SmallButton("Add RenderComponent")) {
+        //     const entityHandle = try commands.getEntity(entityId);
+        //     _ = try commands.addComponent(entityHandle, root.RenderComponent{});
+        // }
 
         // Check if entity has the specified component.
         // const componentId = try self.getComponentId(ComponentType);
