@@ -182,6 +182,7 @@ pub fn init(allocator: Allocator, gc: *GraphicsContext, frame_count: u64, render
         },
     };
     self.quad_pipeline = try Pipeline.init(
+        allocator,
         gc,
         render_pass,
         self.sceneDescriptorSetLayouts,

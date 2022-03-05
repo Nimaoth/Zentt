@@ -17,6 +17,7 @@ layout: vk.PipelineLayout,
 pipeline: vk.Pipeline,
 
 pub fn init(
+    allocator: std.mem.Allocator,
     gc: *GraphicsContext,
     render_pass: vk.RenderPass,
     descriptor_set_layouts: []const vk.DescriptorSetLayout,
@@ -35,17 +36,23 @@ pub fn init(
     }, null);
     errdefer gc.vkd.destroyPipelineLayout(gc.dev, layout, null);
 
+    const vertex_mem = try allocator.alignedAlloc(u8, @alignOf(u32), vertex_shader.len);
+    defer allocator.free(vertex_mem);
+    std.mem.copy(u8, vertex_mem, vertex_shader);
     const vert = try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
-        .code_size = vertex_shader.len,
-        .p_code = @ptrCast([*]const u32, @alignCast(@alignOf(u32), vertex_shader.ptr)),
+        .code_size = vertex_mem.len,
+        .p_code = @ptrCast([*]const u32, vertex_mem.ptr),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
 
+    const fragment_mem = try allocator.alignedAlloc(u8, @alignOf(u32), fragment_shader.len);
+    defer allocator.free(fragment_mem);
+    std.mem.copy(u8, fragment_mem, fragment_shader);
     const frag = try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
-        .code_size = fragment_shader.len,
-        .p_code = @ptrCast([*]const u32, @alignCast(@alignOf(u32), fragment_shader.ptr)),
+        .code_size = fragment_mem.len,
+        .p_code = @ptrCast([*]const u32, fragment_mem.ptr),
     }, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 

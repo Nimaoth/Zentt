@@ -55,6 +55,8 @@ pub fn moveSystemPlayer(
     var acceleration = imgui2.variable(moveSystemPlayer, f32, "Player Acc", 1300, true, .{}).*;
 
     const delta = @floatCast(f32, time.delta);
+    if (delta == 0)
+        return;
 
     var iter = query.iter();
     while (iter.next()) |entity| {
