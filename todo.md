@@ -1,0 +1,16 @@
+# Todo
+- Implement basic grid based physics
+- Optimizations:
+  - Keep pointer to first non-full chunk instead of finding it every time
+  - Add initial components to create entity commands
+  - Create batch sprite renderer
+- Add enemies and weapons
+- Refactor rendering
+- Improve editor tools
+  - Render pass id to shader to render to id texture, then use that for selecting entities in the viewport
+  - Add gizmos
+  - Improve details view
+  - Add more debug info for systems
+  - Improve profiler
+- Implement copying worlds
+- Add play/stop distiction

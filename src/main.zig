@@ -17,6 +17,7 @@ const resources = @import("resources");
 
 const app_name = "vulkan-zig triangle example";
 const Renderer = @import("renderer.zig");
+const SpriteRenderer = @import("sprite_renderer.zig");
 const App = @import("app.zig");
 const Details = @import("details_window.zig");
 const ChunkDebugger = @import("editor/chunk_debugger.zig");
@@ -39,7 +40,7 @@ pub const TransformComponent = struct {
 };
 
 pub const RenderComponent = struct {
-    // texture: *AssetDB.TextureAsset,
+    texture: *AssetDB.TextureAsset,
 };
 
 pub fn moveSystemPlayer(
@@ -82,6 +83,7 @@ pub fn moveSystemQuad(
     profiler: *Profiler,
     commands: *Commands,
     time: *const Time,
+    assetdb: *AssetDB,
     players: Query(.{ Player, TransformComponent }),
     query: Query(.{ Quad, TransformComponent, RenderComponent }),
 ) !void {
@@ -135,12 +137,14 @@ pub fn moveSystemQuad(
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
                     // .addComponent(RenderComponent{ .texture = entity.RenderComponent.texture });
-                        .addComponent(RenderComponent{});
+                        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
+                    // .addComponent(RenderComponent{});
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
                     // .addComponent(RenderComponent{ .texture = entity.RenderComponent.texture });
-                        .addComponent(RenderComponent{});
+                        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
+                    // .addComponent(RenderComponent{});
                 } else {
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
@@ -195,7 +199,7 @@ pub fn renderSystemImgui(profiler: *Profiler, query: Query(.{ TransformComponent
     }
 }
 
-pub fn renderSystemVulkan(profiler: *Profiler, renderer: *Renderer, query: Query(.{ TransformComponent, RenderComponent })) !void {
+pub fn renderSystemVulkan(profiler: *Profiler, renderer: *SpriteRenderer, query: Query(.{ TransformComponent, RenderComponent })) !void {
     const scope = profiler.beginScope("renderSystemVulkan");
     defer scope.end();
 
@@ -207,10 +211,7 @@ pub fn renderSystemVulkan(profiler: *Profiler, renderer: *Renderer, query: Query
         _ = size;
         _ = renderer;
 
-        // if (entity.RenderComponent.texture) |tex| {
-        // renderer.bindTexture(entity.RenderComponent.texture.descriptor);
-        // }
-        renderer.drawTriangle(zal.Vec4.new(position.x, position.y, size.x, size.y), .null_handle);
+        renderer.drawSprite(zal.Vec4.new(position.x, position.y, size.x, size.y), entity.RenderComponent.texture);
     }
 }
 
@@ -260,18 +261,19 @@ pub fn main() !void {
     try world.addResourcePtr(profiler);
 
     try world.addResourcePtr(app.renderer);
+    try world.addResourcePtr(app.sprite_renderer);
 
     const e = try commands.createEntity();
     _ = try commands.addComponent(e, Quad{});
     _ = try commands.addComponent(e, TransformComponent{ .position = .{ .x = -50 }, .vel = .{ .x = -1 } });
-    _ = try commands.addComponent(e, RenderComponent{});
-    // _ = try commands.addComponent(e, RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
+    // _ = try commands.addComponent(e, RenderComponent{});
+    _ = try commands.addComponent(e, RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
 
     const player = (try commands.createEntity())
         .addComponent(Player{})
         .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = .{ .x = 50, .y = 50 } })
-        .addComponent(RenderComponent{});
-    // .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
+    // .addComponent(RenderComponent{});
+        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
     _ = player;
 
@@ -448,4 +450,6 @@ pub fn main() !void {
             // return;
         }
     }
+
+    app.renderer.waitIdle();
 }

@@ -88,6 +88,7 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .createDescriptorSetLayout = true,
     .destroyDescriptorSetLayout = true,
     .updateDescriptorSets = true,
+    .resetDescriptorPool = true,
     .createSampler = true,
     .destroySampler = true,
     .cmdBindDescriptorSets = true,
@@ -234,7 +235,7 @@ pub const GraphicsContext = struct {
         }, null);
     }
 
-    fn createDescriptorPool(gc: *const GraphicsContext) !vk.DescriptorPool {
+    pub fn createDescriptorPool(gc: *const GraphicsContext) !vk.DescriptorPool {
         const POOL_SIZE = 1000;
         const pool_sizes = [_]vk.DescriptorPoolSize{
             .{ .@"type" = .sampler, .descriptor_count = POOL_SIZE },
@@ -256,6 +257,14 @@ pub const GraphicsContext = struct {
             .p_pool_sizes = &pool_sizes,
         };
         return try gc.vkd.createDescriptorPool(gc.dev, &pool_info, null);
+    }
+
+    pub fn resetDescriptorPool(self: *GraphicsContext, descriptor_pool: vk.DescriptorPool, flags: vk.DescriptorPoolResetFlags) void {
+        const result = self.vkd.dispatch.vkResetDescriptorPool(self.dev, descriptor_pool, flags.toInt());
+        switch (result) {
+            .success => {},
+            else => unreachable,
+        }
     }
 
     pub fn createImage(self: *GraphicsContext, width: u32, height: u32, format: vk.Format, tiling: vk.ImageTiling, usage: vk.ImageUsageFlags, properties: vk.MemoryPropertyFlags) !Image {
@@ -402,6 +411,26 @@ pub const GraphicsContext = struct {
         }
 
         std.mem.copy(u8, mem, data);
+    }
+
+    pub fn uploadBufferDataStaged(self: *GraphicsContext, buffer: Buffer, data: []const u8) !void {
+        const staging_buffer = try self.createBuffer(data.len, .{ .transfer_src_bit = true }, .{ .host_visible_bit = true, .host_coherent_bit = true });
+        defer staging_buffer.deinit(self);
+        try self.uploadBufferData(staging_buffer, data);
+        try self.copyBuffer(buffer.buffer, staging_buffer.buffer, data.len);
+    }
+
+    fn copyBuffer(gc: *GraphicsContext, dst: vk.Buffer, src: vk.Buffer, size: vk.DeviceSize) !void {
+        var cmdbuf = try gc.beginSingleTimeCommandBuffer();
+
+        const region = vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = size,
+        };
+        gc.vkd.cmdCopyBuffer(cmdbuf, src, dst, 1, @ptrCast([*]const vk.BufferCopy, &region));
+
+        try gc.endSingleTimeCommandBuffer(cmdbuf);
     }
 
     pub fn beginSingleTimeCommandBuffer(self: *GraphicsContext) !vk.CommandBuffer {

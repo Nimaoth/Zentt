@@ -16,6 +16,7 @@ const resources = @import("resources");
 
 const app_name = "vulkan-zig triangle example";
 const Renderer = @import("renderer.zig");
+const SpriteRenderer = @import("sprite_renderer.zig");
 const Details = @import("details_window.zig");
 
 const EntityId = @import("entity.zig").EntityId;
@@ -35,11 +36,12 @@ isRunning: bool,
 
 window: *sdl.SDL_Window,
 renderer: *Renderer,
+sprite_renderer: *SpriteRenderer,
 profiler: Profiler,
 
 windowSize: vk.Extent2D,
 
-matrices: Renderer.SceneMatricesUbo,
+matrices: SpriteRenderer.SceneMatricesUbo,
 
 pub fn init(allocator: std.mem.Allocator) !*Self {
     const self = try allocator.create(Self);
@@ -68,6 +70,9 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
     var renderer = try Renderer.init(allocator, window, extent);
     errdefer renderer.deinit();
 
+    var sprite_renderer = try SpriteRenderer.init(allocator, &renderer.gc, renderer.swapchain.swap_images.len, renderer.sceneRenderPass);
+    errdefer sprite_renderer.deinit();
+
     try imgui2.initForWindow(window);
     errdefer imgui2.deinitWindow();
 
@@ -79,6 +84,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .isRunning = true,
         .window = window,
         .renderer = renderer,
+        .sprite_renderer = sprite_renderer,
         .profiler = Profiler.init(allocator),
         .windowSize = extent,
         .matrices = .{
@@ -95,6 +101,7 @@ pub fn deinit(self: *Self) void {
     imgui2.deinitRenderer(self.renderer);
     imgui2.deinitWindow();
     self.profiler.deinit();
+    self.sprite_renderer.deinit();
     self.renderer.deinit();
     sdl.SDL_DestroyWindow(self.window);
     sdl.SDL_Quit();
@@ -148,7 +155,7 @@ pub fn beginRender(self: *Self) !void {
         self.matrices.proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1);
         if (open) {
             imgui.ImageExt(
-                @ptrCast(**anyopaque, &self.renderer.getSceneImageDescriptor()).*,
+                @ptrCast(**anyopaque, &self.renderer.getSceneImage().descriptor).*,
                 size,
                 .{ .x = 0, .y = 0 },
                 .{ .x = size.x / 1920, .y = size.y / 1080 }, // the size is the size of the scene frame buffer which doesn't get resized.
@@ -159,17 +166,19 @@ pub fn beginRender(self: *Self) !void {
 
         break :blk size;
     };
+
+    const frame = try self.renderer.beginSceneRender(
+        .{ .width = @floatToInt(u32, std.math.max(contentSize.x, 1)), .height = @floatToInt(u32, std.math.max(contentSize.y, 1)) },
+    );
+
     // const hdr = imgui2.variable(endFrame, bool, "HDR", true, true, .{}).*;
     // const options = struct { color: bool = true, flags: imgui.ColorEditFlags }{ .flags = .{ .HDR = hdr } };
     // const color = imgui2.variable(endFrame, zal.Vec4, "Tint", .{ .data = [4]f32{ 1, 1, 0, 1 } }, true, options).*;
     // const transform = imgui2.variable(endFrame, zal.Vec4, "Transform", .{ .data = [4]f32{ 0, 0, 1, 1 } }, true, .{}).*;
-
-    try self.renderer.beginSceneRender(
-        .{ .width = @floatToInt(u32, std.math.max(contentSize.x, 1)), .height = @floatToInt(u32, std.math.max(contentSize.y, 1)) },
-        &self.matrices,
-    );
+    try self.sprite_renderer.beginRender(frame.cmdbuf, frame.frame_index, &self.matrices);
 }
 
 pub fn endRender(self: *Self) !void {
+    self.sprite_renderer.endRender();
     try self.renderer.endSceneRender();
 }
