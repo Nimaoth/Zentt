@@ -158,7 +158,7 @@ pub fn build(b: *std.build.Builder) void {
     exe.setBuildMode(mode);
     exe.install();
 
-    const vk_xml_path = b.option([]const u8, "vulkan-registry", "Override the path to the Vulkan registry") orelse "src/vulkan/vk.xml";
+    const vk_xml_path = b.option([]const u8, "vulkan-registry", "Override the path to the Vulkan registry") orelse "src/rendering/vulkan/vk.xml";
 
     const gen = vkgen.VkGenerateStep.init(b, vk_xml_path, "vk.zig");
     exe.addPackage(gen.package);
@@ -166,8 +166,8 @@ pub fn build(b: *std.build.Builder) void {
     exe.addPackagePath("zalgebra", "libs/zalgebra/src/main.zig");
 
     const res = ResourceGenStep.init(b, "resources.zig");
-    res.addShader("triangle_vert", "src/vulkan/shaders/triangle.vert");
-    res.addShader("triangle_frag", "src/vulkan/shaders/triangle.frag");
+    res.addShader("triangle_vert", "src/rendering/vulkan/shaders/triangle.vert");
+    res.addShader("triangle_frag", "src/rendering/vulkan/shaders/triangle.frag");
     exe.addPackage(res.package);
 
     const run_cmd = exe.run();

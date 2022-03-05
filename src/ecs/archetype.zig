@@ -2,7 +2,7 @@ const std = @import("std");
 
 const World = @import("world.zig");
 const ArchetypeTable = @import("archetype_table.zig");
-const BitSet = @import("bit_set.zig");
+const BitSet = @import("../util/bit_set.zig");
 
 hash: u64,
 components: BitSet,

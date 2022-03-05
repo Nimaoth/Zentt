@@ -7,11 +7,11 @@ const C = @cImport({
 });
 
 const imgui = @import("imgui.zig");
-const sdl = @import("sdl.zig");
+const sdl = @import("../rendering/sdl.zig");
 
-const Renderer = @import("renderer.zig");
+const Renderer = @import("../rendering/renderer.zig");
 
-const Rtti = @import("rtti.zig");
+const Rtti = @import("../util/rtti.zig");
 const zal = @import("zalgebra");
 
 pub const ImGui_ImplVulkan_InitInfo = extern struct {

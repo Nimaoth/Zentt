@@ -1,13 +1,11 @@
 const std = @import("std");
 
-const EntityId = @import("entity.zig").EntityId;
-const ComponentId = @import("entity.zig").ComponentId;
-const World = @import("world.zig");
-const Tag = @import("tag_component.zig").Tag;
-const Rtti = @import("rtti.zig");
-const Commands = @import("commands.zig");
-
-const root = @import("root");
+const EntityId = @import("../ecs/entity.zig").EntityId;
+const ComponentId = @import("../ecs/entity.zig").ComponentId;
+const World = @import("../ecs/world.zig");
+const Tag = @import("../ecs/tag_component.zig").Tag;
+const Commands = @import("../ecs/commands.zig");
+const Rtti = @import("../util/rtti.zig");
 
 const imgui = @import("imgui.zig");
 const imgui2 = @import("imgui2.zig");
@@ -63,10 +61,10 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
             _ = try commands.addComponent(entityHandle, Tag{ .name = "foo" });
         }
 
-        if (imgui.SmallButton("Add TransformComponent")) {
-            const entityHandle = try commands.getEntity(entityId);
-            _ = try commands.addComponent(entityHandle, root.TransformComponent{});
-        }
+        // if (imgui.SmallButton("Add TransformComponent")) {
+        //     const entityHandle = try commands.getEntity(entityId);
+        //     _ = try commands.addComponent(entityHandle, root.TransformComponent{});
+        // }
 
         // if (imgui.SmallButton("Add RenderComponent")) {
         //     const entityHandle = try commands.getEntity(entityId);

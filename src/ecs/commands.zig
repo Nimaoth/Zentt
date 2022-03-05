@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Rtti = @import("rtti.zig");
+const Rtti = @import("../util/rtti.zig");
 const EntityId = @import("entity.zig").EntityId;
 const ComponentId = @import("entity.zig").ComponentId;
 const World = @import("world.zig");

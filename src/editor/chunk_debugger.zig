@@ -1,14 +1,14 @@
 const std = @import("std");
 
-const imgui = @import("../imgui.zig");
-const imgui2 = @import("../imgui2.zig");
+const imgui = @import("../editor/imgui.zig");
+const imgui2 = @import("../editor/imgui2.zig");
 
-const World = @import("../world.zig");
-const ArchetypeTable = @import("../archetype_table.zig");
-const Archetype = @import("../archetype.zig");
-const Chunk = @import("../chunk.zig");
-const Entity = @import("../entity.zig");
-const Rtti = @import("../rtti.zig");
+const World = @import("../ecs/world.zig");
+const ArchetypeTable = @import("../ecs/archetype_table.zig");
+const Archetype = @import("../ecs/archetype.zig");
+const Chunk = @import("../ecs/chunk.zig");
+const Entity = @import("../ecs/entity.zig");
+const Rtti = @import("../util/rtti.zig");
 
 const Vec2 = imgui.Vec2;
 

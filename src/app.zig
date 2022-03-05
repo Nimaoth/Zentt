@@ -1,32 +1,19 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const c = @import("vulkan/c.zig");
 
-const imgui = @import("imgui.zig");
-const imgui2 = @import("imgui2.zig");
-const sdl = @import("sdl.zig");
+const imgui = @import("editor/imgui.zig");
+const imgui2 = @import("editor/imgui2.zig");
+
+const sdl = @import("rendering/sdl.zig");
 
 const Vec2 = imgui.Vec2;
 const Allocator = std.mem.Allocator;
 const zal = @import("zalgebra");
 
-const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
-const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
-const resources = @import("resources");
+const Renderer = @import("rendering/renderer.zig");
+const SpriteRenderer = @import("rendering/sprite_renderer.zig");
 
-const app_name = "vulkan-zig triangle example";
-const Renderer = @import("renderer.zig");
-const SpriteRenderer = @import("sprite_renderer.zig");
-const Details = @import("details_window.zig");
-
-const EntityId = @import("entity.zig").EntityId;
-const ComponentId = @import("entity.zig").ComponentId;
-const World = @import("world.zig");
-const EntityBuilder = @import("entity_builder.zig");
-const Query = @import("query.zig").Query;
-const Tag = @import("tag_component.zig").Tag;
-const Commands = @import("commands.zig");
-const Profiler = @import("profiler.zig");
+const Profiler = @import("editor/profiler.zig");
 
 const Self = @This();
 

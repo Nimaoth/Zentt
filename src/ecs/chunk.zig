@@ -2,8 +2,8 @@ const std = @import("std");
 
 const ArchetypeTable = @import("archetype_table.zig");
 const Chunk = @import("chunk.zig");
-const Rtti = @import("rtti.zig");
 const Entity = @import("entity.zig");
+const Rtti = @import("../util/rtti.zig");
 
 pub const EntityId = u64;
 pub const ComponentId = u64;

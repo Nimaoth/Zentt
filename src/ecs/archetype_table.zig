@@ -1,10 +1,11 @@
 const std = @import("std");
 
 const Archetype = @import("archetype.zig");
-const BitSet = @import("bit_set.zig");
-const Rtti = @import("rtti.zig");
 const Chunk = @import("chunk.zig");
 const Entity = @import("entity.zig");
+
+const BitSet = @import("../util/bit_set.zig");
+const Rtti = @import("../util/rtti.zig");
 
 typeToList: std.AutoHashMap(Rtti.TypeId, u64),
 supersets: std.AutoHashMap(BitSet, *Self),

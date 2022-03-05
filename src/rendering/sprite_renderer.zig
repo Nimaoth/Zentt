@@ -3,17 +3,10 @@ const Allocator = std.mem.Allocator;
 
 const vk = @import("vulkan");
 
-const sdl = @import("sdl.zig");
-const stb = @import("stb_image.zig");
-
-const imgui2 = @import("imgui2.zig");
-
 const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
 const Image = @import("vulkan/graphics_context.zig").Image;
 const Buffer = @import("vulkan/graphics_context.zig").Buffer;
-const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
 const Pipeline = @import("vulkan/pipeline.zig");
-const Renderer = @import("renderer.zig");
 const resources = @import("resources");
 
 const AssetDB = @import("assetdb.zig");

@@ -4,13 +4,15 @@ const ArchetypeTable = @import("archetype_table.zig");
 const Chunk = @import("chunk.zig");
 const Archetype = @import("archetype.zig");
 const Entity = @import("entity.zig");
-const Rtti = @import("rtti.zig");
-const BitSet = @import("bit_set.zig");
 const DotPrinter = @import("dot_printer.zig");
 const Query = @import("query.zig").Query;
 const SystemParameterType = @import("system_parameter_type.zig").SystemParameterType;
-const imgui = @import("imgui.zig");
-const imgui2 = @import("imgui2.zig");
+
+const Rtti = @import("../util/rtti.zig");
+const BitSet = @import("../util/bit_set.zig");
+
+const imgui = @import("../editor/imgui.zig");
+const imgui2 = @import("../editor/imgui2.zig");
 
 pub const EntityId = u64;
 pub const ComponentId = u64;

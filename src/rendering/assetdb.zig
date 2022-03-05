@@ -1,13 +1,9 @@
 const std = @import("std");
 
-const imgui = @import("imgui.zig");
-const imgui2 = @import("imgui2.zig");
 const stb = @import("stb_image.zig");
 const vk = @import("vulkan");
 const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
 const Image = @import("vulkan/graphics_context.zig").Image;
-
-const Vec2 = imgui.Vec2;
 
 const Self = @This();
 

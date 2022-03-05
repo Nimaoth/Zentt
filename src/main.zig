@@ -1,37 +1,32 @@
 const std = @import("std");
-const vk = @import("vulkan");
-const c = @import("vulkan/c.zig");
 
-const imgui = @import("imgui.zig");
-const imgui2 = @import("imgui2.zig");
-const sdl = @import("sdl.zig");
+const imgui = @import("editor/imgui.zig");
+const imgui2 = @import("editor/imgui2.zig");
+const sdl = @import("rendering/sdl.zig");
 
 const zal = @import("zalgebra");
 
 const Vec2 = imgui.Vec2;
 const Allocator = std.mem.Allocator;
 
-const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
-const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
-const resources = @import("resources");
-
-const app_name = "vulkan-zig triangle example";
-const Renderer = @import("renderer.zig");
-const SpriteRenderer = @import("sprite_renderer.zig");
 const App = @import("app.zig");
-const Details = @import("details_window.zig");
+const Renderer = @import("rendering/renderer.zig");
+const SpriteRenderer = @import("rendering/sprite_renderer.zig");
+const AssetDB = @import("rendering/assetdb.zig");
+
+const Profiler = @import("editor/profiler.zig");
+const Details = @import("editor/details_window.zig");
 const ChunkDebugger = @import("editor/chunk_debugger.zig");
 
-const EntityId = @import("entity.zig").EntityId;
-const ComponentId = @import("entity.zig").ComponentId;
-const World = @import("world.zig");
-const EntityBuilder = @import("entity_builder.zig");
-const Query = @import("query.zig").Query;
-const Tag = @import("tag_component.zig").Tag;
-const Commands = @import("commands.zig");
-const Profiler = @import("profiler.zig");
+const EntityId = @import("ecs/entity.zig").EntityId;
+const ComponentId = @import("ecs/entity.zig").ComponentId;
+const World = @import("ecs/world.zig");
+const EntityBuilder = @import("ecs/entity_builder.zig");
+const Query = @import("ecs/query.zig").Query;
+const Tag = @import("ecs/tag_component.zig").Tag;
+const Commands = @import("ecs/commands.zig");
 
-const AssetDB = @import("assetdb.zig");
+const app_name = "vulkan-zig triangle example";
 
 pub const TransformComponent = struct {
     position: Vec2 = .{ .x = 0, .y = 0 },
@@ -197,7 +192,6 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    // init SDL
     var app = try App.init(allocator);
     defer app.deinit();
 
