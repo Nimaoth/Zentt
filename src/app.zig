@@ -96,7 +96,7 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
 }
 
 pub fn deinit(self: *Self) void {
-    self.renderer.waitIdle();
+    self.waitIdle();
 
     imgui2.deinitRenderer(self.renderer);
     imgui2.deinitWindow();
@@ -107,6 +107,12 @@ pub fn deinit(self: *Self) void {
     sdl.SDL_Quit();
 
     self.allocator.destroy(self);
+}
+
+pub fn waitIdle(self: *Self) void {
+    self.renderer.gc.vkd.queueWaitIdle(self.renderer.gc.graphics_queue.handle) catch |err| {
+        std.log.err("Failed to wait for idle device: {}", .{err});
+    };
 }
 
 pub fn beginFrame(self: *Self) !void {

@@ -155,12 +155,6 @@ pub fn deinit(self: *Self) void {
     self.allocator.destroy(self);
 }
 
-pub fn waitIdle(self: *const Self) void {
-    self.swapchain.waitForAllFences() catch |err| {
-        std.log.err("Failed to wait for all fences on the swapchain: {}", .{err});
-    };
-}
-
 pub fn getCommandBuffer(self: *const Self) vk.CommandBuffer {
     return self.commandBuffers[self.swapchain.image_index];
 }

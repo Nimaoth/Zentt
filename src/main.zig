@@ -93,10 +93,10 @@ pub fn moveSystemQuad(
     var prng = std.rand.DefaultPrng.init(@floatToInt(u64, time.now * 10000));
     var rand = prng.random();
 
-    var player = players.iter().next() orelse return error.NoPlayerFound;
-
-    // comptime var i = 0;
-    // inline while (i < 10) : (i += 1) _ = rand.int(u64);
+    var player = players.iter().next() orelse {
+        std.log.warn("moveSystemQuad: Player not found", .{});
+        return;
+    };
 
     var speed = imgui2.variable(moveSystemQuad, f32, "speed", 0.1, true, .{});
     var radius = imgui2.variable(moveSystemQuad, f32, "radius", 100, true, .{});
@@ -160,59 +160,21 @@ pub fn moveSystemQuad(
     try profiler.record("moveSystemEntities", @intToFloat(f64, i));
 }
 
-pub fn renderSystemImgui(profiler: *Profiler, query: Query(.{ TransformComponent, RenderComponent })) !void {
-    const scope = profiler.beginScope("renderSystemImgui");
-    defer scope.end();
-
-    imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
-    defer imgui.PopStyleVar();
-    _ = imgui.Begin("renderSystemImgui");
-    defer imgui.End();
-
-    var cameraSize = imgui2.variable(renderSystemImgui, f32, "cameraSize", 500, true, .{});
-    if (cameraSize.* < 0.1) {
-        cameraSize.* = 0.1;
-    }
-
-    const canvas_p0 = imgui.GetCursorScreenPos(); // ImDrawList API uses screen coordinates!
-    var canvas_sz = imgui.GetContentRegionAvail(); // Resize canvas to what's available
-    if (canvas_sz.x < 50) canvas_sz.x = 50;
-    if (canvas_sz.y < 50) canvas_sz.y = 50;
-    const canvas_p1 = Vec2{ .x = canvas_p0.x + canvas_sz.x, .y = canvas_p0.y + canvas_sz.y };
-
-    const aspectRatio = canvas_sz.x / canvas_sz.y;
-    _ = aspectRatio;
-    const scale = canvas_sz.y / cameraSize.*;
-
-    var drawList = imgui.GetWindowDrawList() orelse return;
-    drawList.PushClipRect(canvas_p0, canvas_p1);
-    defer drawList.PopClipRect();
-
-    var iter = query.iter();
-    while (iter.next()) |entity| {
-        const renderComponent = entity.RenderComponent;
-        _ = renderComponent;
-
-        const position = entity.TransformComponent.position.timess(scale).plus(canvas_p0).plus(canvas_sz.timess(0.5));
-        const size = entity.TransformComponent.size.timess(scale);
-        drawList.AddRect(position.plus(size.timess(-0.5)), position.plus(size.timess(0.5)), 0xff00ffff);
-    }
-}
-
-pub fn renderSystemVulkan(profiler: *Profiler, renderer: *SpriteRenderer, query: Query(.{ TransformComponent, RenderComponent })) !void {
-    const scope = profiler.beginScope("renderSystemVulkan");
+pub fn spriteRenderSystem(profiler: *Profiler, renderer: *SpriteRenderer, query: Query(.{ TransformComponent, RenderComponent })) !void {
+    const scope = profiler.beginScope("spriteRenderSystem");
     defer scope.end();
 
     var iter = query.iter();
     while (iter.next()) |entity| {
         const position = entity.TransformComponent.position;
         const size = entity.TransformComponent.size;
-        _ = position;
-        _ = size;
-        _ = renderer;
 
         renderer.drawSprite(zal.Vec4.new(position.x, position.y, size.x, size.y), entity.RenderComponent.texture);
     }
+
+    const descriptor_set_count = renderer.frame_data[renderer.frame_index].image_descriptor_sets.count();
+
+    try profiler.record("Descriptor sets per frame", @intToFloat(f64, descriptor_set_count));
 }
 
 const Player = struct {};
@@ -246,7 +208,7 @@ pub fn main() !void {
     try world.addSystem(moveSystemPlayer, "Move System Player");
 
     // try world.addRenderSystem(renderSystemImgui, "Render System Imgui");
-    try world.addRenderSystem(renderSystemVulkan, "Render System Vulkan");
+    try world.addRenderSystem(spriteRenderSystem, "Render System Vulkan");
 
     _ = try world.addResource(Time{});
     var commands = try world.addResource(Commands.init(allocator));
@@ -286,6 +248,7 @@ pub fn main() !void {
     var lastFrameTime = std.time.nanoTimestamp();
     var frameTimeSmoothed: f64 = 0;
 
+    defer app.waitIdle();
     while (app.isRunning) {
         var event: sdl.SDL_Event = undefined;
         while (sdl.SDL_PollEvent(&event) != 0) {
@@ -418,7 +381,10 @@ pub fn main() !void {
         {
             const scope = profiler.beginScope("runFrameSystems");
             defer scope.end();
-            try world.runFrameSystems();
+
+            world.runFrameSystems() catch |err| {
+                std.log.err("Failed to run frame systems: {}", .{err});
+            };
         }
 
         {
@@ -426,7 +392,9 @@ pub fn main() !void {
             defer scope.end();
 
             try app.beginRender();
-            try world.runRenderSystems();
+            world.runRenderSystems() catch |err| {
+                std.log.err("Failed to run render systems: {}", .{err});
+            };
             try app.endRender();
         }
 
@@ -445,11 +413,5 @@ pub fn main() !void {
         }
 
         try app.endFrame();
-
-        if (timeResource.now > 0.02) {
-            // return;
-        }
     }
-
-    app.renderer.waitIdle();
 }
