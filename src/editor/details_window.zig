@@ -100,7 +100,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
             const open = imgui.CollapsingHeaderBoolPtrExt(
                 component_name.ptr,
                 null,
-                imgui.TreeNodeFlags.CollapsingHeader.with(.{ .DefaultOpen = true }),
+                imgui.TreeNodeFlags.CollapsingHeader.with(.{ .DefaultOpen = true, .AllowItemOverlap = true }),
             );
 
             imgui.SameLineExt(imgui.GetWindowContentRegionWidth() - imgui.CalcTextSize("X").x - 10, -1);

@@ -17,7 +17,7 @@ layout(push_constant) uniform UniformPushConstant {
 } pc;
 
 void main() {
-    gl_Position = vec4((a_pos * pc.transform.zw + pc.transform.xy), 0.0, 1.0) * ubo.proj * ubo.view;
+    gl_Position = vec4((a_pos * pc.transform.zw + pc.transform.xy) * vec2(1, -1), 0.0, 1.0) * ubo.view * ubo.proj;
     v_color = a_color;
     v_uv = a_uv;
 }

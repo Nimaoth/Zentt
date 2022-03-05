@@ -153,6 +153,7 @@ frame_data: []FrameData,
 /// Current frame
 cmdbuf: vk.CommandBuffer,
 frame_index: u64,
+matrices: SceneMatricesUbo,
 
 pub fn init(allocator: Allocator, gc: *GraphicsContext, frame_count: u64, render_pass: vk.RenderPass) !*Self {
     var self = try allocator.create(Self);
@@ -214,7 +215,14 @@ pub fn deinit(self: *Self) void {
     self.allocator.destroy(self);
 }
 
+pub fn updateCameraData(self: *Self, matrices: *const SceneMatricesUbo) !void {
+    self.matrices = matrices.*;
+    const frame = &self.frame_data[self.frame_index];
+    try self.gc.uploadBufferData(frame.scene_matrices_ubo, std.mem.asBytes(matrices));
+}
+
 pub fn beginRender(self: *Self, cmdbuf: vk.CommandBuffer, frame_index: u64, matrices: *SceneMatricesUbo) !void {
+    self.matrices = matrices.*;
     self.cmdbuf = cmdbuf;
     self.frame_index = frame_index;
 

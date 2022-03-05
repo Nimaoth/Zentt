@@ -1221,22 +1221,22 @@ pub const Color = extern struct {
     pub const init = raw.ImColor_ImColor;
 
     /// initIntExt(self: *Color, r: i32, g: i32, b: i32, a: i32) void
-    pub const initIntExt = raw.ImColor_ImColorInt;
+    pub const initIntExt = raw.ImColor_ImColor_Int;
     pub inline fn initInt(self: *Color, r: i32, g: i32, b: i32) void {
         return initIntExt(self, r, g, b, 255);
     }
 
     /// initU32(self: *Color, rgba: u32) void
-    pub const initU32 = raw.ImColor_ImColorU32;
+    pub const initU32 = raw.ImColor_ImColor_U32;
 
     /// initFloatExt(self: *Color, r: f32, g: f32, b: f32, a: f32) void
-    pub const initFloatExt = raw.ImColor_ImColorFloat;
+    pub const initFloatExt = raw.ImColor_ImColor_Float;
     pub inline fn initFloat(self: *Color, r: f32, g: f32, b: f32) void {
         return initFloatExt(self, r, g, b, 1.0);
     }
 
     /// initVec4(self: *Color, col: Vec4) void
-    pub const initVec4 = raw.ImColor_ImColorVec4;
+    pub const initVec4 = raw.ImColor_ImColor_Vec4;
 
     /// SetHSVExt(self: *Color, h: f32, s: f32, v: f32, a: f32) void
     pub const SetHSVExt = raw.ImColor_SetHSV;
@@ -2341,6 +2341,10 @@ pub const Vec2 = extern struct {
 
     pub fn plus(self: Self, other: Self) Self {
         return .{ .x = self.x + other.x, .y = self.y + other.y };
+    }
+
+    pub fn minus(self: Self, other: Self) Self {
+        return .{ .x = self.x - other.x, .y = self.y - other.y };
     }
 
     pub fn mul(self: *Self, other: Self) *Self {
@@ -3873,7 +3877,10 @@ pub inline fn DragFloat2(label: ?[*:0]const u8, v: *[2]f32) bool {
 }
 
 /// DragFloat3Ext(label: ?[*:0]const u8, v: *[3]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool
-pub const DragFloat3Ext = raw.igDragFloat3;
+pub inline fn DragFloat3Ext(label: ?[*:0]const u8, v: *[3]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool {
+    return raw.igDragFloat3(label, v, v_speed, v_min, v_max, format, flags.toInt());
+}
+
 pub inline fn DragFloat3(label: ?[*:0]const u8, v: *[3]f32) bool {
     return DragFloat3Ext(label, v, 1.0, 0.0, 0.0, "%.3f", SliderFlags.None.toInt());
 }
@@ -5157,10 +5164,10 @@ pub const TableHeader = raw.igTableHeader;
 pub const raw = struct {
     pub extern fn ImColor_HSV(pOut: *Color, self: *Color, h: f32, s: f32, v: f32, a: f32) callconv(.C) void;
     pub extern fn ImColor_ImColor(self: *Color) callconv(.C) void;
-    pub extern fn ImColor_ImColorInt(self: *Color, r: i32, g: i32, b: i32, a: i32) callconv(.C) void;
-    pub extern fn ImColor_ImColorU32(self: *Color, rgba: u32) callconv(.C) void;
-    pub extern fn ImColor_ImColorFloat(self: *Color, r: f32, g: f32, b: f32, a: f32) callconv(.C) void;
-    pub extern fn ImColor_ImColorVec4(self: *Color, col: Vec4) callconv(.C) void;
+    pub extern fn ImColor_ImColor_Int(self: *Color, r: i32, g: i32, b: i32, a: i32) callconv(.C) void;
+    pub extern fn ImColor_ImColor_U32(self: *Color, rgba: u32) callconv(.C) void;
+    pub extern fn ImColor_ImColor_Float(self: *Color, r: f32, g: f32, b: f32, a: f32) callconv(.C) void;
+    pub extern fn ImColor_ImColor_Vec4(self: *Color, col: Vec4) callconv(.C) void;
     pub extern fn ImColor_SetHSV(self: *Color, h: f32, s: f32, v: f32, a: f32) callconv(.C) void;
     pub extern fn ImColor_destroy(self: *Color) callconv(.C) void;
     pub extern fn ImDrawCmd_ImDrawCmd(self: *DrawCmd) callconv(.C) void;

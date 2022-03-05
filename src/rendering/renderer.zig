@@ -61,6 +61,9 @@ sceneImages: []SceneImage,
 /// Render pass which renders to the image in `sceneImages`.
 sceneRenderPass: vk.RenderPass,
 
+/// Extent of the currently rendered scene images (so size of viewport basically).
+current_scene_extent: vk.Extent2D,
+
 pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) !*Self {
     var self = try allocator.create(Self);
     errdefer allocator.destroy(self);
@@ -160,6 +163,8 @@ pub fn beginSceneRender(
     self: *Self,
     sceneExtent: vk.Extent2D,
 ) !CurrentFrame {
+    self.current_scene_extent = sceneExtent;
+
     const cmdbuf = self.getCommandBuffer();
     try self.gc.vkd.beginCommandBuffer(cmdbuf, &.{
         .flags = .{ .one_time_submit_bit = true },

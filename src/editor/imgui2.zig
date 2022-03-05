@@ -325,6 +325,46 @@ pub fn any(value: anytype, name: []const u8, options: anytype) void {
         return;
     }
 
+    if (ValueType == zal.Vec3) {
+        property(name);
+        const as_color = getOr(options, .color, false);
+        if (as_color) {
+            const flags = getOr(options, .flags, imgui.ColorEditFlags{});
+            var as_array = value.toArray();
+            if (imgui.ColorEdit3Ext("", &as_array, flags)) {
+                value.* = zal.Vec3.fromSlice(as_array[0..]);
+            }
+        } else {
+            const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+            const min = getOr(options, .min, @floatCast(f32, 0.0));
+            const max = getOr(options, .max, @floatCast(f32, 0.0));
+
+            var as_array = value.toArray();
+            if (imgui.DragFloat3Ext("", &as_array, speed, min, max, "%.3f", .{})) {
+                value.* = zal.Vec3.fromSlice(as_array[0..]);
+            }
+        }
+        return;
+    }
+
+    if (ValueType == imgui.Vec4) {
+        property(name);
+        const as_color = getOr(options, .color, false);
+        if (as_color) {
+            const flags = getOr(options, .flags, imgui.ColorEditFlags{});
+            var as_array = @ptrCast(*[4]f32, value);
+            _ = imgui.ColorEdit4Ext("", as_array, flags);
+        } else {
+            const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+            const min = getOr(options, .min, @floatCast(f32, 0.0));
+            const max = getOr(options, .max, @floatCast(f32, 0.0));
+
+            var as_array = @ptrCast(*[4]f32, value);
+            _ = imgui.DragFloat4Ext("", as_array, speed, min, max, "%.3f", .{});
+        }
+        return;
+    }
+
     const typeInfo = @typeInfo(ValueType);
     switch (typeInfo) {
         .Int => |ti| {
@@ -349,7 +389,11 @@ pub fn any(value: anytype, name: []const u8, options: anytype) void {
             };
 
             property(name);
-            _ = imgui.DragScalarExt("", dataType, value, 1, null, null, null, (imgui.SliderFlags{ .NoRoundToFormat = true, .AlwaysClamp = true }).toInt());
+
+            const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+            const min = getOrPtrNull(ValueType, &options, .min);
+            const max = getOrPtrNull(ValueType, &options, .max);
+            _ = imgui.DragScalarExt("", dataType, value, speed, min, max, null, (imgui.SliderFlags{ .NoRoundToFormat = true, .AlwaysClamp = true }).toInt());
         },
 
         .Float => |ti| {

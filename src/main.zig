@@ -38,6 +38,10 @@ pub const RenderComponent = struct {
     texture: *AssetDB.TextureAsset,
 };
 
+pub const CameraComponent = struct {
+    size: f32,
+};
+
 pub fn moveSystemPlayer(
     profiler: *Profiler,
     time: *const Time,
@@ -47,30 +51,36 @@ pub fn moveSystemPlayer(
     const scope = profiler.beginScope("moveSystemPlayer");
     defer scope.end();
 
-    _ = zal.toRadians(5.0);
-
     var maxSpeed = std.math.clamp(imgui2.variable(moveSystemPlayer, f32, "Player Max Speed", 150, true, .{}).*, 0, 100000);
     var acceleration = imgui2.variable(moveSystemPlayer, f32, "Player Acc", 1300, true, .{}).*;
+
+    const delta = @floatCast(f32, time.delta);
 
     var iter = query.iter();
     while (iter.next()) |entity| {
         var dir = Vec2{};
         if (input.left) dir.x -= 1;
         if (input.right) dir.x += 1;
-        if (input.up) dir.y -= 1;
-        if (input.down) dir.y += 1;
+        if (input.up) dir.y += 1;
+        if (input.down) dir.y -= 1;
+
+        var acc = Vec2{};
 
         if (dir.lenSq() == 0) {
-            dir = entity.TransformComponent.vel.timess(-1);
+            // No input, deccelerate.
+            const speed = entity.TransformComponent.vel.len();
+            acc = entity.TransformComponent.vel.normalized().timess(-std.math.min(acceleration, 0.9 * speed / delta));
+        } else {
+            acc = dir.normalized().timess(acceleration);
         }
-        _ = dir.normalize();
-        _ = entity.TransformComponent.vel.add(dir.timess(acceleration * @floatCast(f32, time.delta)));
+
+        _ = entity.TransformComponent.vel.add(acc.timess(delta));
 
         const len = entity.TransformComponent.vel.len();
         _ = entity.TransformComponent.vel.normalize();
         _ = entity.TransformComponent.vel.muls(std.math.clamp(len, 0, maxSpeed));
 
-        _ = entity.TransformComponent.position.add(entity.TransformComponent.vel.timess(@floatCast(f32, time.delta)));
+        _ = entity.TransformComponent.position.add(entity.TransformComponent.vel.timess(delta));
     }
 }
 
@@ -131,15 +141,11 @@ pub fn moveSystemQuad(
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                    // .addComponent(RenderComponent{ .texture = entity.RenderComponent.texture });
                         .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
-                    // .addComponent(RenderComponent{});
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                    // .addComponent(RenderComponent{ .texture = entity.RenderComponent.texture });
                         .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
-                    // .addComponent(RenderComponent{});
                 } else {
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
@@ -155,19 +161,40 @@ pub fn moveSystemQuad(
     try profiler.record("moveSystemEntities", @intToFloat(f64, i));
 }
 
-pub fn spriteRenderSystem(profiler: *Profiler, renderer: *SpriteRenderer, query: Query(.{ TransformComponent, RenderComponent })) !void {
+pub fn spriteRenderSystem(
+    profiler: *Profiler,
+    renderer: *Renderer,
+    sprite_renderer: *SpriteRenderer,
+    cameras: Query(.{ TransformComponent, CameraComponent }),
+    query: Query(.{ TransformComponent, RenderComponent }),
+) !void {
     const scope = profiler.beginScope("spriteRenderSystem");
     defer scope.end();
+
+    if (cameras.iter().next()) |camera| {
+        const height = std.math.max(camera.CameraComponent.size, 1);
+        const aspect_ratio = @intToFloat(f32, renderer.current_scene_extent.width) / @intToFloat(f32, renderer.current_scene_extent.height);
+
+        const matrices = SpriteRenderer.SceneMatricesUbo{
+            // x needs to be flipped because the view matrix is the inverse of the camera transform
+            // y needs to not be flipped because in vulkan y is flipped.
+            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.TransformComponent.position.x, camera.TransformComponent.position.y, 0 })).transpose(),
+            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1),
+        };
+        try sprite_renderer.updateCameraData(&matrices);
+    } else {
+        std.log.warn("spriteRenderSystem: No camera found", .{});
+    }
 
     var iter = query.iter();
     while (iter.next()) |entity| {
         const position = entity.TransformComponent.position;
         const size = entity.TransformComponent.size;
 
-        renderer.drawSprite(zal.Vec4.new(position.x, position.y, size.x, size.y), entity.RenderComponent.texture);
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, size.x, size.y), entity.RenderComponent.texture);
     }
 
-    const descriptor_set_count = renderer.frame_data[renderer.frame_index].image_descriptor_sets.count();
+    const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
 
     try profiler.record("Descriptor sets per frame", @intToFloat(f64, descriptor_set_count));
 }
@@ -228,8 +255,8 @@ pub fn main() !void {
     const player = (try commands.createEntity())
         .addComponent(Player{})
         .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = .{ .x = 50, .y = 50 } })
-    // .addComponent(RenderComponent{});
-        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
+        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") })
+        .addComponent(CameraComponent{ .size = 300 });
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
     _ = player;
 
@@ -239,6 +266,7 @@ pub fn main() !void {
     try details.registerDefaultComponent(Player{});
     try details.registerDefaultComponent(TransformComponent{});
     try details.registerDefaultComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
+    try details.registerDefaultComponent(CameraComponent{ .size = 300 });
 
     var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
 
@@ -396,6 +424,63 @@ pub fn main() !void {
                 std.log.err("Failed to run render systems: {}", .{err});
             };
             try app.endRender();
+        }
+
+        {
+            const open = imgui.Begin("Viewport");
+            defer imgui.End();
+
+            if (open) {
+                const canvas_p0 = imgui.GetWindowContentRegionMin().plus(imgui.GetWindowPos()); // ImDrawList API uses screen coordinates!
+                var canvas_sz = imgui.GetWindowContentRegionMax().minus(imgui.GetWindowContentRegionMin()); // Resize canvas to what's available
+                if (canvas_sz.x < 50) canvas_sz.x = 50;
+                if (canvas_sz.y < 50) canvas_sz.y = 50;
+                const canvas_p1 = Vec2{ .x = canvas_p0.x + canvas_sz.x, .y = canvas_p0.y + canvas_sz.y };
+
+                const aspectRatio = canvas_sz.x / canvas_sz.y;
+                _ = aspectRatio;
+
+                var drawList = imgui.GetWindowDrawList() orelse return;
+                drawList.PushClipRect(canvas_p0, canvas_p1);
+                defer drawList.PopClipRect();
+
+                if (world.entities.get(selectedEntity)) |entity| {
+                    if (try world.getComponent(entity.id, TransformComponent)) |transform| {
+                        const position = transform.position;
+                        const size = transform.size.timess(0.5);
+
+                        // Transform positions into screen space
+                        const view = app.sprite_renderer.matrices.view.transpose();
+                        const proj = app.sprite_renderer.matrices.proj;
+                        const screen = zal.Mat4.orthographic(canvas_p0.x, canvas_p1.x, canvas_p0.y, canvas_p1.y, 1, -1).inv(); // Flip y
+
+                        const p0_world = zal.Vec3.new(position.x - size.x, -position.y - size.y, 0); // Invert y
+                        const p1_world = zal.Vec3.new(position.x + size.x, -position.y + size.y, 0); // Invert y
+                        const p0_view = view.mulByVec3(p0_world, 1);
+                        const p1_view = view.mulByVec3(p1_world, 1);
+                        const p0_clip = proj.mulByVec3(p0_view, 1);
+                        const p1_clip = proj.mulByVec3(p1_view, 1);
+                        const p0_screen = screen.mulByVec3(p0_clip, 1);
+                        const p1_screen = screen.mulByVec3(p1_clip, 1);
+
+                        const p0 = Vec2{ .x = p0_screen.x(), .y = p0_screen.y() };
+                        const p1 = Vec2{ .x = p1_screen.x(), .y = p1_screen.y() };
+
+                        const color = imgui.ColorConvertFloat4ToU32(imgui2.variable(main, imgui.Vec4, "Selection Color", .{ .x = 1, .y = 0.5, .z = 0.15, .w = 1 }, true, .{ .color = true }).*);
+                        const thickness = imgui2.variable(main, u64, "Selection Thickness", 3, true, .{ .min = 2 }).*;
+
+                        var i: u64 = 0;
+                        while (i < thickness) : (i += 1) {
+                            const f = @intToFloat(f32, i);
+                            drawList.AddRect(
+                                p0.minus(.{ .x = f, .y = f }),
+                                p1.plus(.{ .x = f, .y = f }),
+                                if (i == 0) 0xff000000 else color,
+                            );
+                        }
+                    }
+                }
+            }
         }
 
         {
