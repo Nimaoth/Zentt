@@ -327,12 +327,12 @@ pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !Entity
         const componentId: u64 = try self.getComponentId(@TypeOf(component));
         var newComponents = BitSet.initEmpty();
         newComponents.set(componentId);
-        var newArchetype = try oldEntity.chunk.table.archetype.addComponents(rtti.hash, newComponents);
+        var newArchetype = oldEntity.chunk.table.archetype.addComponents(rtti.hash, newComponents);
 
         var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
 
         // copy existing entity to new table
-        var newEntity = try newTable.copyEntityInto(oldEntity, component);
+        var newEntity = try newTable.copyEntityWithComponentInto(oldEntity, component);
 
         // Update entities map
         try self.entities.put(newEntity.id, newEntity);
@@ -355,12 +355,12 @@ pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.Type
         const componentId: u64 = try self.getComponentIdForRtti(componentType);
         var newComponents = BitSet.initEmpty();
         newComponents.set(componentId);
-        var newArchetype = try oldEntity.chunk.table.archetype.addComponents(componentType.typeInfo.hash, newComponents);
+        var newArchetype = oldEntity.chunk.table.archetype.addComponents(componentType.typeInfo.hash, newComponents);
 
         var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
 
         // copy existing entity to new table
-        var newEntity = try newTable.copyEntityIntoRaw(oldEntity, componentType, componentData);
+        var newEntity = try newTable.copyEntityWithComponentIntoRaw(oldEntity, componentType, componentData);
 
         // Update entities map
         try self.entities.put(newEntity.id, newEntity);
@@ -378,11 +378,32 @@ pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.Type
     }
 }
 
-pub fn removeComponent(self: *const Self, entityId: EntityId, componentType: Rtti.TypeId) !void {
-    _ = self;
-    _ = entityId;
-    _ = componentType;
-    // @todo
+pub fn removeComponent(self: *Self, entityId: EntityId, componentType: Rtti.TypeId) !Entity {
+    if (self.entities.get(entityId)) |oldEntity| {
+        const componentId: u64 = try self.getComponentIdForRtti(componentType);
+        var componentIds = BitSet.initEmpty();
+        componentIds.set(componentId);
+        var newArchetype = oldEntity.chunk.table.archetype.removeComponents(componentType.typeInfo.hash, componentIds);
+
+        var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
+
+        // copy existing entity to new table
+        var newEntity = try newTable.copyEntityIntoRaw(oldEntity);
+
+        // Update entities map
+        try self.entities.put(newEntity.id, newEntity);
+
+        // Remove old entity
+        if (oldEntity.chunk.table.removeEntity(oldEntity)) |update| {
+            // Another entity moved while removing oldEntity, so update the index.
+            var entity = self.entities.getEntry(update.entityId) orelse unreachable;
+            entity.value_ptr.index = update.newIndex;
+        }
+
+        return newEntity;
+    } else {
+        return error.InvalidEntity;
+    }
 }
 
 pub fn getComponentType(self: *const Self, componentId: ComponentId) ?Rtti.TypeId {
@@ -401,10 +422,20 @@ pub fn getComponent(self: *Self, entityId: EntityId, comptime ComponentType: typ
         }
 
         // Component exists on this entity.
-        const componentIndex = entity.chunk.table.getListIndexForType(Rtti.typeId(ComponentType));
+        const componentIndex = entity.chunk.table.getListIndexForType(Rtti.typeId(ComponentType)) orelse unreachable;
         const rawData = entity.chunk.getComponentRaw(componentIndex, entity.index);
         std.debug.assert(rawData.len == @sizeOf(ComponentType));
         return @ptrCast(*ComponentType, @alignCast(@alignOf(ComponentType), rawData.ptr));
+    } else {
+        return error.InvalidEntity;
+    }
+}
+
+pub fn hasComponent(self: *Self, entityId: EntityId, componentType: Rtti.TypeId) !bool {
+    if (self.entities.get(entityId)) |entity| {
+        // Check if entity has the specified component.
+        const componentId = try self.getComponentIdForRtti(componentType);
+        return entity.chunk.table.archetype.components.isSet(componentId);
     } else {
         return error.InvalidEntity;
     }
@@ -461,12 +492,12 @@ fn createArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable {
     var tableIter = self.archetypeTables.valueIterator();
     while (tableIter.next()) |otherTable| {
         if (table.archetype.components.isSubSetOf(otherTable.*.archetype.components)) {
-            try table.subsets.put(otherTable.*.archetype.components.subtract(table.archetype.components), otherTable.*);
-            try otherTable.*.supersets.put(otherTable.*.archetype.components.subtract(table.archetype.components), table);
+            try table.subsets.put(otherTable.*.archetype.components.without(table.archetype.components), otherTable.*);
+            try otherTable.*.supersets.put(otherTable.*.archetype.components.without(table.archetype.components), table);
         }
         if (table.archetype.components.isSuperSetOf(otherTable.*.archetype.components)) {
-            try table.supersets.put(table.archetype.components.subtract(otherTable.*.archetype.components), otherTable.*);
-            try otherTable.*.subsets.put(table.archetype.components.subtract(otherTable.*.archetype.components), table);
+            try table.supersets.put(table.archetype.components.without(otherTable.*.archetype.components), otherTable.*);
+            try otherTable.*.subsets.put(table.archetype.components.without(otherTable.*.archetype.components), table);
         }
     }
 

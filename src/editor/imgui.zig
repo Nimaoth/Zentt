@@ -4662,7 +4662,7 @@ pub fn PushIDInt64(id: u64) void {
 }
 
 /// PushIDInt(int_id: i32) void
-pub const PushIDInt = raw.igPushIDInt;
+pub const PushIDInt = raw.igPushID_Int;
 
 /// PushItemWidth(item_width: f32) void
 pub const PushItemWidth = raw.igPushItemWidth;
@@ -6145,7 +6145,7 @@ pub const raw = struct {
     pub extern fn igPushIDStr(str_id: ?[*:0]const u8) callconv(.C) void;
     pub extern fn igPushIDRange(str_id_begin: ?[*]const u8, str_id_end: ?[*]const u8) callconv(.C) void;
     pub extern fn igPushID_Ptr(ptr_id: ?*const anyopaque) callconv(.C) void;
-    pub extern fn igPushIDInt(int_id: i32) callconv(.C) void;
+    pub extern fn igPushID_Int(int_id: i32) callconv(.C) void;
     pub extern fn igPushItemWidth(item_width: f32) callconv(.C) void;
     pub extern fn igPushStyleColorU32(idx: Col, col: u32) callconv(.C) void;
     pub extern fn igPushStyleColorVec4(idx: Col, col: Vec4) callconv(.C) void;

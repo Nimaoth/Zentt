@@ -22,10 +22,16 @@ pub fn clone(self: *const Self) !Self {
     return Self.init(self.world, self.hash, self.components);
 }
 
-pub fn addComponents(self: *const Self, newHash: u64, components: BitSet) !Self {
+pub fn addComponents(self: *const Self, hash: u64, components: BitSet) Self {
     var newComponents = self.components;
     newComponents.setUnion(components);
-    return Self.init(self.world, self.hash ^ newHash, newComponents);
+    return Self.init(self.world, self.hash ^ hash, newComponents);
+}
+
+pub fn removeComponents(self: *const Self, hash: u64, components: BitSet) Self {
+    var newComponents = self.components;
+    newComponents.subtract(components);
+    return Self.init(self.world, self.hash ^ hash, newComponents);
 }
 
 pub const Context = struct {

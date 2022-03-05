@@ -19,6 +19,12 @@ const TempEntityId = struct {
             return self;
         return self.commands.?.addComponent(self, component) catch return .{};
     }
+
+    pub fn removeComponentRaw(self: TempEntityId, componentType: Rtti.TypeId) TempEntityId {
+        if (self.commands == null)
+            return self;
+        return self.commands.?.removeComponentRaw(self, componentType) catch return .{};
+    }
 };
 
 const Commands = union(enum) {
@@ -31,7 +37,7 @@ const Commands = union(enum) {
         componentDataLen: usize,
     },
     RemoveComponent: struct {
-        entityId: EntityId,
+        index: usize,
         componentType: Rtti.TypeId,
     },
 };
@@ -77,22 +83,31 @@ pub fn destroyEntity(self: *Self, entityId: EntityId) !void {
 }
 
 pub fn addComponent(self: *Self, entity: TempEntityId, component: anytype) !TempEntityId {
+    return self.addComponentRaw(entity, Rtti.typeId(@TypeOf(component)), std.mem.asBytes(&component));
+}
+
+pub fn addComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti.TypeId, data: []const u8) !TempEntityId {
     const dataStartIndex = self.componentData.items.len;
-    try self.componentData.appendSlice(std.mem.asBytes(&component));
+    try self.componentData.appendSlice(data);
     try self.commands.append(.{ .AddComponent = .{
         .index = entity.index,
-        .componentType = Rtti.typeId(@TypeOf(component)),
+        .componentType = componentType,
         .componentDataIndex = dataStartIndex,
-        .componentDataLen = @sizeOf(@TypeOf(component)),
+        .componentDataLen = data.len,
     } });
     return entity;
 }
 
-pub fn removeComponent(self: *Self, entityId: EntityId, comptime ComponentType: type) !void {
+pub fn removeComponent(self: *Self, entity: TempEntityId, comptime ComponentType: type) !TempEntityId {
+    return try self.removeComponentRaw(entity, Rtti.typeId(ComponentType));
+}
+
+pub fn removeComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti.TypeId) !TempEntityId {
     try self.commands.append(.{ .RemoveComponent = .{
-        .entityId = entityId,
-        .componentType = Rtti.init(ComponentType),
+        .index = entity.index,
+        .componentType = componentType,
     } });
+    return entity;
 }
 
 pub fn applyCommands(self: *Self, world: *World, maxCommands: u64) !u64 {
@@ -124,7 +139,8 @@ pub fn applyCommands(self: *Self, world: *World, maxCommands: u64) !u64 {
             },
 
             .RemoveComponent => |data| {
-                try world.removeComponent(data.entityId, data.componentType);
+                const entityId = self.entityIdMap.items[data.index];
+                _ = try world.removeComponent(entityId, data.componentType);
             },
         }
     }

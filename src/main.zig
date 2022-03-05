@@ -234,6 +234,12 @@ pub fn main() !void {
     _ = player;
 
     var details = Details.init(allocator);
+    defer details.deinit();
+    try details.registerDefaultComponent(Quad{});
+    try details.registerDefaultComponent(Player{});
+    try details.registerDefaultComponent(TransformComponent{});
+    try details.registerDefaultComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
+
     var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
 
     var chunkDebugger = ChunkDebugger.init(allocator);

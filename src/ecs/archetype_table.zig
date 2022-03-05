@@ -41,8 +41,8 @@ pub fn deinit(self: *Self) void {
     self.subsets.deinit();
 }
 
-pub fn getListIndexForType(self: *const Self, rtti: Rtti.TypeId) u64 {
-    return self.typeToList.get(rtti) orelse unreachable;
+pub fn getListIndexForType(self: *const Self, rtti: Rtti.TypeId) ?u64 {
+    return self.typeToList.get(rtti);
 }
 
 // pub fn getTyped(self: *Self, comptime Components: anytype) getType(Components) {
@@ -94,14 +94,14 @@ pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
     const typeInfo = @typeInfo(@TypeOf(components)).Struct;
     inline for (typeInfo.fields) |field| {
         const componentType = Rtti.typeId(field.field_type);
-        const index = self.getListIndexForType(componentType);
+        const index = self.getListIndexForType(componentType) orelse unreachable;
         try entity.chunk.setComponentRaw(index, entity.index, std.mem.asBytes(&@field(components, field.name)));
     }
 
     return entity;
 }
 
-pub fn copyEntityIntoRaw(self: *Self, entity: Entity, componentType: Rtti.TypeId, componentData: []const u8) !Entity {
+pub fn copyEntityWithComponentIntoRaw(self: *Self, entity: Entity, componentType: Rtti.TypeId, componentData: []const u8) !Entity {
     // @todo: check if the provided components match the archetype
     // Add entity
     const newEntity: Entity = try self.firstChunk.addEntity(entity.id);
@@ -109,20 +109,36 @@ pub fn copyEntityIntoRaw(self: *Self, entity: Entity, componentType: Rtti.TypeId
     // Add new component
     std.debug.assert(self.typeToList.count() == newEntity.chunk.components.len);
     if (componentType.typeInfo.size > 0) {
-        try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType), newEntity.index, componentData);
+        try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType) orelse unreachable, newEntity.index, componentData);
     }
 
     // Copy existing components
     for (entity.chunk.components) |*componentList| {
         var oldData = componentList.getRaw(entity.index);
-        const newComponentIndex = newEntity.chunk.table.getListIndexForType(componentList.componentType);
+        const newComponentIndex = self.getListIndexForType(componentList.componentType) orelse unreachable;
         try newEntity.chunk.setComponentRaw(newComponentIndex, newEntity.index, oldData);
     }
 
     return newEntity;
 }
 
-pub fn copyEntityInto(self: *Self, entity: Entity, newComponent: anytype) !Entity {
+pub fn copyEntityIntoRaw(self: *Self, entity: Entity) !Entity {
+    // @todo: check if the provided components match the archetype
+    // Add entity
+    const new_entity: Entity = try self.firstChunk.addEntity(entity.id);
+
+    // Copy existing components
+    for (entity.chunk.components) |*component_list| {
+        if (self.getListIndexForType(component_list.componentType)) |index| {
+            var old_data = component_list.getRaw(entity.index);
+            try new_entity.chunk.setComponentRaw(index, new_entity.index, old_data);
+        }
+    }
+
+    return new_entity;
+}
+
+pub fn copyEntityWithComponentInto(self: *Self, entity: Entity, newComponent: anytype) !Entity {
     // @todo: check if the provided components match the archetype
 
     const ComponentType = @TypeOf(newComponent);
@@ -134,13 +150,13 @@ pub fn copyEntityInto(self: *Self, entity: Entity, newComponent: anytype) !Entit
     const componentType = Rtti.typeId(ComponentType);
     std.debug.assert(self.typeToList.count() == newEntity.chunk.components.len);
     if (componentType.size > 0) {
-        try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType), newEntity.index, std.mem.asBytes(&newComponent));
+        try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType), newEntity.index, std.mem.asBytes(&newComponent)) orelse unreachable;
     }
 
     // Copy existing components
     for (entity.chunk.components) |*componentList| {
         var oldData = componentList.getRaw(entity.index);
-        const newComponentIndex = newEntity.chunk.table.getListIndexForType(componentList.componentType);
+        const newComponentIndex = newEntity.chunk.table.getListIndexForType(componentList.componentType) orelse unreachable;
         try newEntity.chunk.setComponentRaw(newComponentIndex, newEntity.index, oldData);
     }
 

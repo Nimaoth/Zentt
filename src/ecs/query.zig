@@ -41,7 +41,7 @@ pub fn Query(comptime Components: anytype) type {
             inline for (typeInfo.fields) |field, index| {
                 const ComponentType = field.default_value orelse unreachable;
                 if (@sizeOf(ComponentType) > 0) {
-                    self.componentIndexMap[index] = table.getListIndexForType(Rtti.typeId(ComponentType));
+                    self.componentIndexMap[index] = table.getListIndexForType(Rtti.typeId(ComponentType)) orelse unreachable;
                 } else {
                     self.componentIndexMap[index] = 0;
                 }

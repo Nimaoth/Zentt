@@ -33,6 +33,9 @@ capacity: u64,
 count: u64 = 0,
 
 entityIds: []EntityId,
+
+/// Contains data about non zero sized components.
+/// To get all components you have to go through table.archetype.components
 components: []Components,
 
 table: *ArchetypeTable,

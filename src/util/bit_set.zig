@@ -29,6 +29,18 @@ pub fn setIntersection(self: *Self, other: Self) void {
     self.bitSet.setIntersection(other.bitSet);
 }
 
+pub fn subtract(self: *Self, other: Self) void {
+    var otherInverse = other;
+    otherInverse.bitSet.toggleAll();
+    self.setIntersection(otherInverse);
+}
+
+pub fn without(self: Self, other: Self) Self {
+    var result = self;
+    result.subtract(other);
+    return result;
+}
+
 pub fn isSubSetOf(self: *const Self, other: Self) bool {
     var sum = self.*;
     sum.setUnion(other);
@@ -39,14 +51,6 @@ pub fn isSuperSetOf(self: *const Self, other: Self) bool {
     var sum = self.*;
     sum.setUnion(other);
     return std.meta.eql(sum, self.*);
-}
-
-pub fn subtract(self: *const Self, other: Self) Self {
-    var diff = self.*;
-    var otherInverse = other;
-    otherInverse.bitSet.toggleAll();
-    diff.setIntersection(otherInverse);
-    return diff;
 }
 
 pub fn iterator(self: *const Self) @TypeOf(Impl.initEmpty().iterator(.{})) {
