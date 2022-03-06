@@ -528,6 +528,8 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
     else
         2;
 
+    const enabled_features = vk.PhysicalDeviceFeatures{ .independent_blend = vk.TRUE };
+
     return try vki.createDevice(candidate.pdev, &.{
         .flags = .{},
         .queue_create_info_count = queue_count,
@@ -536,7 +538,7 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
         .pp_enabled_layer_names = undefined,
         .enabled_extension_count = required_device_extensions.len,
         .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &required_device_extensions),
-        .p_enabled_features = null,
+        .p_enabled_features = &enabled_features,
     }, null);
 }
 
