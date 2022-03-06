@@ -245,6 +245,10 @@ pub fn main() !void {
     defer assetdb.deinit();
 
     try assetdb.loadTexturePack("assets/img/characters.json", .{ .filter = .nearest });
+    try assetdb.loadTexturePack("assets/img/enemies.json", .{ .filter = .nearest });
+    try assetdb.loadTexturePack("assets/img/items.json", .{ .filter = .nearest });
+    try assetdb.loadTexturePack("assets/img/vfx.json", .{ .filter = .nearest });
+    try assetdb.loadTexturePack("assets/img/UI.json", .{ .filter = .nearest });
 
     var profiler = &app.profiler;
     try world.addResourcePtr(profiler);

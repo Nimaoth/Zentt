@@ -142,6 +142,7 @@ const TexturePackJson = struct {
 
 pub fn loadTexturePack(self: *Self, json_path: [:0]const u8, options: TextureOptions) !void {
     const json_text = try std.fs.cwd().readFileAlloc(self.allocator, json_path, std.math.maxInt(u64));
+    defer self.allocator.free(json_text);
     var token_stream = std.json.TokenStream.init(json_text);
     const parse_options = std.json.ParseOptions{ .allocator = self.allocator, .ignore_unknown_fields = true, .allow_trailing_data = true };
     const texture_pack_json: TexturePackJson = try std.json.parse(TexturePackJson, &token_stream, parse_options);
