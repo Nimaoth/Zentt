@@ -95,6 +95,7 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .cmdPushConstants = true,
     .cmdPipelineBarrier = true,
     .cmdCopyBufferToImage = true,
+    .cmdCopyImageToBuffer = true,
 });
 
 pub const Buffer = struct {
@@ -111,6 +112,7 @@ pub const Buffer = struct {
 pub const Image = struct {
     image: vk.Image,
     memory: vk.DeviceMemory,
+    extent: vk.Extent3D,
 
     pub fn deinit(self: *const @This(), gc: *GraphicsContext) void {
         gc.vkd.destroyImage(gc.dev, self.image, null);
@@ -295,13 +297,17 @@ pub const GraphicsContext = struct {
 
         try self.vkd.bindImageMemory(self.dev, image, memory, 0);
 
-        return Image{ .image = image, .memory = memory };
+        return Image{ .image = image, .memory = memory, .extent = .{ .width = width, .height = height, .depth = 1 } };
     }
 
-    pub fn transitionImageToLayout(self: *GraphicsContext, image: Image, format: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout) !void {
+    pub fn transitionImageToLayout(self: *GraphicsContext, image: Image, format: vk.Format, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout, existing_cmdbuf: ?vk.CommandBuffer) !void {
         _ = format;
 
-        const cmdbuf = try self.beginSingleTimeCommandBuffer();
+        var end_command_buffer = false;
+        const cmdbuf = if (existing_cmdbuf) |cmdbuf| cmdbuf else blk: {
+            end_command_buffer = true;
+            break :blk try self.beginSingleTimeCommandBuffer();
+        };
 
         var barrier = vk.ImageMemoryBarrier{
             .src_access_mask = .{},
@@ -333,6 +339,11 @@ pub const GraphicsContext = struct {
             barrier.dst_access_mask = .{ .shader_read_bit = true };
             src_stage = .{ .transfer_bit = true };
             dst_stage = .{ .fragment_shader_bit = true };
+        } else if (old_layout == .color_attachment_optimal and new_layout == .transfer_src_optimal) {
+            barrier.src_access_mask = .{ .color_attachment_write_bit = true };
+            barrier.dst_access_mask = .{ .transfer_read_bit = true };
+            src_stage = .{ .color_attachment_output_bit = true };
+            dst_stage = .{ .transfer_bit = true };
         } else {
             return error.UnsupportedTransition;
         }
@@ -350,7 +361,9 @@ pub const GraphicsContext = struct {
             @ptrCast([*]const vk.ImageMemoryBarrier, &barrier),
         );
 
-        try self.endSingleTimeCommandBuffer(cmdbuf);
+        if (end_command_buffer) {
+            try self.endSingleTimeCommandBuffer(cmdbuf);
+        }
     }
 
     pub fn copyBufferToImage(self: *GraphicsContext, buffer: Buffer, image: Image, width: u32, height: u32) !void {

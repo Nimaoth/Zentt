@@ -7,6 +7,7 @@ const sdl = @import("sdl.zig");
 
 const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
 const Image = @import("vulkan/graphics_context.zig").Image;
+const Buffer = @import("vulkan/graphics_context.zig").Buffer;
 const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
 
 const Self = @This();
@@ -17,10 +18,15 @@ pub const SceneImage = struct {
     descriptor: vk.DescriptorSet,
     framebuffer: vk.Framebuffer,
 
+    id_image: Image,
+    id_image_view: vk.ImageView,
+
     pub fn deinit(self: *const @This(), gc: *GraphicsContext) void {
         gc.vkd.destroyFramebuffer(gc.dev, self.framebuffer, null);
         gc.vkd.destroyImageView(gc.dev, self.image_view, null);
         self.image.deinit(gc);
+        gc.vkd.destroyImageView(gc.dev, self.id_image_view, null);
+        self.id_image.deinit(gc);
     }
 };
 
@@ -57,6 +63,9 @@ commandBuffers: []vk.CommandBuffer,
 /// These currently have a fixed size of 1980x1080, and we specify the area we render to every frame.
 /// Maybe it's better to recreate them aswell when the viewport size changes.
 sceneImages: []SceneImage,
+
+last_rendered_id_index: u64,
+id_staging_image: Buffer,
 
 /// Render pass which renders to the image in `sceneImages`.
 sceneRenderPass: vk.RenderPass,
@@ -104,7 +113,7 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
 
     // scene render pass
     const sceneExtent = vk.Extent2D{ .width = 1920, .height = 1080 };
-    self.sceneRenderPass = try createSceneRenderPass(&self.gc, self.swapchain.surface_format.format, .shader_read_only_optimal);
+    self.sceneRenderPass = try createSceneRenderPass(&self.gc, self.swapchain.surface_format.format);
     errdefer self.gc.vkd.destroyRenderPass(self.gc.dev, self.sceneRenderPass, null);
 
     self.mainImageSampler = try createMainImageSampler(&self.gc);
@@ -126,6 +135,14 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
     );
     errdefer destroySceneImages(&self.gc, allocator, self.sceneImages);
 
+    self.id_staging_image = try self.gc.createBuffer(
+        sceneExtent.width * sceneExtent.height * 4,
+        .{ .transfer_dst_bit = true },
+        .{ .host_visible_bit = true, .host_coherent_bit = true },
+    );
+    errdefer self.id_staging_image.deinit(&self.gc);
+    self.last_rendered_id_index = 0;
+
     return self;
 }
 
@@ -138,6 +155,7 @@ pub fn deinit(self: *Self) void {
     self.gc.vkd.destroySampler(self.gc.dev, self.mainImageSampler, null);
 
     // scene
+    self.id_staging_image.deinit(&self.gc);
     destroySceneImages(&self.gc, self.allocator, self.sceneImages);
 
     // main
@@ -156,6 +174,40 @@ pub fn getCommandBuffer(self: *const Self) vk.CommandBuffer {
 
 pub fn getSceneImage(self: *const Self) *SceneImage {
     return &self.sceneImages[self.swapchain.image_index];
+}
+
+pub fn getIdAt(self: *Self, x: usize, y: usize) !u64 {
+    const id_image = self.sceneImages[self.last_rendered_id_index].id_image;
+
+    const cmdbuf = try self.gc.beginSingleTimeCommandBuffer();
+
+    const regions = [_]vk.BufferImageCopy{.{
+        .buffer_offset = 0,
+        .buffer_row_length = id_image.extent.width,
+        .buffer_image_height = id_image.extent.height,
+        .image_subresource = .{
+            .aspect_mask = .{ .color_bit = true },
+            .mip_level = 0,
+            .base_array_layer = 0,
+            .layer_count = 1,
+        },
+        .image_offset = .{ .x = 0, .y = 0, .z = 0 },
+        .image_extent = id_image.extent,
+    }};
+    self.gc.vkd.cmdCopyImageToBuffer(cmdbuf, id_image.image, .transfer_src_optimal, self.id_staging_image.buffer, regions.len, @ptrCast([*]const vk.BufferImageCopy, &regions));
+
+    try self.gc.endSingleTimeCommandBuffer(cmdbuf);
+
+    //
+    const mem_raw = try self.gc.vkd.mapMemory(self.gc.dev, self.id_staging_image.memory, 0, vk.WHOLE_SIZE, .{});
+    const mem = @ptrCast([*]u8, mem_raw)[0 .. id_image.extent.width * id_image.extent.height * 4];
+    defer self.gc.vkd.unmapMemory(self.gc.dev, self.id_staging_image.memory);
+
+    const byte_index = (x + y * id_image.extent.width) * @sizeOf(u32);
+    var id: u32 = 0;
+    std.mem.copy(u8, std.mem.asBytes(&id), mem[byte_index .. byte_index + @sizeOf(u32)]);
+
+    return id;
 }
 
 const CurrentFrame = struct { cmdbuf: vk.CommandBuffer, frame_index: u64 };
@@ -193,15 +245,16 @@ pub fn beginSceneRender(
         .offset = .{ .x = 0, .y = 0 },
         .extent = sceneExtent,
     };
-    const clear = vk.ClearValue{
-        .color = .{ .float_32 = .{ 0.1, 0.1, 0.1, 1 } },
+    const clear = [_]vk.ClearValue{
+        .{ .color = .{ .float_32 = .{ 0.1, 0.1, 0.1, 1 } } },
+        .{ .color = .{ .uint_32 = .{ 0, 0, 0, 0 } } },
     };
 
     self.gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
         .render_pass = self.sceneRenderPass,
         .framebuffer = self.sceneImages[self.swapchain.image_index].framebuffer,
         .render_area = render_area,
-        .clear_value_count = 1,
+        .clear_value_count = clear.len,
         .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
     }, .@"inline");
 
@@ -270,6 +323,8 @@ pub fn endMainRender(self: *Self, newExtent: vk.Extent2D) !void {
     const cmdbuf = self.commandBuffers[self.swapchain.image_index];
     self.gc.vkd.cmdEndRenderPass(cmdbuf);
     try self.gc.vkd.endCommandBuffer(cmdbuf);
+
+    self.last_rendered_id_index = self.swapchain.image_index;
 
     const state = self.swapchain.present(cmdbuf) catch |err| switch (err) {
         error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -371,8 +426,28 @@ fn createSceneImage(
             .layer_count = 1,
         },
     }, null);
+    errdefer gc.vkd.destroyImageView(gc.dev, image_view, null);
 
-    const framebuffer = try createSceneFrameBuffer(gc, render_pass, image_view, extent);
+    const id_image = try gc.createImage(extent.width, extent.height, .r32_uint, .optimal, .{ .transfer_src_bit = true, .color_attachment_bit = true }, .{ .device_local_bit = true });
+    errdefer id_image.deinit(gc);
+
+    const id_image_view = try gc.vkd.createImageView(gc.dev, &.{
+        .flags = .{},
+        .image = id_image.image,
+        .view_type = .@"2d",
+        .format = .r32_uint,
+        .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+        .subresource_range = .{
+            .aspect_mask = .{ .color_bit = true },
+            .base_mip_level = 0,
+            .level_count = 1,
+            .base_array_layer = 0,
+            .layer_count = 1,
+        },
+    }, null);
+    errdefer gc.vkd.destroyImageView(gc.dev, id_image_view, null);
+
+    const framebuffer = try createSceneFrameBuffer(gc, render_pass, &.{ image_view, id_image_view }, extent);
     errdefer gc.vkd.destroyFramebuffer(gc.dev, framebuffer, null);
 
     const descriptor = try createSceneImageDescriptorSet(gc, image_view, descriptor_pool, descriptor_set_layout, sampler);
@@ -380,6 +455,8 @@ fn createSceneImage(
     return SceneImage{
         .image = image,
         .image_view = image_view,
+        .id_image = id_image,
+        .id_image_view = id_image_view,
         .descriptor = descriptor,
         .framebuffer = framebuffer,
     };
@@ -392,12 +469,12 @@ fn destroySceneImages(gc: *GraphicsContext, allocator: Allocator, images: []cons
     allocator.free(images);
 }
 
-fn createSceneFrameBuffer(gc: *GraphicsContext, render_pass: vk.RenderPass, image_view: vk.ImageView, extent: vk.Extent2D) !vk.Framebuffer {
+fn createSceneFrameBuffer(gc: *GraphicsContext, render_pass: vk.RenderPass, image_views: []const vk.ImageView, extent: vk.Extent2D) !vk.Framebuffer {
     return try gc.vkd.createFramebuffer(gc.dev, &.{
         .flags = .{},
         .render_pass = render_pass,
-        .attachment_count = 1,
-        .p_attachments = @ptrCast([*]const vk.ImageView, &image_view),
+        .attachment_count = @intCast(u32, image_views.len),
+        .p_attachments = @ptrCast([*]const vk.ImageView, image_views.ptr),
         .width = extent.width,
         .height = extent.height,
         .layers = 1,
@@ -499,22 +576,41 @@ fn destroyFramebuffers(gc: *GraphicsContext, allocator: Allocator, framebuffers:
     allocator.free(framebuffers);
 }
 
-fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format, finalImageLayout: vk.ImageLayout) !vk.RenderPass {
-    const color_attachment = vk.AttachmentDescription{
-        .flags = .{},
-        .format = format,
-        .samples = .{ .@"1_bit" = true },
-        .load_op = .clear,
-        .store_op = .store,
-        .stencil_load_op = .dont_care,
-        .stencil_store_op = .dont_care,
-        .initial_layout = .@"undefined",
-        .final_layout = finalImageLayout,
+fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format) !vk.RenderPass {
+    const color_attachments = [_]vk.AttachmentDescription{
+        .{
+            .flags = .{},
+            .format = format,
+            .samples = .{ .@"1_bit" = true },
+            .load_op = .clear,
+            .store_op = .store,
+            .stencil_load_op = .dont_care,
+            .stencil_store_op = .dont_care,
+            .initial_layout = .@"undefined",
+            .final_layout = .shader_read_only_optimal,
+        },
+        .{
+            .flags = .{},
+            .format = .r32_uint,
+            .samples = .{ .@"1_bit" = true },
+            .load_op = .clear,
+            .store_op = .store,
+            .stencil_load_op = .dont_care,
+            .stencil_store_op = .dont_care,
+            .initial_layout = .@"undefined",
+            .final_layout = .transfer_src_optimal,
+        },
     };
 
-    const color_attachment_ref = vk.AttachmentReference{
-        .attachment = 0,
-        .layout = .color_attachment_optimal,
+    const color_attachment_refs = [_]vk.AttachmentReference{
+        .{
+            .attachment = 0,
+            .layout = .color_attachment_optimal,
+        },
+        .{
+            .attachment = 1,
+            .layout = .color_attachment_optimal,
+        },
     };
 
     const subpass = vk.SubpassDescription{
@@ -522,8 +618,8 @@ fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format, finalImageLayo
         .pipeline_bind_point = .graphics,
         .input_attachment_count = 0,
         .p_input_attachments = undefined,
-        .color_attachment_count = 1,
-        .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_ref),
+        .color_attachment_count = color_attachment_refs.len,
+        .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_refs),
         .p_resolve_attachments = null,
         .p_depth_stencil_attachment = null,
         .preserve_attachment_count = 0,
@@ -542,8 +638,8 @@ fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format, finalImageLayo
 
     return try gc.vkd.createRenderPass(gc.dev, &.{
         .flags = .{},
-        .attachment_count = 1,
-        .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &color_attachment),
+        .attachment_count = color_attachments.len,
+        .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &color_attachments),
         .subpass_count = 1,
         .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
         .dependency_count = 1,

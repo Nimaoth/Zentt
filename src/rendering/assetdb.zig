@@ -73,9 +73,9 @@ pub fn getTextureByPath(self: *Self, asset_path: [:0]const u8) !*TextureAsset {
         const image = try self.gc.createImage(@intCast(u32, width), @intCast(u32, height), .b8g8r8a8_srgb, .optimal, .{ .sampled_bit = true, .transfer_dst_bit = true }, .{ .device_local_bit = true });
         errdefer image.deinit(self.gc);
 
-        try self.gc.transitionImageToLayout(image, format, .@"undefined", .transfer_dst_optimal);
+        try self.gc.transitionImageToLayout(image, format, .@"undefined", .transfer_dst_optimal, null);
         try self.gc.copyBufferToImage(buffer, image, @intCast(u32, width), @intCast(u32, height));
-        try self.gc.transitionImageToLayout(image, format, .transfer_dst_optimal, .shader_read_only_optimal);
+        try self.gc.transitionImageToLayout(image, format, .transfer_dst_optimal, .shader_read_only_optimal, null);
 
         const image_view = try self.gc.vkd.createImageView(self.gc.dev, &.{
             .flags = .{},

@@ -180,6 +180,11 @@ pub fn init(allocator: Allocator, gc: *GraphicsContext, frame_count: u64, render
             .offset = 0,
             .size = @sizeOf(f32) * 4,
         },
+        .{
+            .stage_flags = .{ .fragment_bit = true },
+            .offset = @sizeOf(f32) * 4,
+            .size = @sizeOf(u32),
+        },
     };
     self.quad_pipeline = try Pipeline.init(
         allocator,
@@ -253,7 +258,7 @@ pub fn endRender(self: *Self) void {
 
 /// Draw a quad at the specified transform.
 /// (X,Y) is the 2D position, (Z,W) is the 2D scale (scale of 1 means width and height are 1).
-pub fn drawSprite(self: *Self, transform: zal.Vec4, texture: *AssetDB.TextureAsset) void {
+pub fn drawSprite(self: *Self, transform: zal.Vec4, texture: *AssetDB.TextureAsset, id: u32) void {
     const frame = &self.frame_data[self.frame_index];
 
     // Get a descriptor from the cache or create a new one.
@@ -276,7 +281,9 @@ pub fn drawSprite(self: *Self, transform: zal.Vec4, texture: *AssetDB.TextureAss
         self.gc.vkd.cmdBindDescriptorSets(self.cmdbuf, .graphics, self.quad_pipeline.layout, 1, 1, @ptrCast([*]const vk.DescriptorSet, &descriptor), 0, undefined);
         frame.last_bound_descriptor_set = descriptor;
     }
+
     self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .vertex_bit = true }, 0, @sizeOf(zal.Vec4), &transform);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Vec4), @sizeOf(u32), &id);
     self.gc.vkd.cmdDraw(self.cmdbuf, vertices.len, 1, 0, 0);
 }
 

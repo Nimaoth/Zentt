@@ -119,22 +119,34 @@ pub fn init(
         .alpha_to_one_enable = vk.FALSE,
     };
 
-    const pcbas = vk.PipelineColorBlendAttachmentState{
-        .blend_enable = vk.FALSE,
-        .src_color_blend_factor = .one,
-        .dst_color_blend_factor = .zero,
-        .color_blend_op = .add,
-        .src_alpha_blend_factor = .one,
-        .dst_alpha_blend_factor = .zero,
-        .alpha_blend_op = .add,
-        .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+    const pcbas = [_]vk.PipelineColorBlendAttachmentState{
+        .{ // color image
+            .blend_enable = vk.FALSE,
+            .src_color_blend_factor = .one,
+            .dst_color_blend_factor = .zero,
+            .color_blend_op = .add,
+            .src_alpha_blend_factor = .one,
+            .dst_alpha_blend_factor = .zero,
+            .alpha_blend_op = .add,
+            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+        },
+        .{ // id image
+            .blend_enable = vk.FALSE,
+            .src_color_blend_factor = .one,
+            .dst_color_blend_factor = .zero,
+            .color_blend_op = .add,
+            .src_alpha_blend_factor = .one,
+            .dst_alpha_blend_factor = .zero,
+            .alpha_blend_op = .add,
+            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+        },
     };
 
     const pcbsci = vk.PipelineColorBlendStateCreateInfo{
         .flags = .{},
         .logic_op_enable = vk.FALSE,
         .logic_op = .copy,
-        .attachment_count = 1,
+        .attachment_count = pcbas.len,
         .p_attachments = @ptrCast([*]const vk.PipelineColorBlendAttachmentState, &pcbas),
         .blend_constants = [_]f32{ 0, 0, 0, 0 },
     };

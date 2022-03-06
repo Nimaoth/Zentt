@@ -193,7 +193,7 @@ pub fn spriteRenderSystem(
         const position = entity.TransformComponent.position;
         const size = entity.TransformComponent.size;
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, size.x, size.y), entity.RenderComponent.texture);
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, size.x, size.y), entity.RenderComponent.texture, @intCast(u32, entity.id));
     }
 
     const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
@@ -428,6 +428,7 @@ pub fn main() !void {
             try app.endRender();
         }
 
+        var viewport_click_location: ?Vec2 = null;
         {
             const open = imgui.Begin("Viewport");
             defer imgui.End();
@@ -482,6 +483,13 @@ pub fn main() !void {
                         }
                     }
                 }
+
+                if (imgui.IsMouseClicked(.Left)) {
+                    const mouse_pos = imgui.GetMousePos().minus(canvas_p0);
+                    if (mouse_pos.x >= 0 and mouse_pos.y >= 0 and mouse_pos.x < canvas_sz.x and mouse_pos.y < canvas_sz.y) {
+                        viewport_click_location = mouse_pos;
+                    }
+                }
             }
         }
 
@@ -500,5 +508,15 @@ pub fn main() !void {
         }
 
         try app.endFrame();
+
+        if (viewport_click_location) |loc| {
+            //
+            const id = try app.renderer.getIdAt(@floatToInt(usize, loc.x), @floatToInt(usize, loc.y));
+            if (world.entities.get(id)) |_| {
+                selectedEntity = id;
+            } else if (id == 0) {
+                selectedEntity = id;
+            }
+        }
     }
 }
