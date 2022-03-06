@@ -1,4 +1,5 @@
 # Todo
+- Add metadata to components for imgui.
 - Implement basic grid based physics
 - Optimizations:
   - Keep pointer to first non-full chunk instead of finding it every time

@@ -33,8 +33,14 @@ pub const TransformComponent = struct {
     size: f32 = 1,
 };
 
-pub const RenderComponent = struct {
+pub const SpriteComponent = struct {
     texture: *AssetDB.TextureAsset,
+};
+
+pub const AnimatedSpriteComponent = struct {
+    textures: []*AssetDB.TextureAsset,
+    time: f32 = 0,
+    length: f32 = 1,
 };
 
 pub const CameraComponent = struct {
@@ -92,7 +98,7 @@ pub fn moveSystemQuad(
     time: *const Time,
     // assetdb: *AssetDB,
     players: Query(.{ Player, TransformComponent }),
-    query: Query(.{ Quad, TransformComponent, RenderComponent, SpeedComponent }),
+    query: Query(.{ Quad, TransformComponent, SpriteComponent, SpeedComponent }),
 ) !void {
     const scope = profiler.beginScope("moveSystemQuad");
     defer scope.end();
@@ -117,12 +123,69 @@ pub fn moveSystemQuad(
     }
 }
 
+pub fn animatedSpriteRenderSystem(
+    profiler: *Profiler,
+    renderer: *Renderer,
+    sprite_renderer: *SpriteRenderer,
+    time: *const Time,
+    cameras: Query(.{ TransformComponent, CameraComponent }),
+    query: Query(.{ TransformComponent, AnimatedSpriteComponent }),
+) !void {
+    const scope = profiler.beginScope("spriteRenderSystem");
+    defer scope.end();
+
+    const delta = @floatCast(f32, time.delta);
+
+    if (cameras.iter().next()) |camera| {
+        const height = std.math.max(camera.CameraComponent.size, 1);
+        const aspect_ratio = @intToFloat(f32, renderer.current_scene_extent.width) / @intToFloat(f32, renderer.current_scene_extent.height);
+
+        const matrices = SpriteRenderer.SceneMatricesUbo{
+            // x needs to be flipped because the view matrix is the inverse of the camera transform
+            // y needs to not be flipped because in vulkan y is flipped.
+            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.TransformComponent.position.x, camera.TransformComponent.position.y, 0 })).transpose(),
+            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1),
+        };
+        try sprite_renderer.updateCameraData(&matrices);
+    } else {
+        std.log.warn("spriteRenderSystem: No camera found", .{});
+    }
+
+    var iter = query.iter();
+    while (iter.next()) |entity| {
+        const position = entity.TransformComponent.position;
+        const size = entity.TransformComponent.size;
+
+        if (entity.AnimatedSpriteComponent.length <= 0) {
+            entity.AnimatedSpriteComponent.length = 1;
+        }
+
+        if (delta > 0) {
+            //
+            entity.AnimatedSpriteComponent.time += delta;
+            while (entity.AnimatedSpriteComponent.time >= entity.AnimatedSpriteComponent.length) {
+                entity.AnimatedSpriteComponent.time -= entity.AnimatedSpriteComponent.length;
+            }
+        }
+
+        const index = @floatToInt(usize, (entity.AnimatedSpriteComponent.time / entity.AnimatedSpriteComponent.length) * @intToFloat(f32, entity.AnimatedSpriteComponent.textures.len));
+        const texture = entity.AnimatedSpriteComponent.textures[index];
+        const texture_size: zal.Vec2 = texture.getSize().scale(size);
+
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), texture, @intCast(u32, entity.id));
+    }
+
+    const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
+
+    try profiler.record("Descriptor sets per frame", @intToFloat(f64, descriptor_set_count));
+}
+
 pub fn spriteRenderSystem(
     profiler: *Profiler,
     renderer: *Renderer,
     sprite_renderer: *SpriteRenderer,
     cameras: Query(.{ TransformComponent, CameraComponent }),
-    query: Query(.{ TransformComponent, RenderComponent }),
+    query: Query(.{ TransformComponent, SpriteComponent }),
 ) !void {
     const scope = profiler.beginScope("spriteRenderSystem");
     defer scope.end();
@@ -147,9 +210,9 @@ pub fn spriteRenderSystem(
         const position = entity.TransformComponent.position;
         const size = entity.TransformComponent.size;
 
-        const texture_size: zal.Vec2 = entity.RenderComponent.texture.getSize().scale(size);
+        const texture_size: zal.Vec2 = entity.SpriteComponent.texture.getSize().scale(size);
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), entity.RenderComponent.texture, @intCast(u32, entity.id));
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), entity.SpriteComponent.texture, @intCast(u32, entity.id));
     }
 
     const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
@@ -171,8 +234,8 @@ pub fn main() !void {
     try world.addSystem(moveSystemQuad, "Move System Quad");
     try world.addSystem(moveSystemPlayer, "Move System Player");
 
-    // try world.addRenderSystem(renderSystemImgui, "Render System Imgui");
     try world.addRenderSystem(spriteRenderSystem, "Render System Vulkan");
+    try world.addRenderSystem(animatedSpriteRenderSystem, "Render System Vulkan");
 
     _ = try world.addResource(Time{});
     var commands = try world.addResource(Commands.init(allocator));
@@ -198,14 +261,21 @@ pub fn main() !void {
     const e = try commands.createEntity();
     _ = try commands.addComponent(e, Quad{});
     _ = try commands.addComponent(e, TransformComponent{ .position = .{ .x = -50 }, .size = 1 });
-    // _ = try commands.addComponent(e, RenderComponent{});
-    _ = try commands.addComponent(e, SpeedComponent{ .speed = 100 });
-    _ = try commands.addComponent(e, RenderComponent{ .texture = try assetdb.getTextureByPath("XLFlower1_1.png", .{}) });
+    // _ = try commands.addComponent(e, SpriteComponent{});
+    _ = try commands.addComponent(e, SpeedComponent{ .speed = 75 });
+    _ = try commands.addComponent(e, SpriteComponent{ .texture = try assetdb.getTextureByPath("XLFlower1_1.png", .{}) });
 
     const player = (try commands.createEntity())
         .addComponent(Player{})
         .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = 1 })
-        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("Poppea_01.png", .{}) })
+        .addComponent(AnimatedSpriteComponent{
+        .textures = &.{
+            try assetdb.getTextureByPath("Poppea_01.png", .{}),
+            try assetdb.getTextureByPath("Poppea_02.png", .{}),
+            try assetdb.getTextureByPath("Poppea_03.png", .{}),
+            try assetdb.getTextureByPath("Poppea_04.png", .{}),
+        },
+    })
         .addComponent(CameraComponent{ .size = 400 })
         .addComponent(SpeedComponent{ .speed = 150 });
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
@@ -216,7 +286,7 @@ pub fn main() !void {
     try details.registerDefaultComponent(Quad{});
     try details.registerDefaultComponent(Player{});
     try details.registerDefaultComponent(TransformComponent{});
-    try details.registerDefaultComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("whiteDot.png", .{}) });
+    try details.registerDefaultComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("whiteDot.png", .{}) });
     try details.registerDefaultComponent(CameraComponent{ .size = 400 });
 
     var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
@@ -398,7 +468,7 @@ pub fn main() !void {
 
                 if (world.entities.get(selectedEntity)) |entity| {
                     if (try world.getComponent(entity.id, TransformComponent)) |transform| {
-                        if (try world.getComponent(entity.id, RenderComponent)) |render| {
+                        if (try world.getComponent(entity.id, SpriteComponent)) |render| {
                             const position = transform.position;
 
                             const texture_size = render.texture.getSize();
