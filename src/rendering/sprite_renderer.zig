@@ -178,12 +178,12 @@ pub fn init(allocator: Allocator, gc: *GraphicsContext, frame_count: u64, render
         .{
             .stage_flags = .{ .vertex_bit = true },
             .offset = 0,
-            .size = @sizeOf(f32) * 4,
+            .size = @sizeOf(zal.Vec4),
         },
         .{
             .stage_flags = .{ .fragment_bit = true },
-            .offset = @sizeOf(f32) * 4,
-            .size = @sizeOf(u32),
+            .offset = @sizeOf(zal.Vec4),
+            .size = @sizeOf(zal.Vec4) + @sizeOf(u32),
         },
     };
     self.quad_pipeline = try Pipeline.init(
@@ -261,11 +261,15 @@ pub fn endRender(self: *Self) void {
 pub fn drawSprite(self: *Self, transform: zal.Vec4, texture: *AssetDB.TextureAsset, id: u32) void {
     const frame = &self.frame_data[self.frame_index];
 
+    var uv = zal.Vec4.new(0, 0, 1, 1);
+
     // Get a descriptor from the cache or create a new one.
     const descriptor = if (frame.image_descriptor_sets.get(texture)) |descriptor| descriptor else blk: {
+        const image = texture.resolve();
+        uv = texture.getUV();
 
         // Create new descriptor. This will be freed automatically at the beginning of the next time this frame is used.
-        const descriptor = self.createDescriptorForImage(frame.image_descriptor_pool, texture.image_view, texture.sampler) catch |err| {
+        const descriptor = self.createDescriptorForImage(frame.image_descriptor_pool, image.image_view, image.sampler) catch |err| {
             std.log.err("Failed to create descriptor for texture: {}", .{err});
             return;
         };
@@ -283,7 +287,9 @@ pub fn drawSprite(self: *Self, transform: zal.Vec4, texture: *AssetDB.TextureAss
     }
 
     self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .vertex_bit = true }, 0, @sizeOf(zal.Vec4), &transform);
-    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Vec4), @sizeOf(u32), &id);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Vec4), @sizeOf(zal.Vec4), &uv);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Vec4) * 2, @sizeOf(u32), &id);
+
     self.gc.vkd.cmdDraw(self.cmdbuf, vertices.len, 1, 0, 0);
 }
 

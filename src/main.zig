@@ -143,11 +143,11 @@ pub fn moveSystemQuad(
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
+                        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg", .{}) });
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
                         .addComponent(TransformComponent{ .vel = .{ .x = rand.float(f32) - 0.5, .y = rand.float(f32) - 0.5 }, .size = .{ .x = rand.float(f32) * 15 + 5, .y = rand.float(f32) * 15 + 5 } })
-                        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
+                        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg", .{}) });
                 } else {
                     _ = (try commands.createEntity())
                         .addComponent(Quad{})
@@ -193,7 +193,9 @@ pub fn spriteRenderSystem(
         const position = entity.TransformComponent.position;
         const size = entity.TransformComponent.size;
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, size.x, size.y), entity.RenderComponent.texture, @intCast(u32, entity.id));
+        const texture_size: zal.Vec2 = entity.RenderComponent.texture.getSize().scale(size.x);
+
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), entity.RenderComponent.texture, @intCast(u32, entity.id));
     }
 
     const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
@@ -242,6 +244,8 @@ pub fn main() !void {
     var assetdb = try world.addResource(try AssetDB.init(allocator, &app.renderer.gc));
     defer assetdb.deinit();
 
+    try assetdb.loadTexturePack("assets/img/characters.json", .{ .filter = .nearest });
+
     var profiler = &app.profiler;
     try world.addResourcePtr(profiler);
 
@@ -252,12 +256,12 @@ pub fn main() !void {
     _ = try commands.addComponent(e, Quad{});
     _ = try commands.addComponent(e, TransformComponent{ .position = .{ .x = -50 }, .vel = .{ .x = -1 } });
     // _ = try commands.addComponent(e, RenderComponent{});
-    _ = try commands.addComponent(e, RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg") });
+    _ = try commands.addComponent(e, RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img.jpg", .{}) });
 
     const player = (try commands.createEntity())
         .addComponent(Player{})
         .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = .{ .x = 50, .y = 50 } })
-        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") })
+        .addComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("Poppea_01.png", .{}) })
         .addComponent(CameraComponent{ .size = 300 });
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
     _ = player;
@@ -267,7 +271,7 @@ pub fn main() !void {
     try details.registerDefaultComponent(Quad{});
     try details.registerDefaultComponent(Player{});
     try details.registerDefaultComponent(TransformComponent{});
-    try details.registerDefaultComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg") });
+    try details.registerDefaultComponent(RenderComponent{ .texture = try assetdb.getTextureByPath("assets/img2.jpg", .{}) });
     try details.registerDefaultComponent(CameraComponent{ .size = 300 });
 
     var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
