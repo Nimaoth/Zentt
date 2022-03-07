@@ -87,8 +87,8 @@ pub fn moveSystemPlayer(
         if (input.up) dir.y += 1;
         if (input.down) dir.y -= 1;
 
-        const vel = dir.normalized().timess(entity.SpeedComponent.speed);
-        _ = entity.TransformComponent.position.add(vel.timess(delta));
+        const vel = dir.normalized().timess(entity.speed.speed);
+        _ = entity.transform.position.add(vel.timess(delta));
     }
 }
 
@@ -116,10 +116,10 @@ pub fn moveSystemQuad(
 
     var iter = query.iter();
     while (iter.next()) |entity| {
-        const toPlayer = player.TransformComponent.position.plus(entity.TransformComponent.position.timess(-1));
-        const vel = toPlayer.normalized().timess(speed * entity.SpeedComponent.speed);
+        const toPlayer = player.transform.position.plus(entity.transform.position.timess(-1));
+        const vel = toPlayer.normalized().timess(speed * entity.speed.speed);
 
-        _ = entity.TransformComponent.position.add(vel.timess(delta));
+        _ = entity.transform.position.add(vel.timess(delta));
     }
 }
 
@@ -137,13 +137,13 @@ pub fn animatedSpriteRenderSystem(
     const delta = @floatCast(f32, time.delta);
 
     if (cameras.iter().next()) |camera| {
-        const height = std.math.max(camera.CameraComponent.size, 1);
+        const height = std.math.max(camera.camera.size, 1);
         const aspect_ratio = @intToFloat(f32, renderer.current_scene_extent.width) / @intToFloat(f32, renderer.current_scene_extent.height);
 
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.TransformComponent.position.x, camera.TransformComponent.position.y, 0 })).transpose(),
+            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, camera.transform.position.y, 0 })).transpose(),
             .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1),
         };
         try sprite_renderer.updateCameraData(&matrices);
@@ -153,23 +153,23 @@ pub fn animatedSpriteRenderSystem(
 
     var iter = query.iter();
     while (iter.next()) |entity| {
-        const position = entity.TransformComponent.position;
-        const size = entity.TransformComponent.size;
+        const position = entity.transform.position;
+        const size = entity.transform.size;
 
-        if (entity.AnimatedSpriteComponent.length <= 0) {
-            entity.AnimatedSpriteComponent.length = 1;
+        if (entity.animated_sprite.length <= 0) {
+            entity.animated_sprite.length = 1;
         }
 
         if (delta > 0) {
             //
-            entity.AnimatedSpriteComponent.time += delta;
-            while (entity.AnimatedSpriteComponent.time >= entity.AnimatedSpriteComponent.length) {
-                entity.AnimatedSpriteComponent.time -= entity.AnimatedSpriteComponent.length;
+            entity.animated_sprite.time += delta;
+            while (entity.animated_sprite.time >= entity.animated_sprite.length) {
+                entity.animated_sprite.time -= entity.animated_sprite.length;
             }
         }
 
-        const index = @floatToInt(usize, (entity.AnimatedSpriteComponent.time / entity.AnimatedSpriteComponent.length) * @intToFloat(f32, entity.AnimatedSpriteComponent.textures.len));
-        const texture = entity.AnimatedSpriteComponent.textures[index];
+        const index = @floatToInt(usize, (entity.animated_sprite.time / entity.animated_sprite.length) * @intToFloat(f32, entity.animated_sprite.textures.len));
+        const texture = entity.animated_sprite.textures[index];
         const texture_size: zal.Vec2 = texture.getSize().scale(size);
 
         sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), texture, @intCast(u32, entity.id));
@@ -191,13 +191,13 @@ pub fn spriteRenderSystem(
     defer scope.end();
 
     if (cameras.iter().next()) |camera| {
-        const height = std.math.max(camera.CameraComponent.size, 1);
+        const height = std.math.max(camera.camera.size, 1);
         const aspect_ratio = @intToFloat(f32, renderer.current_scene_extent.width) / @intToFloat(f32, renderer.current_scene_extent.height);
 
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.TransformComponent.position.x, camera.TransformComponent.position.y, 0 })).transpose(),
+            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, camera.transform.position.y, 0 })).transpose(),
             .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1),
         };
         try sprite_renderer.updateCameraData(&matrices);
@@ -207,12 +207,12 @@ pub fn spriteRenderSystem(
 
     var iter = query.iter();
     while (iter.next()) |entity| {
-        const position = entity.TransformComponent.position;
-        const size = entity.TransformComponent.size;
+        const position = entity.transform.position;
+        const size = entity.transform.size;
 
-        const texture_size: zal.Vec2 = entity.SpriteComponent.texture.getSize().scale(size);
+        const texture_size: zal.Vec2 = entity.sprite.texture.getSize().scale(size);
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), entity.SpriteComponent.texture, @intCast(u32, entity.id));
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), entity.sprite.texture, @intCast(u32, entity.id));
     }
 
     const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();

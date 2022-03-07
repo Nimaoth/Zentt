@@ -145,6 +145,61 @@ fn deduplicate(comptime name: []const u8, comptime otherFields: []std.builtin.Ty
     return name;
 }
 
+fn isLowerCase(c: u8) bool {
+    return c >= 'a' and c <= 'z';
+}
+
+fn isUpperCase(c: u8) bool {
+    return c >= 'A' and c <= 'Z';
+}
+
+fn isDigit(c: u8) bool {
+    return c >= '0' and c <= '9';
+}
+
+fn toLowerCase(c: u8) u8 {
+    if (isUpperCase(c)) return (c - 'A') + 'a';
+    return c;
+}
+
+/// Converts from "PascalCase" to "sake_case", and removes "Component" suffix if present.
+fn componentNameToFieldName(comptime name: []const u8) []const u8 {
+    // Count how many _ we have to insert. (underscore between lower case letter followed by upper case letter)
+    comptime var underscore_count = 0;
+    comptime var last = name[0];
+    inline for (name[1..]) |current| {
+        if (isLowerCase(last) and isUpperCase(current)) {
+            underscore_count += 1;
+        }
+        last = current;
+    }
+
+    comptime var buffer: [name.len + underscore_count]u8 = [1]u8{toLowerCase(name[0])} ** (name.len + underscore_count);
+
+    comptime var index = 1;
+    last = name[0];
+    inline for (name[1..]) |current| {
+        if (isLowerCase(last) and isUpperCase(current)) {
+            buffer[index] = '_';
+            index += 1;
+            buffer[index] = toLowerCase(current);
+        } else {
+            buffer[index] = toLowerCase(current);
+        }
+        last = current;
+        index += 1;
+    }
+
+    // const T = @Type(std.builtin.TypeInfo{ .Struct = .{ .layout = .Extern, .fields = &.{.{ .name = buffer[0..], .field_type = u8, .default_value = @intCast(u8, 0), .is_comptime = false, .alignment = 1 }}, .decls = &.{}, .is_tuple = false } });
+    // @compileLog(@typeInfo(T).Struct.fields[0].name);
+
+    if (std.mem.endsWith(u8, buffer[0..], "_component")) {
+        return buffer[0..(buffer.len - "_component".len)];
+    }
+
+    return buffer[0..];
+}
+
 fn getEntityHandle(comptime Components: anytype) type {
     _ = Components;
     const typeInfo = comptime blk: {
@@ -168,7 +223,7 @@ fn getEntityHandle(comptime Components: anytype) type {
             std.debug.assert(@TypeOf(ComponentType) == type);
             if (@sizeOf(ComponentType) > 0) {
                 fields[index + 1] = .{
-                    .name = deduplicate(@typeName(ComponentType), fields[0..(index + 1)]),
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
                     .field_type = *ComponentType,
                     .default_value = null,
                     .is_comptime = false,
@@ -176,7 +231,7 @@ fn getEntityHandle(comptime Components: anytype) type {
                 };
             } else {
                 fields[index + 1] = .{
-                    .name = deduplicate(@typeName(ComponentType), fields[0..(index + 1)]),
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
                     .field_type = u8,
                     .default_value = @intCast(u8, 0),
                     .is_comptime = false,
