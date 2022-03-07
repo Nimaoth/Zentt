@@ -28,6 +28,8 @@ const Commands = @import("ecs/commands.zig");
 
 const app_name = "vulkan-zig triangle example";
 
+const assets = @import("assets.zig");
+
 pub const TransformComponent = struct {
     position: Vec2 = .{ .x = 0, .y = 0 },
     size: f32 = 1,
@@ -38,9 +40,16 @@ pub const SpriteComponent = struct {
 };
 
 pub const AnimatedSpriteComponent = struct {
-    textures: []*AssetDB.TextureAsset,
+    anim: *AssetDB.SpriteAnimationAsset,
     time: f32 = 0,
-    length: f32 = 1,
+
+    pub fn getCurrentTextureIndex(self: *const @This()) usize {
+        return @floatToInt(usize, (self.time / self.anim.length) * @intToFloat(f32, self.anim.sprites.len));
+    }
+
+    pub fn getCurrentTexture(self: *const @This()) *AssetDB.TextureAsset {
+        return self.anim.sprites[self.getCurrentTextureIndex()];
+    }
 };
 
 pub const CameraComponent = struct {
@@ -156,28 +165,23 @@ pub fn animatedSpriteRenderSystem(
         const position = entity.transform.position;
         const size = entity.transform.size;
 
-        if (entity.animated_sprite.length <= 0) {
-            entity.animated_sprite.length = 1;
-        }
-
         if (delta > 0) {
             //
             entity.animated_sprite.time += delta;
-            while (entity.animated_sprite.time >= entity.animated_sprite.length) {
-                entity.animated_sprite.time -= entity.animated_sprite.length;
+            while (entity.animated_sprite.time >= entity.animated_sprite.anim.length) {
+                entity.animated_sprite.time -= entity.animated_sprite.anim.length;
             }
         }
 
-        const index = @floatToInt(usize, (entity.animated_sprite.time / entity.animated_sprite.length) * @intToFloat(f32, entity.animated_sprite.textures.len));
-        const texture = entity.animated_sprite.textures[index];
+        const texture = entity.animated_sprite.getCurrentTexture();
         const texture_size: zal.Vec2 = texture.getSize().scale(size);
 
         sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), texture, @intCast(u32, entity.id));
     }
 
-    const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
+    // const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
 
-    try profiler.record("Descriptor sets per frame", @intToFloat(f64, descriptor_set_count));
+    // try profiler.record("Descriptor sets per frame", @intToFloat(f64, descriptor_set_count));
 }
 
 pub fn spriteRenderSystem(
@@ -246,11 +250,7 @@ pub fn main() !void {
     var assetdb = try world.addResource(try AssetDB.init(allocator, &app.renderer.gc));
     defer assetdb.deinit();
 
-    try assetdb.loadTexturePack("assets/img/characters.json", .{ .filter = .nearest });
-    try assetdb.loadTexturePack("assets/img/enemies.json", .{ .filter = .nearest });
-    try assetdb.loadTexturePack("assets/img/items.json", .{ .filter = .nearest });
-    try assetdb.loadTexturePack("assets/img/vfx.json", .{ .filter = .nearest });
-    try assetdb.loadTexturePack("assets/img/UI.json", .{ .filter = .nearest });
+    try assets.loadAssets(assetdb);
 
     var profiler = &app.profiler;
     try world.addResourcePtr(profiler);
@@ -258,35 +258,45 @@ pub fn main() !void {
     try world.addResourcePtr(app.renderer);
     try world.addResourcePtr(app.sprite_renderer);
 
-    const e = try commands.createEntity();
-    _ = try commands.addComponent(e, Quad{});
-    _ = try commands.addComponent(e, TransformComponent{ .position = .{ .x = -50 }, .size = 1 });
-    // _ = try commands.addComponent(e, SpriteComponent{});
-    _ = try commands.addComponent(e, SpeedComponent{ .speed = 75 });
-    _ = try commands.addComponent(e, SpriteComponent{ .texture = try assetdb.getTextureByPath("XLFlower1_1.png", .{}) });
-
-    const player = (try commands.createEntity())
+    _ = (try commands.createEntity())
         .addComponent(Player{})
         .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = 1 })
-        .addComponent(AnimatedSpriteComponent{
-        .textures = &.{
-            try assetdb.getTextureByPath("Poppea_01.png", .{}),
-            try assetdb.getTextureByPath("Poppea_02.png", .{}),
-            try assetdb.getTextureByPath("Poppea_03.png", .{}),
-            try assetdb.getTextureByPath("Poppea_04.png", .{}),
-        },
-    })
+        .addComponent(SpeedComponent{ .speed = 150 })
         .addComponent(CameraComponent{ .size = 400 })
-        .addComponent(SpeedComponent{ .speed = 150 });
+        .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
+
+    const animation_count = assetdb.sprite_animations.count();
+    const x_count = std.math.sqrt(animation_count);
+    {
+        var iter = assetdb.sprite_animations.valueIterator();
+        var pos = Vec2{};
+        var i: usize = 0;
+        while (iter.next()) |asset| : (i += 1) {
+            const anim: *AssetDB.SpriteAnimationAsset = asset.*;
+            _ = (try commands.createEntity())
+                .addComponent(Quad{})
+                .addComponent(TransformComponent{ .position = pos, .size = 1 })
+                .addComponent(AnimatedSpriteComponent{ .anim = anim })
+                .addComponent(SpeedComponent{ .speed = 75 });
+
+            if (i >= x_count) {
+                i = 0;
+                pos.x = 0;
+                pos.y += 50;
+            } else {
+                pos.x += 50;
+            }
+        }
+    }
+
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
-    _ = player;
 
     var details = Details.init(allocator);
     defer details.deinit();
     try details.registerDefaultComponent(Quad{});
     try details.registerDefaultComponent(Player{});
     try details.registerDefaultComponent(TransformComponent{});
-    try details.registerDefaultComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("whiteDot.png", .{}) });
+    // try details.registerDefaultComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("whiteDot.png", .{}) });
     try details.registerDefaultComponent(CameraComponent{ .size = 400 });
 
     var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
@@ -468,41 +478,45 @@ pub fn main() !void {
 
                 if (world.entities.get(selectedEntity)) |entity| {
                     if (try world.getComponent(entity.id, TransformComponent)) |transform| {
-                        if (try world.getComponent(entity.id, SpriteComponent)) |render| {
-                            const position = transform.position;
+                        var texture_size = zal.Vec2.new(1, 1);
 
-                            const texture_size = render.texture.getSize();
-                            const size = (Vec2{ .x = texture_size.x(), .y = texture_size.y() }).timess(0.5 * transform.size);
+                        if (try world.getComponent(entity.id, SpriteComponent)) |sprite| {
+                            texture_size = sprite.texture.getSize();
+                        } else if (try world.getComponent(entity.id, AnimatedSpriteComponent)) |animated_sprite| {
+                            texture_size = animated_sprite.getCurrentTexture().getSize();
+                        }
 
-                            // Transform positions into screen space
-                            const view = app.sprite_renderer.matrices.view.transpose();
-                            const proj = app.sprite_renderer.matrices.proj;
-                            const screen = zal.Mat4.orthographic(canvas_p0.x, canvas_p1.x, canvas_p0.y, canvas_p1.y, 1, -1).inv(); // Flip y
+                        const position = transform.position;
+                        const size = (Vec2{ .x = texture_size.x(), .y = texture_size.y() }).timess(0.5 * transform.size);
 
-                            const p0_world = zal.Vec3.new(position.x - size.x, -position.y - size.y, 0); // Invert y
-                            const p1_world = zal.Vec3.new(position.x + size.x, -position.y + size.y, 0); // Invert y
-                            const p0_view = view.mulByVec3(p0_world, 1);
-                            const p1_view = view.mulByVec3(p1_world, 1);
-                            const p0_clip = proj.mulByVec3(p0_view, 1);
-                            const p1_clip = proj.mulByVec3(p1_view, 1);
-                            const p0_screen = screen.mulByVec3(p0_clip, 1);
-                            const p1_screen = screen.mulByVec3(p1_clip, 1);
+                        // Transform positions into screen space
+                        const view = app.sprite_renderer.matrices.view.transpose();
+                        const proj = app.sprite_renderer.matrices.proj;
+                        const screen = zal.Mat4.orthographic(canvas_p0.x, canvas_p1.x, canvas_p0.y, canvas_p1.y, 1, -1).inv(); // Flip y
 
-                            const p0 = Vec2{ .x = p0_screen.x(), .y = p0_screen.y() };
-                            const p1 = Vec2{ .x = p1_screen.x(), .y = p1_screen.y() };
+                        const p0_world = zal.Vec3.new(position.x - size.x, -position.y - size.y, 0); // Invert y
+                        const p1_world = zal.Vec3.new(position.x + size.x, -position.y + size.y, 0); // Invert y
+                        const p0_view = view.mulByVec3(p0_world, 1);
+                        const p1_view = view.mulByVec3(p1_world, 1);
+                        const p0_clip = proj.mulByVec3(p0_view, 1);
+                        const p1_clip = proj.mulByVec3(p1_view, 1);
+                        const p0_screen = screen.mulByVec3(p0_clip, 1);
+                        const p1_screen = screen.mulByVec3(p1_clip, 1);
 
-                            const color = imgui.ColorConvertFloat4ToU32(imgui2.variable(main, imgui.Vec4, "Selection Color", .{ .x = 1, .y = 0.5, .z = 0.15, .w = 1 }, true, .{ .color = true }).*);
-                            const thickness = imgui2.variable(main, u64, "Selection Thickness", 3, true, .{ .min = 2 }).*;
+                        const p0 = Vec2{ .x = p0_screen.x(), .y = p0_screen.y() };
+                        const p1 = Vec2{ .x = p1_screen.x(), .y = p1_screen.y() };
 
-                            var i: u64 = 0;
-                            while (i < thickness) : (i += 1) {
-                                const f = @intToFloat(f32, i);
-                                drawList.AddRect(
-                                    p0.minus(.{ .x = f, .y = f }),
-                                    p1.plus(.{ .x = f, .y = f }),
-                                    if (i == 0) 0xff000000 else color,
-                                );
-                            }
+                        const color = imgui.ColorConvertFloat4ToU32(imgui2.variable(main, imgui.Vec4, "Selection Color", .{ .x = 1, .y = 0.5, .z = 0.15, .w = 1 }, true, .{ .color = true }).*);
+                        const thickness = imgui2.variable(main, u64, "Selection Thickness", 3, true, .{ .min = 2 }).*;
+
+                        var i: u64 = 0;
+                        while (i < thickness) : (i += 1) {
+                            const f = @intToFloat(f32, i);
+                            drawList.AddRect(
+                                p0.minus(.{ .x = f, .y = f }),
+                                p1.plus(.{ .x = f, .y = f }),
+                                if (i == 0) 0xff000000 else color,
+                            );
                         }
                     }
                 }
