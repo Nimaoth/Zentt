@@ -2,6 +2,7 @@ const std = @import("std");
 
 const imgui = @import("editor/imgui.zig");
 const imgui2 = @import("editor/imgui2.zig");
+const imguizmo = @import("editor/imguizmo.zig");
 const sdl = @import("rendering/sdl.zig");
 
 const zal = @import("zalgebra");
@@ -32,6 +33,7 @@ const assets = @import("assets.zig");
 
 pub const TransformComponent = struct {
     position: Vec2 = .{ .x = 0, .y = 0 },
+    rotation: f32 = 0,
     size: f32 = 1,
 };
 
@@ -163,6 +165,7 @@ pub fn animatedSpriteRenderSystem(
     var iter = query.iter();
     while (iter.next()) |entity| {
         const position = entity.transform.position;
+        const rotation = entity.transform.rotation;
         const size = entity.transform.size;
 
         if (delta > 0) {
@@ -176,7 +179,7 @@ pub fn animatedSpriteRenderSystem(
         const texture = entity.animated_sprite.getCurrentTexture();
         const texture_size: zal.Vec2 = texture.getSize().scale(size);
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), texture, @intCast(u32, entity.id));
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), rotation, texture, @intCast(u32, entity.id));
     }
 
     // const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
@@ -212,11 +215,12 @@ pub fn spriteRenderSystem(
     var iter = query.iter();
     while (iter.next()) |entity| {
         const position = entity.transform.position;
+        const rotation = entity.transform.rotation;
         const size = entity.transform.size;
 
         const texture_size: zal.Vec2 = entity.sprite.texture.getSize().scale(size);
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), entity.sprite.texture, @intCast(u32, entity.id));
+        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), rotation, entity.sprite.texture, @intCast(u32, entity.id));
     }
 
     const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
@@ -288,6 +292,22 @@ pub fn main() !void {
             }
         }
     }
+    {
+        var pos = Vec2{ .x = -500, .y = -600 };
+        for (assetdb.textures.items) |asset| {
+            if (asset.data == .image) {
+                _ = (try commands.createEntity())
+                    .addComponent(TransformComponent{ .position = pos.plus(.{ .x = @intToFloat(f32, asset.data.image.image.extent.width) * 0.5 }), .size = 0.5 })
+                    .addComponent(SpriteComponent{ .texture = asset });
+                pos.x += @intToFloat(f32, asset.data.image.image.extent.width) + 10;
+            }
+        }
+    }
+
+    _ = (try commands.createEntity())
+        .addComponent(TransformComponent{ .position = .{ .x = 0, .y = -100 }, .size = 1 })
+        .addComponent(SpeedComponent{ .speed = 100 })
+        .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
 
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
 
@@ -476,6 +496,8 @@ pub fn main() !void {
                 drawList.PushClipRect(canvas_p0, canvas_p1);
                 defer drawList.PopClipRect();
 
+                var using_gizmo = false;
+
                 if (world.entities.get(selectedEntity)) |entity| {
                     if (try world.getComponent(entity.id, TransformComponent)) |transform| {
                         var texture_size = zal.Vec2.new(1, 1);
@@ -509,6 +531,7 @@ pub fn main() !void {
                         const color = imgui.ColorConvertFloat4ToU32(imgui2.variable(main, imgui.Vec4, "Selection Color", .{ .x = 1, .y = 0.5, .z = 0.15, .w = 1 }, true, .{ .color = true }).*);
                         const thickness = imgui2.variable(main, u64, "Selection Thickness", 3, true, .{ .min = 2 }).*;
 
+                        // Draw outline
                         var i: u64 = 0;
                         while (i < thickness) : (i += 1) {
                             const f = @intToFloat(f32, i);
@@ -518,10 +541,59 @@ pub fn main() !void {
                                 if (i == 0) 0xff000000 else color,
                             );
                         }
+
+                        // Transform guizmo
+                        imguizmo.SetDrawlist(null);
+                        imguizmo.SetOrthographic(true);
+                        imguizmo.SetRect(imgui.GetWindowPos().x, imgui.GetWindowPos().y, imgui.GetWindowWidth(), imgui.GetWindowHeight());
+
+                        var mode = imgui2.variable(main, imguizmo.Mode, "Guizmo Mode", .World, true, .{});
+                        if (imgui.IsKeyPressed(imgui.Key.@"1")) {
+                            mode.* = .Local;
+                        } else if (imgui.IsKeyPressed(imgui.Key.@"2")) {
+                            mode.* = .World;
+                        }
+
+                        var entity_transform = zal.Mat4.recompose(
+                            zal.Vec3.new(position.x, position.y, 0),
+                            zal.Vec3.new(0, 0, if (mode.* == .World) 0 else transform.rotation),
+                            zal.Vec3.new(transform.size, transform.size, 1),
+                        );
+
+                        var gizmo_view = view;
+                        // Invert y translation
+                        gizmo_view.data[3][1] *= -1;
+
+                        if (imguizmo.Manipulate(
+                            &gizmo_view,
+                            &proj,
+                            .{ .translate_x = true, .translate_y = true, .scale_x = true, .rotate_z = true },
+                            mode.*,
+                            &entity_transform,
+                            null,
+                            null,
+                            null,
+                            null,
+                        )) {
+                            using_gizmo = true;
+                            const comps = entity_transform.decompose();
+                            transform.position.x = comps.t.x();
+                            transform.position.y = comps.t.y();
+                            transform.size = comps.s.x();
+                            if (mode.* == .World) {
+                                transform.rotation += comps.r.extractEulerAngles().z();
+                            } else {
+                                transform.rotation = comps.r.extractEulerAngles().z();
+                            }
+                        }
+
+                        if (imguizmo.IsOverOp(imguizmo.Operation.translate) or imguizmo.IsUsing()) {
+                            using_gizmo = true;
+                        }
                     }
                 }
 
-                if (imgui.IsMouseClicked(.Left)) {
+                if (!using_gizmo and imgui.IsMouseClicked(.Left)) {
                     const mouse_pos = imgui.GetMousePos().minus(canvas_p0);
                     if (mouse_pos.x >= 0 and mouse_pos.y >= 0 and mouse_pos.x < canvas_sz.x and mouse_pos.y < canvas_sz.y) {
                         viewport_click_location = mouse_pos;

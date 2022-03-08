@@ -1103,29 +1103,153 @@ pub const Dir = enum(i32) {
 };
 
 pub const Key = enum(i32) {
-    Tab = 0,
-    LeftArrow = 1,
-    RightArrow = 2,
-    UpArrow = 3,
-    DownArrow = 4,
-    PageUp = 5,
-    PageDown = 6,
-    Home = 7,
-    End = 8,
-    Insert = 9,
-    Delete = 10,
-    Backspace = 11,
-    Space = 12,
-    Enter = 13,
-    Escape = 14,
-    KeyPadEnter = 15,
-    A = 16,
-    C = 17,
-    V = 18,
-    X = 19,
-    Y = 20,
-    Z = 21,
-    pub const COUNT = 22;
+    None = 0,
+    Tab = 512, // == ImGuiKey_NamedKey_BEGIN
+    LeftArrow,
+    RightArrow,
+    UpArrow,
+    DownArrow,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+    Insert,
+    Delete,
+    Backspace,
+    Space,
+    Enter,
+    Escape,
+    LeftCtrl,
+    LeftShift,
+    LeftAlt,
+    LeftSuper,
+    RightCtrl,
+    RightShift,
+    RightAlt,
+    RightSuper,
+    Menu,
+    @"0",
+    @"1",
+    @"2",
+    @"3",
+    @"4",
+    @"5",
+    @"6",
+    @"7",
+    @"8",
+    @"9",
+    A,
+    B,
+    C,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
+    V,
+    W,
+    X,
+    Y,
+    Z,
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    Apostrophe, // '
+    Comma, // ,
+    Minus, // -
+    Period, // .
+    Slash, // /
+    Semicolon, // ;
+    Equal, // =
+    LeftBracket, // [
+    Backslash, // \ (this text inhibit multiline comment caused by backslash)
+    RightBracket, // ]
+    GraveAccent, // `
+    CapsLock,
+    ScrollLock,
+    NumLock,
+    PrintScreen,
+    Pause,
+    Keypad0,
+    Keypad1,
+    Keypad2,
+    Keypad3,
+    Keypad4,
+    Keypad5,
+    Keypad6,
+    Keypad7,
+    Keypad8,
+    Keypad9,
+    KeypadDecimal,
+    KeypadDivide,
+    KeypadMultiply,
+    KeypadSubtract,
+    KeypadAdd,
+    KeypadEnter,
+    KeypadEqual,
+
+    // Gamepad (some of those are analog values, 0.0f to 1.0f)                              // NAVIGATION action
+    GamepadStart, // Menu (Xbox)          + (Switch)   Start/Options (PS) // --
+    GamepadBack, // View (Xbox)          - (Switch)   Share (PS)         // --
+    GamepadFaceUp, // Y (Xbox)             X (Switch)   Triangle (PS)      // -> ImGuiNavInput_Input
+    GamepadFaceDown, // A (Xbox)             B (Switch)   Cross (PS)         // -> ImGuiNavInput_Activate
+    GamepadFaceLeft, // X (Xbox)             Y (Switch)   Square (PS)        // -> ImGuiNavInput_Menu
+    GamepadFaceRight, // B (Xbox)             A (Switch)   Circle (PS)        // -> ImGuiNavInput_Cancel
+    GamepadDpadUp, // D-pad Up                                             // -> ImGuiNavInput_DpadUp
+    GamepadDpadDown, // D-pad Down                                           // -> ImGuiNavInput_DpadDown
+    GamepadDpadLeft, // D-pad Left                                           // -> ImGuiNavInput_DpadLeft
+    GamepadDpadRight, // D-pad Right                                          // -> ImGuiNavInput_DpadRight
+    GamepadL1, // L Bumper (Xbox)      L (Switch)   L1 (PS)            // -> ImGuiNavInput_FocusPrev + ImGuiNavInput_TweakSlow
+    GamepadR1, // R Bumper (Xbox)      R (Switch)   R1 (PS)            // -> ImGuiNavInput_FocusNext + ImGuiNavInput_TweakFast
+    GamepadL2, // L Trigger (Xbox)     ZL (Switch)  L2 (PS) [Analog]
+    GamepadR2, // R Trigger (Xbox)     ZR (Switch)  R2 (PS) [Analog]
+    GamepadL3, // L Thumbstick (Xbox)  L3 (Switch)  L3 (PS)
+    GamepadR3, // R Thumbstick (Xbox)  R3 (Switch)  R3 (PS)
+    GamepadLStickUp, // [Analog]                                             // -> ImGuiNavInput_LStickUp
+    GamepadLStickDown, // [Analog]                                             // -> ImGuiNavInput_LStickDown
+    GamepadLStickLeft, // [Analog]                                             // -> ImGuiNavInput_LStickLeft
+    GamepadLStickRight, // [Analog]                                             // -> ImGuiNavInput_LStickRight
+    GamepadRStickUp, // [Analog]
+    GamepadRStickDown, // [Analog]
+    GamepadRStickLeft, // [Analog]
+    GamepadRStickRight, // [Analog]
+
+    // Keyboard Modifiers
+    // - This is mirroring the data also written to io.KeyCtrl, io.KeyShift, io.KeyAlt, io.KeySuper, in a format allowing
+    //   them to be accessed via standard key API, allowing calls such as IsKeyPressed(), IsKeyReleased(), querying duration etc.
+    // - Code polling every keys (e.g. an interface to detect a key press for input mapping) might want to ignore those
+    //   and prefer using the real keys (e.g. ImGuiKey_LeftCtrl, ImGuiKey_RightCtrl instead of ImGuiKey_ModCtrl).
+    // - In theory the value of keyboard modifiers should be roughly equivalent to a logical or of the equivalent left/right keys.
+    //   In practice: it's complicated; mods are often provided from different sources. Keyboard layout, IME, sticky keys and
+    //   backends tend to interfere and break that equivalence. The safer decision is to relay that ambiguity down to the end-user...
+    ModCtrl,
+    ModShift,
+    ModAlt,
+    ModSuper,
+
+    pub const COUNT = @enumToInt(@This().ModSuper) + 1;
 };
 
 pub const MouseButton = enum(i32) {
@@ -4408,8 +4532,8 @@ pub const IsKeyDown = raw.igIsKeyDown;
 
 /// IsKeyPressedExt(user_key_index: i32, repeat: bool) bool
 pub const IsKeyPressedExt = raw.igIsKeyPressed;
-pub inline fn IsKeyPressed(user_key_index: i32) bool {
-    return IsKeyPressedExt(user_key_index, true);
+pub inline fn IsKeyPressed(user_key_index: Key) bool {
+    return IsKeyPressedExt(@enumToInt(user_key_index), true);
 }
 
 /// IsKeyReleased(user_key_index: i32) bool

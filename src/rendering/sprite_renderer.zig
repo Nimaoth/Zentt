@@ -178,11 +178,11 @@ pub fn init(allocator: Allocator, gc: *GraphicsContext, frame_count: u64, render
         .{
             .stage_flags = .{ .vertex_bit = true },
             .offset = 0,
-            .size = @sizeOf(zal.Vec4),
+            .size = @sizeOf(zal.Mat4),
         },
         .{
             .stage_flags = .{ .fragment_bit = true },
-            .offset = @sizeOf(zal.Vec4),
+            .offset = @sizeOf(zal.Mat4),
             .size = @sizeOf(zal.Vec4) + @sizeOf(u32),
         },
     };
@@ -258,15 +258,14 @@ pub fn endRender(self: *Self) void {
 
 /// Draw a quad at the specified transform.
 /// (X,Y) is the 2D position, (Z,W) is the 2D scale (scale of 1 means width and height are 1).
-pub fn drawSprite(self: *Self, transform: zal.Vec4, texture: *AssetDB.TextureAsset, id: u32) void {
+pub fn drawSprite(self: *Self, transform: zal.Vec4, rotation: f32, texture: *AssetDB.TextureAsset, id: u32) void {
     const frame = &self.frame_data[self.frame_index];
 
-    var uv = zal.Vec4.new(0, 0, 1, 1);
+    var uv = texture.getUV();
 
     // Get a descriptor from the cache or create a new one.
     const descriptor = if (frame.image_descriptor_sets.get(texture)) |descriptor| descriptor else blk: {
         const image = texture.resolve();
-        uv = texture.getUV();
 
         // Create new descriptor. This will be freed automatically at the beginning of the next time this frame is used.
         const descriptor = self.createDescriptorForImage(frame.image_descriptor_pool, image.image_view, image.sampler) catch |err| {
@@ -286,9 +285,15 @@ pub fn drawSprite(self: *Self, transform: zal.Vec4, texture: *AssetDB.TextureAss
         frame.last_bound_descriptor_set = descriptor;
     }
 
-    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .vertex_bit = true }, 0, @sizeOf(zal.Vec4), &transform);
-    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Vec4), @sizeOf(zal.Vec4), &uv);
-    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Vec4) * 2, @sizeOf(u32), &id);
+    const transform_mat = zal.Mat4.recompose(
+        zal.Vec3.new(transform.x(), transform.y(), 0),
+        zal.Vec3.new(0, 0, rotation),
+        zal.Vec3.new(transform.z(), transform.w(), 1),
+    );
+
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .vertex_bit = true }, 0, @sizeOf(zal.Mat4), &transform_mat);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Mat4), @sizeOf(zal.Vec4), &uv);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Mat4) + @sizeOf(zal.Vec4), @sizeOf(u32), &id);
 
     self.gc.vkd.cmdDraw(self.cmdbuf, vertices.len, 1, 0, 0);
 }

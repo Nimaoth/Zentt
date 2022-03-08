@@ -13,13 +13,13 @@ layout(binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(push_constant) uniform UniformPushConstant {
-    vec4 transform;
+    mat4 transform;
     vec4 uv;
     uint id;
 } pc;
 
 void main() {
-    gl_Position = vec4((a_pos * pc.transform.zw + pc.transform.xy) * vec2(1, -1), 0.0, 1.0) * ubo.view * ubo.proj;
+    gl_Position = vec4(a_pos, 0, 1) * transpose(pc.transform) * vec4(1, -1, 1, 1) * ubo.view * ubo.proj;
     v_color = a_color;
     v_uv = a_uv;
 }

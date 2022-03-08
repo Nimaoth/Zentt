@@ -152,6 +152,13 @@ pub fn build(b: *std.build.Builder) void {
         &.{},
     );
 
+    // ImGuizmo
+    exe.addIncludeDir("libs/");
+    exe.addCSourceFiles(
+        &.{"libs/imguizmo/ImGuizmo.cpp"},
+        &.{},
+    );
+
     exe.linkLibC();
     exe.linkLibCpp();
     exe.setTarget(target);

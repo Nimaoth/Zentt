@@ -7,9 +7,11 @@ const C = @cImport({
 });
 
 const imgui = @import("imgui.zig");
+const imguizmo = @import("imguizmo.zig");
 const sdl = @import("../rendering/sdl.zig");
 
 const Renderer = @import("../rendering/renderer.zig");
+const AssetDB = @import("../rendering/assetdb.zig");
 
 const Rtti = @import("../util/rtti.zig");
 const zal = @import("zalgebra");
@@ -82,6 +84,8 @@ pub fn newFrame() void {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL2_NewFrame();
     C.igNewFrame();
+
+    imguizmo.BeginFrame();
 }
 
 pub fn endFrame() void {
@@ -417,6 +421,12 @@ pub fn any(value: anytype, name: []const u8, options: anytype) void {
             _ = imgui.Checkbox("", value);
         },
 
+        .Enum => |ti| {
+            _ = ti;
+            const tag_name = std.meta.tagName(value.*);
+            any(&tag_name, name, options);
+        },
+
         .Struct => |ti| {
             const flags = imgui.TreeNodeFlags{ .Bullet = true, .SpanFullWidth = false, .DefaultOpen = true };
             if (imgui.TreeNodeExPtr(value, flags.toInt(), "")) {
@@ -456,6 +466,23 @@ pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
     if (typeInfo == Rtti.typeInfo([]const u8)) {
         const string = @ptrCast(*[]const u8, @alignCast(@alignOf(*u8), value.ptr)).*;
         imgui.Text("%.*s", string.len, string.ptr);
+        return;
+    }
+    if (typeInfo == Rtti.typeInfo([:0]const u8)) {
+        const string = @ptrCast(*[:0]const u8, @alignCast(@alignOf(*u8), value.ptr)).*;
+        imgui.Text("%s", string.ptr);
+        return;
+    }
+
+    if (typeInfo == Rtti.typeInfo(*AssetDB.SpriteAnimationAsset)) {
+        const asset = @ptrCast(**AssetDB.SpriteAnimationAsset, @alignCast(@alignOf(*u8), value.ptr)).*;
+        anyDynamic(Rtti.typeInfo(AssetDB.SpriteAnimationAsset), std.mem.asBytes(asset));
+        return;
+    }
+
+    if (typeInfo == Rtti.typeInfo(*AssetDB.TextureAsset)) {
+        const asset = @ptrCast(**AssetDB.TextureAsset, @alignCast(@alignOf(*u8), value.ptr)).*;
+        anyDynamic(Rtti.typeInfo(AssetDB.TextureAsset), std.mem.asBytes(asset));
         return;
     }
 

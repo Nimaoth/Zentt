@@ -78,6 +78,7 @@ pub const TextureOptions = struct {
 };
 
 pub const SpriteAnimationAsset = struct {
+    name: []const u8,
     sprites: []*TextureAsset,
     length: f32,
 };
@@ -322,6 +323,7 @@ pub fn defineSpriteAnimation(self: *Self, name: []const u8, length: f32, options
     errdefer self.allocator.destroy(asset);
 
     asset.* = SpriteAnimationAsset{
+        .name = name,
         .sprites = sprites,
         .length = length,
     };
@@ -374,6 +376,7 @@ pub fn defineSpriteAnimationFromInTexturePack(self: *Self, name: []const u8, len
     errdefer self.allocator.destroy(asset);
 
     asset.* = SpriteAnimationAsset{
+        .name = name,
         .sprites = try self.arena.allocator().dupe(*TextureAsset, sprites.items),
         .length = length,
     };
