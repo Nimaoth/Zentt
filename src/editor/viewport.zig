@@ -79,7 +79,7 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                 const size = Vec2.new(texture_size.x(), texture_size.y()).scale(0.5 * transform.size);
 
                 // Transform positions into screen space
-                const view = self.app.sprite_renderer.matrices.view.transpose();
+                const view = self.app.sprite_renderer.matrices.view;
                 const proj = self.app.sprite_renderer.matrices.proj;
                 const screen = Mat4.orthographic(canvas_p0.x(), canvas_p1.x(), canvas_p0.y(), canvas_p1.y(), 1, -1).inv();
 

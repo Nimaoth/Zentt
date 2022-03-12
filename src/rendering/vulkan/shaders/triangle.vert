@@ -4,7 +4,7 @@ layout(location = 0) in vec2 a_pos;
 layout(location = 1) in vec3 a_color;
 layout(location = 2) in vec2 a_uv;
 
-layout(location = 0) out vec3 v_color;
+layout(location = 0) out vec4 v_color;
 layout(location = 1) out vec2 v_uv;
 
 layout(binding = 0) uniform UniformBufferObject {
@@ -20,7 +20,7 @@ layout(push_constant) uniform UniformPushConstant {
 } pc;
 
 void main() {
-    gl_Position = vec4(a_pos, 0, 1) * transpose(pc.transform) * ubo.view * ubo.proj;
-    v_color = a_color;
+    gl_Position = ubo.proj * ubo.view * pc.transform * vec4(a_pos, 0, 1);
+    v_color = vec4(a_color, 1);
     v_uv = a_uv;
 }

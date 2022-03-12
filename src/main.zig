@@ -162,8 +162,8 @@ pub fn animatedSpriteRenderSystem(
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = Mat4.fromTranslate(Vec3.fromSlice(&.{ -camera.transform.position.x(), -camera.transform.position.y(), 0 })).transpose(),
-            .proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
+            .view = Mat4.fromTranslate(Vec3.fromSlice(&.{ -camera.transform.position.x(), -camera.transform.position.y(), 0 })),
+            .proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, -500, 1000),
         };
         try sprite_renderer.updateCameraData(&matrices);
     } else {
@@ -219,8 +219,8 @@ pub fn spriteRenderSystem(
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = Mat4.fromTranslate(Vec3.fromSlice(&.{ -camera.transform.position.x(), -camera.transform.position.y(), 0 })).transpose(),
-            .proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
+            .view = Mat4.fromTranslate(Vec3.fromSlice(&.{ -camera.transform.position.x(), -camera.transform.position.y(), 0 })),
+            .proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, -500, 1000),
         };
         try sprite_renderer.updateCameraData(&matrices);
     } else {

@@ -278,14 +278,16 @@ pub fn Mat4x4(comptime T: type) type {
         pub fn orthographic(left: T, right: T, bottom: T, top: T, z_near: T, z_far: T) Self {
             var mat = Self{};
 
+            // depth in vulkan goes from 0 (near) to 1 (far)
+
             mat.data[0][0] = 2.0 / (right - left);
             mat.data[1][1] = 2.0 / (top - bottom);
-            mat.data[2][2] = 2.0 / (z_near - z_far);
+            mat.data[2][2] = -1.0 / (z_near - z_far);
             mat.data[3][3] = 1.0;
 
             mat.data[3][0] = (left + right) / (left - right);
             mat.data[3][1] = (bottom + top) / (bottom - top);
-            mat.data[3][2] = (z_far + z_near) / (z_near - z_far);
+            mat.data[3][2] = z_near / (z_near - z_far);
 
             return mat;
         }
