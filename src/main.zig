@@ -164,7 +164,7 @@ pub fn main() !void {
     //     }
     // }
 
-    _ = try commands.applyCommands(world, std.math.maxInt(u64));
+    _ = try commands.applyCommands(world);
 
     var details = Details.init(allocator);
     defer details.deinit();
@@ -325,8 +325,7 @@ pub fn main() !void {
 
             try profiler.record("Num commands (req)", @intToFloat(f64, commands.commands.items.len));
 
-            var maxCommands = imgui2.variable(main, u64, "max_commands", 1000, true, .{}).*;
-            commands.applyCommands(world, maxCommands) catch |err| blk: {
+            commands.applyCommands(world) catch |err| {
                 std.log.err("applyCommands failed: {}", .{err});
             };
         }
