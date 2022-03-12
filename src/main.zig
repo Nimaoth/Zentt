@@ -63,8 +63,9 @@ pub const SpeedComponent = struct {
     speed: f32,
 };
 
+pub const FollowPlayerMovementComponent = struct {};
+
 const Player = struct {};
-const Quad = struct {};
 
 const Time = struct {
     delta: f64 = 0,
@@ -104,15 +105,15 @@ pub fn moveSystemPlayer(
     }
 }
 
-pub fn moveSystemQuad(
+pub fn moveSystemFollowPlayer(
     profiler: *Profiler,
     // commands: *Commands,
     time: *const Time,
     // assetdb: *AssetDB,
     players: Query(.{ Player, TransformComponent }),
-    query: Query(.{ Quad, TransformComponent, SpriteComponent, SpeedComponent }),
+    query: Query(.{ FollowPlayerMovementComponent, TransformComponent, SpeedComponent }),
 ) !void {
-    const scope = profiler.beginScope("moveSystemQuad");
+    const scope = profiler.beginScope("moveSystemFollowPlayer");
     defer scope.end();
 
     const delta = @floatCast(f32, time.delta);
@@ -120,16 +121,14 @@ pub fn moveSystemQuad(
         return;
 
     var player = players.iter().next() orelse {
-        std.log.warn("moveSystemQuad: Player not found", .{});
+        std.log.warn("moveSystemFollowPlayer: Player not found", .{});
         return;
     };
-
-    var speed = imgui2.variable(moveSystemQuad, f32, "speed", 1, true, .{}).*;
 
     var iter = query.iter();
     while (iter.next()) |entity| {
         const toPlayer = player.transform.position.plus(entity.transform.position.timess(-1));
-        const vel = toPlayer.normalized().timess(speed * entity.speed.speed);
+        const vel = toPlayer.normalized().timess(entity.speed.speed);
 
         _ = entity.transform.position.add(vel.timess(delta));
     }
@@ -155,8 +154,8 @@ pub fn animatedSpriteRenderSystem(
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, camera.transform.position.y, 0 })).transpose(),
-            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1),
+            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, -camera.transform.position.y, 0 })).transpose(),
+            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
         };
         try sprite_renderer.updateCameraData(&matrices);
     } else {
@@ -205,8 +204,8 @@ pub fn spriteRenderSystem(
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, camera.transform.position.y, 0 })).transpose(),
-            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1),
+            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, -camera.transform.position.y, 0 })).transpose(),
+            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
         };
         try sprite_renderer.updateCameraData(&matrices);
     } else {
@@ -240,7 +239,7 @@ pub fn main() !void {
     var world = try World.init(allocator);
     defer world.deinit();
     defer world.dumpGraph() catch {};
-    try world.addSystem(moveSystemQuad, "Move System Quad");
+    try world.addSystem(moveSystemFollowPlayer, "Move System Follow Player");
     try world.addSystem(moveSystemPlayer, "Move System Player");
 
     try world.addRenderSystem(spriteRenderSystem, "Render System Vulkan");
@@ -279,7 +278,6 @@ pub fn main() !void {
         while (iter.next()) |asset| : (i += 1) {
             const anim: *AssetDB.SpriteAnimationAsset = asset.*;
             _ = (try commands.createEntity())
-                .addComponent(Quad{})
                 .addComponent(TransformComponent{ .position = pos, .size = 1 })
                 .addComponent(AnimatedSpriteComponent{ .anim = anim })
                 .addComponent(SpeedComponent{ .speed = 75 });
@@ -314,7 +312,6 @@ pub fn main() !void {
 
     var details = Details.init(allocator);
     defer details.deinit();
-    try details.registerDefaultComponent(Quad{});
     try details.registerDefaultComponent(Player{});
     try details.registerDefaultComponent(TransformComponent{});
     // try details.registerDefaultComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("whiteDot.png", .{}) });

@@ -77,10 +77,10 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                 // Transform positions into screen space
                 const view = self.app.sprite_renderer.matrices.view.transpose();
                 const proj = self.app.sprite_renderer.matrices.proj;
-                const screen = zal.Mat4.orthographic(canvas_p0.x, canvas_p1.x, canvas_p0.y, canvas_p1.y, 1, -1).inv(); // Flip y
+                const screen = zal.Mat4.orthographic(canvas_p0.x, canvas_p1.x, canvas_p0.y, canvas_p1.y, 1, -1).inv();
 
-                const p0_world = zal.Vec3.new(position.x - size.x, -position.y - size.y, 0); // Invert y
-                const p1_world = zal.Vec3.new(position.x + size.x, -position.y + size.y, 0); // Invert y
+                const p0_world = zal.Vec3.new(position.x - size.x, position.y - size.y, 0); // Invert y
+                const p1_world = zal.Vec3.new(position.x + size.x, position.y + size.y, 0); // Invert y
                 const p0_view = view.mulByVec3(p0_world, 1);
                 const p1_view = view.mulByVec3(p1_world, 1);
                 const p0_clip = proj.mulByVec3(p0_view, 1);
@@ -108,7 +108,7 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                 // Transform guizmo
                 imguizmo.SetDrawlist(null);
                 imguizmo.SetOrthographic(true);
-                imguizmo.SetRect(imgui.GetWindowPos().x, imgui.GetWindowPos().y, imgui.GetWindowWidth(), imgui.GetWindowHeight());
+                imguizmo.SetRect(canvas_p0.x, canvas_p0.y, canvas_sz.x, canvas_sz.y);
 
                 var mode = imgui2.variable(draw, imguizmo.Mode, "Guizmo Mode", .World, true, .{});
                 if (imgui.IsKeyPressed(imgui.Key.@"1")) {
@@ -123,13 +123,12 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                     zal.Vec3.new(transform.size, transform.size, 1),
                 );
 
-                var gizmo_view = view;
-                // Invert y translation
-                gizmo_view.data[3][1] *= -1;
+                // We need to invert the y axis of the projection matrix because vulkan uses inverse y but imguizmo does not.
+                const guizmo_proj = proj.invertOrthographicY();
 
                 if (imguizmo.Manipulate(
-                    &gizmo_view,
-                    &proj,
+                    &view,
+                    &guizmo_proj,
                     .{ .translate_x = true, .translate_y = true, .scale_x = true, .rotate_z = true },
                     mode.*,
                     &entity_transform,
@@ -157,8 +156,9 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
         }
 
         if (!using_gizmo and imgui.IsMouseClicked(.Left)) {
+            const border = 5;
             const mouse_pos = imgui.GetMousePos().minus(canvas_p0);
-            if (mouse_pos.x >= 0 and mouse_pos.y >= 0 and mouse_pos.x < canvas_sz.x and mouse_pos.y < canvas_sz.y) {
+            if (mouse_pos.x >= border and mouse_pos.y >= border and mouse_pos.x + border < canvas_sz.x and mouse_pos.y + border < canvas_sz.y) {
                 viewport_click_location = mouse_pos;
             }
         }
