@@ -114,8 +114,6 @@ pub fn beginFrame(self: *Self) !void {
     self.windowSize.height = @intCast(u32, h);
 
     {
-        const scope = self.profiler.beginScope("prepare + demo");
-        defer scope.end();
         try self.renderer.swapchain.prepare();
 
         imgui2.newFrame();
@@ -124,9 +122,6 @@ pub fn beginFrame(self: *Self) !void {
 }
 
 pub fn endFrame(self: *Self) !void {
-    const scope = self.profiler.beginScope("App.endFrame");
-    defer scope.end();
-
     imgui2.render();
     imgui2.endFrame();
 
@@ -168,10 +163,6 @@ pub fn beginRender(self: *Self) !void {
         .{ .width = @floatToInt(u32, std.math.max(contentSize.x, 1)), .height = @floatToInt(u32, std.math.max(contentSize.y, 1)) },
     );
 
-    // const hdr = imgui2.variable(endFrame, bool, "HDR", true, true, .{}).*;
-    // const options = struct { color: bool = true, flags: imgui.ColorEditFlags }{ .flags = .{ .HDR = hdr } };
-    // const color = imgui2.variable(endFrame, Vec4, "Tint", .{ .data = [4]f32{ 1, 1, 0, 1 } }, true, options).*;
-    // const transform = imgui2.variable(endFrame, Vec4, "Transform", .{ .data = [4]f32{ 0, 0, 1, 1 } }, true, .{}).*;
     try self.sprite_renderer.beginRender(frame.cmdbuf, frame.frame_index, &self.matrices);
 }
 

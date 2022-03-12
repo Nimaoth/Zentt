@@ -1,33 +1,6 @@
 const std = @import("std");
 
-const imgui = @import("editor/imgui.zig");
-const imgui2 = @import("editor/imgui2.zig");
-const sdl = @import("rendering/sdl.zig");
-
-const math = @import("math.zig");
-const Vec2 = math.Vec2;
-const Vec3 = math.Vec3;
-const Vec4 = math.Vec4;
-const Mat4 = math.Mat4;
-
-const Allocator = std.mem.Allocator;
-
-const App = @import("app.zig");
-const Renderer = @import("rendering/renderer.zig");
-const SpriteRenderer = @import("rendering/sprite_renderer.zig");
 const AssetDB = @import("rendering/assetdb.zig");
-
-const Profiler = @import("editor/profiler.zig");
-const Details = @import("editor/details_window.zig");
-const ChunkDebugger = @import("editor/chunk_debugger.zig");
-
-const EntityId = @import("ecs/entity.zig").EntityId;
-const ComponentId = @import("ecs/entity.zig").ComponentId;
-const World = @import("ecs/world.zig");
-const EntityBuilder = @import("ecs/entity_builder.zig");
-const Query = @import("ecs/query.zig").Query;
-const Tag = @import("ecs/tag_component.zig").Tag;
-const Commands = @import("ecs/commands.zig");
 
 pub fn loadAssets(assetdb: *AssetDB) !void {
     try assetdb.loadTexturePack("assets/img/characters.json", .{ .filter = .nearest });

@@ -126,6 +126,15 @@ pub fn Query(comptime Components: anytype) type {
         pub fn iter(self: *const Self) Iterator {
             return Iterator.init(self.tables);
         }
+
+        // Returns the number of entities which match this query.
+        pub fn count(self: *const Self) u64 {
+            var result: u64 = 0;
+            for (self.tables) |table| {
+                result += table.getEntityCount();
+            }
+            return result;
+        }
     };
 
     return QueryTemplate;

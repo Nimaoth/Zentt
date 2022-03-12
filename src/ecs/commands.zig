@@ -110,18 +110,14 @@ pub fn removeComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti
     return entity;
 }
 
-pub fn applyCommands(self: *Self, world: *World, maxCommands: u64) !u64 {
+pub fn applyCommands(self: *Self, world: *World) !void {
     defer {
         self.commands.clearRetainingCapacity();
         self.componentData.clearRetainingCapacity();
         self.entityIdMap.clearRetainingCapacity();
     }
 
-    var i: u64 = 0;
     for (self.commands.items) |command| {
-        defer i += 1;
-        if (i >= maxCommands)
-            break;
         switch (command) {
             .CreateEntity => |index| {
                 const entity = try world.createEntity();
@@ -144,8 +140,6 @@ pub fn applyCommands(self: *Self, world: *World, maxCommands: u64) !u64 {
             },
         }
     }
-
-    return i;
 }
 
 pub fn imguiDetails(self: *Self) void {

@@ -23,9 +23,10 @@ const App = @import("../app.zig");
 const Rtti = @import("../util/rtti.zig");
 const EntityId = @import("../ecs/entity.zig").EntityId;
 
-const TransformComponent = @import("root").TransformComponent;
-const SpriteComponent = @import("root").SpriteComponent;
-const AnimatedSpriteComponent = @import("root").AnimatedSpriteComponent;
+const game = @import("../game/game.zig");
+const TransformComponent = game.TransformComponent;
+const SpriteComponent = game.SpriteComponent;
+const AnimatedSpriteComponent = game.AnimatedSpriteComponent;
 
 const Self = @This();
 
