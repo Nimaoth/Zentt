@@ -153,6 +153,19 @@ pub fn init(
         .p_dynamic_states = &dynstate,
     };
 
+    const pdssci = vk.PipelineDepthStencilStateCreateInfo{
+        .flags = .{},
+        .depth_test_enable = vk.TRUE,
+        .depth_write_enable = vk.TRUE,
+        .depth_compare_op = .less_or_equal,
+        .depth_bounds_test_enable = vk.FALSE,
+        .stencil_test_enable = vk.FALSE,
+        .front = std.mem.zeroes(vk.StencilOpState),
+        .back = std.mem.zeroes(vk.StencilOpState),
+        .min_depth_bounds = 0,
+        .max_depth_bounds = 0,
+    };
+
     const gpci = vk.GraphicsPipelineCreateInfo{
         .flags = .{},
         .stage_count = 2,
@@ -163,7 +176,7 @@ pub fn init(
         .p_viewport_state = &pvsci,
         .p_rasterization_state = &prsci,
         .p_multisample_state = &pmsci,
-        .p_depth_stencil_state = null,
+        .p_depth_stencil_state = &pdssci,
         .p_color_blend_state = &pcbsci,
         .p_dynamic_state = &pdsci,
         .layout = layout,

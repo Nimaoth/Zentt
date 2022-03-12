@@ -207,8 +207,6 @@ pub fn init(allocator: Allocator, gc: *GraphicsContext, frame_count: u64, render
     self.quad_buffer = try gc.createBuffer(@sizeOf(@TypeOf(vertices)), .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .{ .device_local_bit = true });
     try gc.uploadBufferDataStaged(self.quad_buffer, std.mem.sliceAsBytes(vertices[0..]));
 
-    // self.texture = try self.getTextureByPath("assets/img.jpg");
-
     return self;
 }
 

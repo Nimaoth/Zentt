@@ -131,7 +131,7 @@ pub fn moveSystemFollowPlayer(
 
     var iter = query.iter();
     while (iter.next()) |entity| {
-        const toPlayer = player.transform.position.sub(entity.transform.position);
+        const toPlayer = player.transform.position.sub(entity.transform.position).mul(Vec3.new(1, 1, 0));
         if (toPlayer.lengthSq() < 20 * 20) {
             const distance = toPlayer.norm().scale(-400);
             entity.transform.position = entity.transform.position.add(distance);

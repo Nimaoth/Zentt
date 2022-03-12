@@ -18,6 +18,9 @@ pub const SceneImage = struct {
     descriptor: vk.DescriptorSet,
     framebuffer: vk.Framebuffer,
 
+    depth_image: Image,
+    depth_image_view: vk.ImageView,
+
     id_image: Image,
     id_image_view: vk.ImageView,
 
@@ -27,6 +30,8 @@ pub const SceneImage = struct {
         self.image.deinit(gc);
         gc.vkd.destroyImageView(gc.dev, self.id_image_view, null);
         self.id_image.deinit(gc);
+        gc.vkd.destroyImageView(gc.dev, self.depth_image_view, null);
+        self.depth_image.deinit(gc);
     }
 };
 
@@ -247,6 +252,7 @@ pub fn beginSceneRender(
     };
     const clear = [_]vk.ClearValue{
         .{ .color = .{ .float_32 = .{ 0.1, 0.1, 0.1, 1 } } },
+        .{ .depth_stencil = .{ .depth = 1, .stencil = 0 } },
         .{ .color = .{ .uint_32 = .{ 0, 0, 0, 0 } } },
     };
 
@@ -428,6 +434,25 @@ fn createSceneImage(
     }, null);
     errdefer gc.vkd.destroyImageView(gc.dev, image_view, null);
 
+    const depth_image = try gc.createImage(extent.width, extent.height, .d24_unorm_s8_uint, .optimal, .{ .depth_stencil_attachment_bit = true }, .{ .device_local_bit = true });
+    errdefer depth_image.deinit(gc);
+
+    const depth_image_view = try gc.vkd.createImageView(gc.dev, &.{
+        .flags = .{},
+        .image = depth_image.image,
+        .view_type = .@"2d",
+        .format = .d24_unorm_s8_uint,
+        .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+        .subresource_range = .{
+            .aspect_mask = .{ .depth_bit = true },
+            .base_mip_level = 0,
+            .level_count = 1,
+            .base_array_layer = 0,
+            .layer_count = 1,
+        },
+    }, null);
+    errdefer gc.vkd.destroyImageView(gc.dev, depth_image_view, null);
+
     const id_image = try gc.createImage(extent.width, extent.height, .r32_uint, .optimal, .{ .transfer_src_bit = true, .color_attachment_bit = true }, .{ .device_local_bit = true });
     errdefer id_image.deinit(gc);
 
@@ -447,7 +472,7 @@ fn createSceneImage(
     }, null);
     errdefer gc.vkd.destroyImageView(gc.dev, id_image_view, null);
 
-    const framebuffer = try createSceneFrameBuffer(gc, render_pass, &.{ image_view, id_image_view }, extent);
+    const framebuffer = try createSceneFrameBuffer(gc, render_pass, &.{ image_view, depth_image_view, id_image_view }, extent);
     errdefer gc.vkd.destroyFramebuffer(gc.dev, framebuffer, null);
 
     const descriptor = try createSceneImageDescriptorSet(gc, image_view, descriptor_pool, descriptor_set_layout, sampler);
@@ -455,6 +480,8 @@ fn createSceneImage(
     return SceneImage{
         .image = image,
         .image_view = image_view,
+        .depth_image = depth_image,
+        .depth_image_view = depth_image_view,
         .id_image = id_image,
         .id_image_view = id_image_view,
         .descriptor = descriptor,
@@ -591,6 +618,17 @@ fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format) !vk.RenderPass
         },
         .{
             .flags = .{},
+            .format = .d24_unorm_s8_uint,
+            .samples = .{ .@"1_bit" = true },
+            .load_op = .clear,
+            .store_op = .dont_care,
+            .stencil_load_op = .dont_care,
+            .stencil_store_op = .dont_care,
+            .initial_layout = .@"undefined",
+            .final_layout = .depth_stencil_attachment_optimal,
+        },
+        .{
+            .flags = .{},
             .format = .r32_uint,
             .samples = .{ .@"1_bit" = true },
             .load_op = .clear,
@@ -608,9 +646,14 @@ fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format) !vk.RenderPass
             .layout = .color_attachment_optimal,
         },
         .{
-            .attachment = 1,
+            .attachment = 2,
             .layout = .color_attachment_optimal,
         },
+    };
+
+    const depth_attachment_ref = vk.AttachmentReference{
+        .attachment = 1,
+        .layout = .depth_stencil_attachment_optimal,
     };
 
     const subpass = vk.SubpassDescription{
@@ -621,7 +664,7 @@ fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format) !vk.RenderPass
         .color_attachment_count = color_attachment_refs.len,
         .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_refs),
         .p_resolve_attachments = null,
-        .p_depth_stencil_attachment = null,
+        .p_depth_stencil_attachment = &depth_attachment_ref,
         .preserve_attachment_count = 0,
         .p_preserve_attachments = undefined,
     };
@@ -629,10 +672,10 @@ fn createSceneRenderPass(gc: *GraphicsContext, format: vk.Format) !vk.RenderPass
     const dependency = vk.SubpassDependency{
         .src_subpass = vk.SUBPASS_EXTERNAL,
         .dst_subpass = 0,
-        .src_stage_mask = vk.PipelineStageFlags{ .fragment_shader_bit = true },
-        .dst_stage_mask = vk.PipelineStageFlags{ .color_attachment_output_bit = true },
+        .src_stage_mask = vk.PipelineStageFlags{ .fragment_shader_bit = true, .early_fragment_tests_bit = true },
+        .dst_stage_mask = vk.PipelineStageFlags{ .color_attachment_output_bit = true, .early_fragment_tests_bit = true },
         .src_access_mask = vk.AccessFlags{ .shader_read_bit = true },
-        .dst_access_mask = vk.AccessFlags{ .color_attachment_write_bit = true },
+        .dst_access_mask = vk.AccessFlags{ .color_attachment_write_bit = true, .depth_stencil_attachment_write_bit = true },
         .dependency_flags = vk.DependencyFlags{},
     };
 
