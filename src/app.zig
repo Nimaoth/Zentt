@@ -6,9 +6,13 @@ const imgui2 = @import("editor/imgui2.zig");
 
 const sdl = @import("rendering/sdl.zig");
 
-const Vec2 = imgui.Vec2;
 const Allocator = std.mem.Allocator;
-const zal = @import("zalgebra");
+
+const math = @import("math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+const Mat4 = math.Mat4;
 
 const Renderer = @import("rendering/renderer.zig");
 const SpriteRenderer = @import("rendering/sprite_renderer.zig");
@@ -75,8 +79,8 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .profiler = Profiler.init(allocator),
         .windowSize = extent,
         .matrices = .{
-            .view = zal.Mat4.identity(),
-            .proj = zal.Mat4.orthographic(-100, 100, -100, 100, 1, -1),
+            .view = Mat4.identity(),
+            .proj = Mat4.orthographic(-100, 100, -100, 100, 1, -1),
         },
     };
     return self;
@@ -134,7 +138,7 @@ pub fn endFrame(self: *Self) !void {
 
 pub fn beginRender(self: *Self) !void {
     const contentSize = blk: {
-        imgui.PushStyleVarVec2(.WindowPadding, Vec2{});
+        imgui.PushStyleVarVec2(.WindowPadding, .{});
         defer imgui.PopStyleVar();
 
         const open = imgui.Begin("Viewport");
@@ -145,7 +149,7 @@ pub fn beginRender(self: *Self) !void {
         const aspect_ratio = size.x / size.y;
         const height = imgui2.variable(endFrame, f32, "Camera Size", 500, true, .{ .min = 1, .max = 1000, .speed = 0.01 }).*;
 
-        self.matrices.proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1);
+        self.matrices.proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1);
         if (open) {
             imgui.ImageExt(
                 @ptrCast(**anyopaque, &self.renderer.getSceneImage().descriptor).*,
@@ -166,8 +170,8 @@ pub fn beginRender(self: *Self) !void {
 
     // const hdr = imgui2.variable(endFrame, bool, "HDR", true, true, .{}).*;
     // const options = struct { color: bool = true, flags: imgui.ColorEditFlags }{ .flags = .{ .HDR = hdr } };
-    // const color = imgui2.variable(endFrame, zal.Vec4, "Tint", .{ .data = [4]f32{ 1, 1, 0, 1 } }, true, options).*;
-    // const transform = imgui2.variable(endFrame, zal.Vec4, "Transform", .{ .data = [4]f32{ 0, 0, 1, 1 } }, true, .{}).*;
+    // const color = imgui2.variable(endFrame, Vec4, "Tint", .{ .data = [4]f32{ 1, 1, 0, 1 } }, true, options).*;
+    // const transform = imgui2.variable(endFrame, Vec4, "Transform", .{ .data = [4]f32{ 0, 0, 1, 1 } }, true, .{}).*;
     try self.sprite_renderer.beginRender(frame.cmdbuf, frame.frame_index, &self.matrices);
 }
 

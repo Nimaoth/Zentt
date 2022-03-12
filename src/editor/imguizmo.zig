@@ -1,19 +1,11 @@
 const std = @import("std");
-const vk = @import("vulkan");
-
-const C = @cImport({
-    @cInclude("imguizmo/ImGuizmo.h");
-});
-
 const imgui = @import("imgui.zig");
-const imgui2 = @import("imgui2.zig");
-const sdl = @import("../rendering/sdl.zig");
 
-const Renderer = @import("../rendering/renderer.zig");
-const AssetDB = @import("../rendering/assetdb.zig");
-
-const Rtti = @import("../util/rtti.zig");
-const zal = @import("zalgebra");
+const math = @import("../math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+const Mat4 = math.Mat4;
 
 pub extern fn SetDrawlist(drawlist: ?*imgui.DrawList) void;
 pub extern fn BeginFrame() void;
@@ -27,7 +19,7 @@ pub extern fn SetRect(x: f32, y: f32, width: f32, height: f32) void;
 pub extern fn SetOrthographic(isOrthographic: bool) void;
 // IMGUI_API void DrawCubes(const float* view, const float* projection, const float* matrices, int matrixCount);
 // IMGUI_API void DrawGrid(const float* view, const float* projection, const float* matrix, const float gridSize);
-pub extern fn Manipulate(view: *const zal.Mat4, projection: *const zal.Mat4, operation: Operation, mode: Mode, matrix: *zal.Mat4, deltaMatrix: ?*zal.Mat4, snap: ?*const f32, localBounds: ?*const f32, boundsSnap: ?*const f32) bool;
+pub extern fn Manipulate(view: *const Mat4, projection: *const Mat4, operation: Operation, mode: Mode, matrix: *Mat4, deltaMatrix: ?*Mat4, snap: ?*const f32, localBounds: ?*const f32, boundsSnap: ?*const f32) bool;
 // IMGUI_API void ViewManipulate(float* view, float length, ImVec2 position, ImVec2 size, ImU32 backgroundColor);
 pub extern fn SetID(id: c_int) void;
 pub extern fn IsOverOp(op: Operation) bool;

@@ -1,6 +1,8 @@
 const std = @import("std");
 const assert = @import("std").debug.assert;
 
+const math = @import("../math.zig");
+
 pub const DrawListSharedData = opaque {};
 pub const Context = opaque {};
 pub const DrawCallback = ?fn (parent_list: ?*const DrawList, cmd: ?*const DrawCmd) callconv(.C) void;
@@ -2457,73 +2459,12 @@ pub const Vec2 = extern struct {
 
     const Self = @This();
 
-    pub fn add(self: *Self, other: Self) *Self {
-        self.x += other.x;
-        self.y += other.y;
-        return self;
+    pub fn toZal(self: Self) math.Vec2 {
+        return math.Vec2.new(self.x, self.y);
     }
 
-    pub fn plus(self: Self, other: Self) Self {
-        return .{ .x = self.x + other.x, .y = self.y + other.y };
-    }
-
-    pub fn minus(self: Self, other: Self) Self {
-        return .{ .x = self.x - other.x, .y = self.y - other.y };
-    }
-
-    pub fn mul(self: *Self, other: Self) *Self {
-        self.x *= other.x;
-        self.y *= other.y;
-        return self;
-    }
-
-    pub fn muls(self: *Self, other: f32) *Self {
-        self.x *= other;
-        self.y *= other;
-        return self;
-    }
-
-    pub fn times(self: Self, other: Self) Self {
-        return .{ .x = self.x * other.x, .y = self.y * other.y };
-    }
-
-    pub fn timess(self: Self, other: f32) Self {
-        return .{ .x = self.x * other, .y = self.y * other };
-    }
-
-    pub fn clamps(self: *Self, min: f32, max: f32) *Self {
-        self.x = std.math.clamp(self.x, min, max);
-        self.y = std.math.clamp(self.y, min, max);
-        return self;
-    }
-
-    pub fn normalize(self: *Self) *Self {
-        const l = self.lenSq();
-        if (l != 0) {
-            const lenInv = 1 / std.math.sqrt(l);
-            self.x *= lenInv;
-            self.y *= lenInv;
-        }
-        return self;
-    }
-
-    pub fn normalized(self: Self) Self {
-        var result = self;
-        const l = result.lenSq();
-        if (l != 0) {
-            const lenInv = 1 / std.math.sqrt(l);
-            result.x *= lenInv;
-            result.y *= lenInv;
-        }
-        return result;
-    }
-
-    pub fn len(self: Self) f32 {
-        return std.math.sqrt(self.x * self.x + self.y * self.y);
-    }
-
-    pub fn lenSq(self: Self) f32 {
-        return self.x * self.x + self.y * self.y;
+    pub fn fromZal(vec: math.Vec2) Self {
+        return .{ .x = vec.x(), .y = vec.y() };
     }
 };
 
@@ -3989,13 +3930,17 @@ pub inline fn DestroyContext() void {
 }
 
 /// DragFloatExt(label: ?[*:0]const u8, v: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool
-pub const DragFloatExt = raw.igDragFloat;
+pub inline fn DragFloatExt(label: ?[*:0]const u8, v: *f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool {
+    return raw.igDragFloat(label, v, v_speed, v_min, v_max, format, flags.toInt());
+}
 pub inline fn DragFloat(label: ?[*:0]const u8, v: *f32) bool {
     return DragFloatExt(label, v, 1.0, 0.0, 0.0, "%.3f", SliderFlags.None.toInt());
 }
 
 /// DragFloat2Ext(label: ?[*:0]const u8, v: *[2]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool
-pub const DragFloat2Ext = raw.igDragFloat2;
+pub inline fn DragFloat2Ext(label: ?[*:0]const u8, v: *[2]f32, v_speed: f32, v_min: f32, v_max: f32, format: ?[*:0]const u8, flags: SliderFlags) bool {
+    return raw.igDragFloat2(label, v, v_speed, v_min, v_max, format, flags.toInt());
+}
 pub inline fn DragFloat2(label: ?[*:0]const u8, v: *[2]f32) bool {
     return DragFloat2Ext(label, v, 1.0, 0.0, 0.0, "%.3f", SliderFlags.None.toInt());
 }

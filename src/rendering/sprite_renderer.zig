@@ -10,7 +10,12 @@ const Pipeline = @import("vulkan/pipeline.zig");
 const resources = @import("resources");
 
 const AssetDB = @import("assetdb.zig");
-const zal = @import("zalgebra");
+
+const math = @import("../math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+const Mat4 = math.Mat4;
 
 const Self = @This();
 
@@ -57,8 +62,8 @@ const vertices = [_]Vertex{
 };
 
 pub const SceneMatricesUbo = struct {
-    view: zal.Mat4,
-    proj: zal.Mat4,
+    view: Mat4,
+    proj: Mat4,
 };
 
 pub const TextureAsset = struct {
@@ -178,12 +183,12 @@ pub fn init(allocator: Allocator, gc: *GraphicsContext, frame_count: u64, render
         .{
             .stage_flags = .{ .vertex_bit = true },
             .offset = 0,
-            .size = @sizeOf(zal.Mat4),
+            .size = @sizeOf(Mat4),
         },
         .{
             .stage_flags = .{ .fragment_bit = true },
-            .offset = @sizeOf(zal.Mat4),
-            .size = @sizeOf(zal.Vec4) + @sizeOf(u32),
+            .offset = @sizeOf(Mat4),
+            .size = @sizeOf(Vec4) + @sizeOf(Vec2) + @sizeOf(u32),
         },
     };
     self.quad_pipeline = try Pipeline.init(
@@ -258,7 +263,7 @@ pub fn endRender(self: *Self) void {
 
 /// Draw a quad at the specified transform.
 /// (X,Y) is the 2D position, (Z,W) is the 2D scale (scale of 1 means width and height are 1).
-pub fn drawSprite(self: *Self, transform: zal.Vec4, rotation: f32, texture: *AssetDB.TextureAsset, id: u32) void {
+pub fn drawSprite(self: *Self, position: Vec3, size: Vec2, rotation: f32, texture: *AssetDB.TextureAsset, tiling: Vec2, id: u32) void {
     const frame = &self.frame_data[self.frame_index];
 
     var uv = texture.getUV();
@@ -285,15 +290,16 @@ pub fn drawSprite(self: *Self, transform: zal.Vec4, rotation: f32, texture: *Ass
         frame.last_bound_descriptor_set = descriptor;
     }
 
-    const transform_mat = zal.Mat4.recompose(
-        zal.Vec3.new(transform.x(), transform.y(), 0),
-        zal.Vec3.new(0, 0, rotation),
-        zal.Vec3.new(transform.z(), transform.w(), 1),
+    const transform_mat = Mat4.recompose(
+        position,
+        Vec3.new(0, 0, rotation),
+        Vec3.new(size.x(), size.y(), 1),
     );
 
-    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .vertex_bit = true }, 0, @sizeOf(zal.Mat4), &transform_mat);
-    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Mat4), @sizeOf(zal.Vec4), &uv);
-    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(zal.Mat4) + @sizeOf(zal.Vec4), @sizeOf(u32), &id);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .vertex_bit = true }, 0, @sizeOf(Mat4), &transform_mat);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(Mat4), @sizeOf(Vec4), &uv);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(Mat4) + @sizeOf(Vec4), @sizeOf(Vec2), &tiling);
+    self.gc.vkd.cmdPushConstants(self.cmdbuf, self.quad_pipeline.layout, .{ .fragment_bit = true }, @sizeOf(Mat4) + @sizeOf(Vec4) + @sizeOf(Vec2), @sizeOf(u32), &id);
 
     self.gc.vkd.cmdDraw(self.cmdbuf, vertices.len, 1, 0, 0);
 }

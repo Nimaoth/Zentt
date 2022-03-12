@@ -4,9 +4,12 @@ const imgui = @import("editor/imgui.zig");
 const imgui2 = @import("editor/imgui2.zig");
 const sdl = @import("rendering/sdl.zig");
 
-const zal = @import("zalgebra");
+const math = @import("math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+const Mat4 = math.Mat4;
 
-const Vec2 = imgui.Vec2;
 const Allocator = std.mem.Allocator;
 
 const App = @import("app.zig");
@@ -32,6 +35,7 @@ pub fn loadAssets(assetdb: *AssetDB) !void {
     try assetdb.loadTexturePack("assets/img/items.json", .{ .filter = .nearest });
     try assetdb.loadTexturePack("assets/img/vfx.json", .{ .filter = .nearest });
     try assetdb.loadTexturePack("assets/img/UI.json", .{ .filter = .nearest });
+    try assetdb.loadTexturePack("assets/tilesets/ForestTexturePacked.json", .{ .filter = .nearest });
 
     // Items
     // ArmorIron.png

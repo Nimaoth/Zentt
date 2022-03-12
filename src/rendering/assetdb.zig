@@ -4,7 +4,12 @@ const stb = @import("stb_image.zig");
 const vk = @import("vulkan");
 const GraphicsContext = @import("vulkan/graphics_context.zig").GraphicsContext;
 const Image = @import("vulkan/graphics_context.zig").Image;
-const zal = @import("zalgebra");
+
+const math = @import("../math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+const Mat4 = math.Mat4;
 
 const Self = @This();
 
@@ -24,8 +29,8 @@ pub const TextureAsset = struct {
         image: ImageTexture,
         ref: struct {
             asset: *TextureAsset,
-            uv: zal.Vec4,
-            size: zal.Vec2,
+            uv: Vec4,
+            size: Vec2,
         },
     },
 
@@ -51,10 +56,10 @@ pub const TextureAsset = struct {
         }
     }
 
-    pub fn getUV(self: *@This()) zal.Vec4 {
+    pub fn getUV(self: *@This()) Vec4 {
         switch (self.data) {
             .image => |_| {
-                return zal.Vec4.new(0, 0, 1, 1);
+                return Vec4.new(0, 1, 1, 0);
             },
             .ref => |ref| {
                 return ref.uv;
@@ -62,10 +67,10 @@ pub const TextureAsset = struct {
         }
     }
 
-    pub fn getSize(self: *@This()) zal.Vec2 {
+    pub fn getSize(self: *@This()) Vec2 {
         switch (self.data) {
             .image => |image| {
-                return zal.Vec2.new(@intToFloat(f32, image.image.extent.width), @intToFloat(f32, image.image.extent.height));
+                return Vec2.new(@intToFloat(f32, image.image.extent.width), @intToFloat(f32, image.image.extent.height));
             },
             .ref => |ref| {
                 return ref.size;
@@ -185,13 +190,13 @@ pub fn loadTexturePack(self: *Self, json_path: [:0]const u8, options: TextureOpt
             asset.* = TextureAsset{
                 .data = .{ .ref = .{
                     .asset = texture_pack,
-                    .uv = zal.Vec4.new(
+                    .uv = Vec4.new(
                         @floatCast(f32, frame.frame.x / texture_json.size.w),
                         @floatCast(f32, (frame.frame.y + frame.frame.h) / texture_json.size.h),
                         @floatCast(f32, (frame.frame.x + frame.frame.w) / texture_json.size.w),
                         @floatCast(f32, frame.frame.y / texture_json.size.h),
                     ),
-                    .size = zal.Vec2.new(
+                    .size = Vec2.new(
                         @floatCast(f32, frame.frame.w),
                         @floatCast(f32, frame.frame.h),
                     ),

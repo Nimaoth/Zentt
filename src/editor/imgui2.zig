@@ -13,8 +13,12 @@ const sdl = @import("../rendering/sdl.zig");
 const Renderer = @import("../rendering/renderer.zig");
 const AssetDB = @import("../rendering/assetdb.zig");
 
+const math = @import("../math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+
 const Rtti = @import("../util/rtti.zig");
-const zal = @import("zalgebra");
 
 pub const ImGui_ImplVulkan_InitInfo = extern struct {
     Instance: vk.Instance,
@@ -307,14 +311,14 @@ pub fn any(value: anytype, name: []const u8, options: anytype) void {
         return;
     }
 
-    if (ValueType == zal.Vec4) {
+    if (ValueType == Vec4) {
         property(name);
         const as_color = getOr(options, .color, false);
         if (as_color) {
             const flags = getOr(options, .flags, imgui.ColorEditFlags{});
             var as_array = value.toArray();
             if (imgui.ColorEdit4Ext("", &as_array, flags)) {
-                value.* = zal.Vec4.fromSlice(as_array[0..]);
+                value.* = Vec4.fromSlice(as_array[0..]);
             }
         } else {
             const speed = getOr(options, .speed, @floatCast(f32, 1.0));
@@ -323,20 +327,20 @@ pub fn any(value: anytype, name: []const u8, options: anytype) void {
 
             var as_array = value.toArray();
             if (imgui.DragFloat4Ext("", &as_array, speed, min, max, "%.3f", .{})) {
-                value.* = zal.Vec4.fromSlice(as_array[0..]);
+                value.* = Vec4.fromSlice(as_array[0..]);
             }
         }
         return;
     }
 
-    if (ValueType == zal.Vec3) {
+    if (ValueType == Vec3) {
         property(name);
         const as_color = getOr(options, .color, false);
         if (as_color) {
             const flags = getOr(options, .flags, imgui.ColorEditFlags{});
             var as_array = value.toArray();
             if (imgui.ColorEdit3Ext("", &as_array, flags)) {
-                value.* = zal.Vec3.fromSlice(as_array[0..]);
+                value.* = Vec3.fromSlice(as_array[0..]);
             }
         } else {
             const speed = getOr(options, .speed, @floatCast(f32, 1.0));
@@ -345,8 +349,21 @@ pub fn any(value: anytype, name: []const u8, options: anytype) void {
 
             var as_array = value.toArray();
             if (imgui.DragFloat3Ext("", &as_array, speed, min, max, "%.3f", .{})) {
-                value.* = zal.Vec3.fromSlice(as_array[0..]);
+                value.* = Vec3.fromSlice(as_array[0..]);
             }
+        }
+        return;
+    }
+
+    if (ValueType == Vec2) {
+        property(name);
+        const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+        const min = getOr(options, .min, @floatCast(f32, 0.0));
+        const max = getOr(options, .max, @floatCast(f32, 0.0));
+
+        var as_array = value.toArray();
+        if (imgui.DragFloat2Ext("", &as_array, speed, min, max, "%.3f", .{})) {
+            value.* = Vec2.fromSlice(as_array[0..]);
         }
         return;
     }
@@ -483,6 +500,73 @@ pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
     if (typeInfo == Rtti.typeInfo(*AssetDB.TextureAsset)) {
         const asset = @ptrCast(**AssetDB.TextureAsset, @alignCast(@alignOf(*u8), value.ptr)).*;
         anyDynamic(Rtti.typeInfo(AssetDB.TextureAsset), std.mem.asBytes(asset));
+        return;
+    }
+
+    if (typeInfo == Rtti.typeInfo(Vec4)) {
+        const vec = @ptrCast(*Vec4, @alignCast(@alignOf(Vec4), value.ptr));
+        // const as_color = getOr(options, .color, false);
+        // if (as_color) {
+        //     const flags = getOr(options, .flags, imgui.ColorEditFlags{});
+        //     var as_array = value.toArray();
+        //     if (imgui.ColorEdit4Ext("", &as_array, flags)) {
+        //         value.* = Vec4.fromSlice(as_array[0..]);
+        //     }
+        // } else {
+        // const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+        // const min = getOr(options, .min, @floatCast(f32, 0.0));
+        // const max = getOr(options, .max, @floatCast(f32, 0.0));
+        const speed: f32 = 1;
+        const min: f32 = 1;
+        const max: f32 = 1;
+
+        var as_array = vec.toArray();
+        if (imgui.DragFloat4Ext("", &as_array, speed, min, max, "%.3f", .{})) {
+            vec.* = Vec4.fromSlice(as_array[0..]);
+        }
+        // }
+        return;
+    }
+
+    if (typeInfo == Rtti.typeInfo(Vec3)) {
+        const vec = @ptrCast(*Vec3, @alignCast(@alignOf(Vec3), value.ptr));
+
+        // const as_color = getOr(options, .color, false);
+        // if (as_color) {
+        //     const flags = getOr(options, .flags, imgui.ColorEditFlags{});
+        //     var as_array = value.toArray();
+        //     if (imgui.ColorEdit3Ext("", &as_array, flags)) {
+        //         value.* = Vec3.fromSlice(as_array[0..]);
+        //     }
+        // } else {
+        // const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+        // const min = getOr(options, .min, @floatCast(f32, 0.0));
+        // const max = getOr(options, .max, @floatCast(f32, 0.0));
+        const speed: f32 = 1;
+        const min: f32 = 1;
+        const max: f32 = 1;
+
+        var as_array = vec.toArray();
+        if (imgui.DragFloat3Ext("", &as_array, speed, min, max, "%.3f", .{})) {
+            vec.* = Vec3.fromSlice(as_array[0..]);
+        }
+        // }
+        return;
+    }
+
+    if (typeInfo == Rtti.typeInfo(Vec2)) {
+        const vec = @ptrCast(*Vec2, @alignCast(@alignOf(Vec2), value.ptr));
+        // const speed = getOr(options, .speed, @floatCast(f32, 1.0));
+        // const min = getOr(options, .min, @floatCast(f32, 0.0));
+        // const max = getOr(options, .max, @floatCast(f32, 0.0));
+        const speed: f32 = 1;
+        const min: f32 = 1;
+        const max: f32 = 1;
+
+        var as_array = vec.toArray();
+        if (imgui.DragFloat2Ext("", &as_array, speed, min, max, "%.3f", .{})) {
+            vec.* = Vec2.fromSlice(as_array[0..]);
+        }
         return;
     }
 

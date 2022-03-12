@@ -4,11 +4,6 @@ const Allocator = std.mem.Allocator;
 const vk = @import("vulkan");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
-const Image = @import("graphics_context.zig").Image;
-const Swapchain = @import("swapchain.zig").Swapchain;
-const resources = @import("resources");
-
-const zal = @import("zalgebra");
 
 const Self = @This();
 

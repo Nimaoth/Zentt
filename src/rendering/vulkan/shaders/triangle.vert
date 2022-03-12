@@ -15,6 +15,7 @@ layout(binding = 0) uniform UniformBufferObject {
 layout(push_constant) uniform UniformPushConstant {
     mat4 transform;
     vec4 uv;
+    vec2 tiling;
     uint id;
 } pc;
 

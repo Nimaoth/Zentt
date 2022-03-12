@@ -5,9 +5,12 @@ const imgui2 = @import("editor/imgui2.zig");
 const imguizmo = @import("editor/imguizmo.zig");
 const sdl = @import("rendering/sdl.zig");
 
-const zal = @import("zalgebra");
+const math = @import("math.zig");
+const Vec2 = math.Vec2;
+const Vec3 = math.Vec3;
+const Vec4 = math.Vec4;
+const Mat4 = math.Mat4;
 
-const Vec2 = imgui.Vec2;
 const Allocator = std.mem.Allocator;
 
 const App = @import("app.zig");
@@ -33,13 +36,14 @@ const app_name = "vulkan-zig triangle example";
 const assets = @import("assets.zig");
 
 pub const TransformComponent = struct {
-    position: Vec2 = .{ .x = 0, .y = 0 },
+    position: Vec3 = Vec3.new(0, 0, 0),
     rotation: f32 = 0,
     size: f32 = 1,
 };
 
 pub const SpriteComponent = struct {
     texture: *AssetDB.TextureAsset,
+    tiling: Vec2 = Vec2.new(1, 1),
 };
 
 pub const AnimatedSpriteComponent = struct {
@@ -94,14 +98,14 @@ pub fn moveSystemPlayer(
 
     var iter = query.iter();
     while (iter.next()) |entity| {
-        var dir = Vec2{};
-        if (input.left) dir.x -= 1;
-        if (input.right) dir.x += 1;
-        if (input.up) dir.y += 1;
-        if (input.down) dir.y -= 1;
+        var dir = Vec3.zero();
+        if (input.left) dir = dir.add(Vec3.new(-1, 0, 0));
+        if (input.right) dir = dir.add(Vec3.new(1, 0, 0));
+        if (input.up) dir = dir.add(Vec3.new(0, 1, 0));
+        if (input.down) dir = dir.add(Vec3.new(0, -1, 0));
 
-        const vel = dir.normalized().timess(entity.speed.speed);
-        _ = entity.transform.position.add(vel.timess(delta));
+        const vel = dir.norm().scale(entity.speed.speed);
+        entity.transform.position = entity.transform.position.add(vel.scale(delta));
     }
 }
 
@@ -127,10 +131,14 @@ pub fn moveSystemFollowPlayer(
 
     var iter = query.iter();
     while (iter.next()) |entity| {
-        const toPlayer = player.transform.position.plus(entity.transform.position.timess(-1));
-        const vel = toPlayer.normalized().timess(entity.speed.speed);
-
-        _ = entity.transform.position.add(vel.timess(delta));
+        const toPlayer = player.transform.position.sub(entity.transform.position);
+        if (toPlayer.lengthSq() < 20 * 20) {
+            const distance = toPlayer.norm().scale(-400);
+            entity.transform.position = entity.transform.position.add(distance);
+        } else {
+            const vel = toPlayer.norm().scale(entity.speed.speed);
+            entity.transform.position = entity.transform.position.add(vel.scale(delta));
+        }
     }
 }
 
@@ -154,8 +162,8 @@ pub fn animatedSpriteRenderSystem(
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, -camera.transform.position.y, 0 })).transpose(),
-            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
+            .view = Mat4.fromTranslate(Vec3.fromSlice(&.{ -camera.transform.position.x(), -camera.transform.position.y(), 0 })).transpose(),
+            .proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
         };
         try sprite_renderer.updateCameraData(&matrices);
     } else {
@@ -177,9 +185,16 @@ pub fn animatedSpriteRenderSystem(
         }
 
         const texture = entity.animated_sprite.getCurrentTexture();
-        const texture_size: zal.Vec2 = texture.getSize().scale(size);
+        const texture_size: Vec2 = texture.getSize().scale(size);
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), rotation, texture, @intCast(u32, entity.id));
+        sprite_renderer.drawSprite(
+            position,
+            texture_size,
+            rotation,
+            texture,
+            Vec2.new(1, 1),
+            @intCast(u32, entity.id),
+        );
     }
 
     // const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
@@ -204,8 +219,8 @@ pub fn spriteRenderSystem(
         const matrices = SpriteRenderer.SceneMatricesUbo{
             // x needs to be flipped because the view matrix is the inverse of the camera transform
             // y needs to not be flipped because in vulkan y is flipped.
-            .view = zal.Mat4.fromTranslate(zal.Vec3.fromSlice(&.{ -camera.transform.position.x, -camera.transform.position.y, 0 })).transpose(),
-            .proj = zal.Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
+            .view = Mat4.fromTranslate(Vec3.fromSlice(&.{ -camera.transform.position.x(), -camera.transform.position.y(), 0 })).transpose(),
+            .proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, height * 0.5, -height * 0.5, 1, -1),
         };
         try sprite_renderer.updateCameraData(&matrices);
     } else {
@@ -218,9 +233,16 @@ pub fn spriteRenderSystem(
         const rotation = entity.transform.rotation;
         const size = entity.transform.size;
 
-        const texture_size: zal.Vec2 = entity.sprite.texture.getSize().scale(size);
+        const texture_size: Vec2 = entity.sprite.texture.getSize().scale(size);
 
-        sprite_renderer.drawSprite(zal.Vec4.new(position.x, position.y, texture_size.x(), texture_size.y()), rotation, entity.sprite.texture, @intCast(u32, entity.id));
+        sprite_renderer.drawSprite(
+            position,
+            texture_size,
+            rotation,
+            entity.sprite.texture,
+            entity.sprite.tiling,
+            @intCast(u32, entity.id),
+        );
     }
 
     const descriptor_set_count = sprite_renderer.frame_data[sprite_renderer.frame_index].image_descriptor_sets.count();
@@ -264,49 +286,57 @@ pub fn main() !void {
 
     _ = (try commands.createEntity())
         .addComponent(Player{})
-        .addComponent(TransformComponent{ .position = .{ .x = 100 }, .size = 1 })
+        .addComponent(TransformComponent{ .position = Vec3.new(100, 0, 0), .size = 1 })
         .addComponent(SpeedComponent{ .speed = 150 })
-        .addComponent(CameraComponent{ .size = 400 })
+        .addComponent(CameraComponent{ .size = 450 })
         .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
+
+    // Background.
+    _ = (try commands.createEntity())
+        .addComponent(TransformComponent{ .position = Vec3.zero(), .size = 1000 })
+        .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("Forest_119.png", .{}), .tiling = Vec2.new(1000, 1000) });
 
     const animation_count = assetdb.sprite_animations.count();
     const x_count = std.math.sqrt(animation_count);
     {
+        var prng = std.rand.DefaultPrng.init(123);
+        var rand = prng.random();
+
         var iter = assetdb.sprite_animations.valueIterator();
-        var pos = Vec2{};
+        var pos = Vec3.zero();
         var i: usize = 0;
         while (iter.next()) |asset| : (i += 1) {
             const anim: *AssetDB.SpriteAnimationAsset = asset.*;
             _ = (try commands.createEntity())
                 .addComponent(TransformComponent{ .position = pos, .size = 1 })
                 .addComponent(AnimatedSpriteComponent{ .anim = anim })
-                .addComponent(SpeedComponent{ .speed = 75 });
+                .addComponent(SpeedComponent{ .speed = std.math.max(1, rand.floatNorm(f32) * 25 + 50) })
+                .addComponent(FollowPlayerMovementComponent{});
 
             if (i >= x_count) {
                 i = 0;
-                pos.x = 0;
-                pos.y += 50;
+                pos = pos.mul(Vec3.new(0, 1, 1)).add(Vec3.new(0, 50, 0));
             } else {
-                pos.x += 50;
+                pos = pos.add(Vec3.new(50, 0, 0));
             }
         }
     }
     {
-        var pos = Vec2{ .x = -500, .y = -600 };
+        var pos = Vec3.new(-500, -600, 0);
         for (assetdb.textures.items) |asset| {
             if (asset.data == .image) {
                 _ = (try commands.createEntity())
-                    .addComponent(TransformComponent{ .position = pos.plus(.{ .x = @intToFloat(f32, asset.data.image.image.extent.width) * 0.5 }), .size = 0.5 })
+                    .addComponent(TransformComponent{ .position = pos.add(Vec3.new(@intToFloat(f32, asset.data.image.image.extent.width) * 0.5, 0, 0)), .size = 0.5 })
                     .addComponent(SpriteComponent{ .texture = asset });
-                pos.x += @intToFloat(f32, asset.data.image.image.extent.width) + 10;
+                pos = pos.add(Vec3.new(@intToFloat(f32, asset.data.image.image.extent.width) + 10, 0, 0));
+                // } else if (std.mem.startsWith(u8, asset.path, "Forest_")) {
+                //     _ = (try commands.createEntity())
+                //         .addComponent(TransformComponent{ .position = pos.plus(.{ .x = asset.getSize().x() * 0.5 }), .size = 1 })
+                //         .addComponent(SpriteComponent{ .texture = asset });
+                //     pos.x += asset.getSize().x() + 10;
             }
         }
     }
-
-    _ = (try commands.createEntity())
-        .addComponent(TransformComponent{ .position = .{ .x = 0, .y = -100 }, .size = 1 })
-        .addComponent(SpeedComponent{ .speed = 100 })
-        .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
 
     _ = try commands.applyCommands(world, std.math.maxInt(u64));
 
@@ -314,7 +344,7 @@ pub fn main() !void {
     defer details.deinit();
     try details.registerDefaultComponent(Player{});
     try details.registerDefaultComponent(TransformComponent{});
-    // try details.registerDefaultComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("whiteDot.png", .{}) });
+    try details.registerDefaultComponent(FollowPlayerMovementComponent{});
     try details.registerDefaultComponent(CameraComponent{ .size = 400 });
 
     var viewport = Viewport.init(world, app);
@@ -503,7 +533,7 @@ pub fn main() !void {
 
         if (viewport_click_location) |loc| {
             //
-            const id = try app.renderer.getIdAt(@floatToInt(usize, loc.x), @floatToInt(usize, loc.y));
+            const id = try app.renderer.getIdAt(@floatToInt(usize, loc.x()), @floatToInt(usize, loc.y()));
             if (world.entities.get(id)) |_| {
                 selectedEntity = id;
             } else if (id == 0) {
