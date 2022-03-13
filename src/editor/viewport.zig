@@ -96,8 +96,10 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                 const p0 = Vec2.new(p0_screen.x(), p0_screen.y());
                 const p1 = Vec2.new(p1_screen.x(), p1_screen.y());
 
-                const color = imgui.ColorConvertFloat4ToU32(imgui2.variable(draw, imgui.Vec4, "Selection Color", .{ .x = 1, .y = 0.5, .z = 0.15, .w = 1 }, true, .{ .color = true }).*);
-                const thickness = imgui2.variable(draw, u64, "Selection Thickness", 3, true, .{ .min = 2 }).*;
+                // const color = imgui.ColorConvertFloat4ToU32(imgui2.variable(draw, imgui.Vec4, "Selection Color", .{ .x = 1, .y = 0.5, .z = 0.15, .w = 1 }, true, .{ .color = true }).*);
+                // const thickness = imgui2.variable(draw, u64, "Selection Thickness", 3, true, .{ .min = 2 }).*;
+                const color = imgui.ColorConvertFloat4ToU32(.{ .x = 1, .y = 0.5, .z = 0.15, .w = 1 });
+                const thickness = 3;
 
                 // Draw outline
                 var i: u64 = 0;
@@ -115,7 +117,7 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                 imguizmo.SetOrthographic(true);
                 imguizmo.SetRect(canvas_p0.x(), canvas_p0.y(), canvas_sz.x(), canvas_sz.y());
 
-                var mode = imgui2.variable(draw, imguizmo.Mode, "Guizmo Mode", .World, true, .{});
+                var mode = imgui2.variable(draw, imguizmo.Mode, "Guizmo Mode", .World, false, .{});
                 if (imgui.IsKeyPressed(imgui.Key.@"1")) {
                     mode.* = .Local;
                 } else if (imgui.IsKeyPressed(imgui.Key.@"2")) {

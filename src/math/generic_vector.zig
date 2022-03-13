@@ -44,6 +44,14 @@ pub fn GenericVector(comptime dimensions: comptime_int, comptime T: type) type {
                     return .{ .data = [2]T{ vx, vy } };
                 }
 
+                pub fn toVec3(self: Self, z: T) GenericVector(3, T) {
+                    return GenericVector(3, T).new(self.x(), self.y(), z);
+                }
+
+                pub fn toVec4(self: Self, z: T, w: T) GenericVector(4, T) {
+                    return GenericVector(4, T).new(self.x(), self.y(), z, w);
+                }
+
                 pub fn toImgui(self: Self) imgui.Vec2 {
                     return imgui.Vec2{ .x = self.x(), .y = self.y() };
                 }
@@ -82,6 +90,10 @@ pub fn GenericVector(comptime dimensions: comptime_int, comptime T: type) type {
                     const vy = (lz * rx) - (lx * rz);
                     const vz = (lx * ry) - (ly * rx);
                     return new(vx, vy, vz);
+                }
+
+                pub fn toVec4(self: Self, w: T) GenericVector(4, T) {
+                    return GenericVector(4, T).new(self.x(), self.y(), self.z(), w);
                 }
 
                 pub fn toImgui2(self: Self) imgui.Vec2 {

@@ -84,7 +84,7 @@ pub fn bibleSystem(
         return;
     };
 
-    const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 100, true, .{ .min = 5 }).*;
+    const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 40, true, .{ .min = 5 }).*;
     const range = base_range * player.player.area_modifier;
 
     const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 3, true, .{ .min = 1 }).*;
@@ -93,10 +93,10 @@ pub fn bibleSystem(
     const base_cooldown = imgui2.variable(bibleSystem, f32, "Bible cooldown", 5, true, .{ .min = 1 }).*;
     const cooldown = base_cooldown * player.player.cooldown_modifier;
 
-    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 2, true, .{ .min = 1 }).*;
+    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 1, true, .{ .min = 1 }).*;
     const amount = base_amount + player.player.amount_modifier;
 
-    const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 50, true, .{ .min = 1 }).*;
+    const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 75, true, .{ .min = 1 }).*;
     const speed = base_speed * player.player.speed_modifier;
 
     var last_spawn_time = imgui2.variable(bibleSystem, f32, "last_spawn_time", 0, false, .{ .min = 5 });

@@ -37,39 +37,6 @@ const assets = @import("assets.zig");
 
 const game = @import("game/game.zig");
 
-pub fn moveSystemFollowPlayer(
-    profiler: *Profiler,
-    // commands: *Commands,
-    time: *const game.Time,
-    // assetdb: *AssetDB,
-    players: Query(.{ game.Player, game.TransformComponent }),
-    query: Query(.{ game.FollowPlayerMovementComponent, game.TransformComponent, game.SpeedComponent }),
-) !void {
-    const scope = profiler.beginScope("moveSystemFollowPlayer");
-    defer scope.end();
-
-    const delta = @floatCast(f32, time.delta);
-    if (delta == 0)
-        return;
-
-    var player = players.iter().next() orelse {
-        std.log.warn("moveSystemFollowPlayer: Player not found", .{});
-        return;
-    };
-
-    var iter = query.iter();
-    while (iter.next()) |entity| {
-        const toPlayer = player.transform.position.sub(entity.transform.position).mul(Vec3.new(1, 1, 0));
-        if (toPlayer.lengthSq() < 20 * 20) {
-            const distance = toPlayer.norm().scale(-400);
-            entity.transform.position = entity.transform.position.add(distance);
-        } else {
-            const vel = toPlayer.norm().scale(entity.speed.speed);
-            entity.transform.position = entity.transform.position.add(vel.scale(delta));
-        }
-    }
-}
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -81,9 +48,10 @@ pub fn main() !void {
     var world = try World.init(allocator);
     defer world.deinit();
     defer world.dumpGraph() catch {};
-    try world.addSystem(moveSystemFollowPlayer, "Move System Follow Player");
     try world.addSystem(game.Player.moveSystemPlayer, "Move System Player");
+    try world.addSystem(game.moveSystemFollowPlayer, "Move System Follow Player");
     try world.addSystem(game.bibleSystem, "Bible");
+    try world.addSystem(game.enemySpawnSystem, "Enemy spawning");
 
     try world.addRenderSystem(game.spriteRenderSystem, "Render System Vulkan");
     try world.addRenderSystem(game.animatedSpriteRenderSystem, "Render System Vulkan");
@@ -106,6 +74,9 @@ pub fn main() !void {
     try world.addResourcePtr(app.sprite_renderer);
     var bible_res = try world.addResource(game.BibleResource.init(allocator, world));
     defer bible_res.deinit();
+
+    var enemy_spawner = try world.addResource(game.EnemySpawner.init(allocator, world));
+    defer enemy_spawner.deinit();
 
     _ = (try commands.createEntity())
         .addComponent(game.Player{})
@@ -186,26 +157,20 @@ pub fn main() !void {
         while (sdl.SDL_PollEvent(&event) != 0) {
             _ = imgui2.ImGui_ImplSDL2_ProcessEvent(event);
             switch (event.@"type") {
-                sdl.SDL_QUIT => {
-                    app.isRunning = false;
+                sdl.SDL_QUIT => app.isRunning = false,
+                sdl.SDL_KEYDOWN => switch (event.key.keysym.sym) {
+                    sdl.SDLK_u => input.left = true,
+                    sdl.SDLK_a => input.right = true,
+                    sdl.SDLK_v => input.up = true,
+                    sdl.SDLK_i => input.down = true,
+                    else => {},
                 },
-                sdl.SDL_KEYDOWN => {
-                    switch (event.key.keysym.sym) {
-                        sdl.SDLK_u => input.left = true,
-                        sdl.SDLK_a => input.right = true,
-                        sdl.SDLK_v => input.up = true,
-                        sdl.SDLK_i => input.down = true,
-                        else => {},
-                    }
-                },
-                sdl.SDL_KEYUP => {
-                    switch (event.key.keysym.sym) {
-                        sdl.SDLK_u => input.left = false,
-                        sdl.SDLK_a => input.right = false,
-                        sdl.SDLK_v => input.up = false,
-                        sdl.SDLK_i => input.down = false,
-                        else => {},
-                    }
+                sdl.SDL_KEYUP => switch (event.key.keysym.sym) {
+                    sdl.SDLK_u => input.left = false,
+                    sdl.SDLK_a => input.right = false,
+                    sdl.SDLK_v => input.up = false,
+                    sdl.SDLK_i => input.down = false,
+                    else => {},
                 },
                 else => {},
             }
