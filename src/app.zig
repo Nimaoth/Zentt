@@ -128,7 +128,7 @@ pub fn endFrame(self: *Self) !void {
     try self.renderer.beginMainRender();
     imgui2.ImGui_ImplVulkan_RenderDrawData(imgui2.getDrawData(), self.renderer.getCommandBuffer(), .null_handle);
     imgui2.updatePlatformWindows();
-    try self.renderer.endMainRender(self.windowSize);
+    try self.renderer.endMainRender(self.window, self.windowSize);
 }
 
 pub fn beginRender(self: *Self) !void {

@@ -325,7 +325,7 @@ fn prepareImgui(
     }, .@"inline");
 }
 
-pub fn endMainRender(self: *Self, newExtent: vk.Extent2D) !void {
+pub fn endMainRender(self: *Self, window: *sdl.SDL_Window, new_extent: vk.Extent2D) !void {
     const cmdbuf = self.commandBuffers[self.swapchain.image_index];
     self.gc.vkd.cmdEndRenderPass(cmdbuf);
     try self.gc.vkd.endCommandBuffer(cmdbuf);
@@ -337,8 +337,19 @@ pub fn endMainRender(self: *Self, newExtent: vk.Extent2D) !void {
         else => |narrow| return narrow,
     };
 
-    if (state == .suboptimal or self.swapchain.extent.width != @intCast(u32, newExtent.width) or self.swapchain.extent.height != @intCast(u32, newExtent.height)) {
-        try self.swapchain.recreate(newExtent);
+    if (state == .suboptimal or self.swapchain.extent.width != @intCast(u32, new_extent.width) or self.swapchain.extent.height != @intCast(u32, new_extent.height)) {
+        var actual_extent = vk.Extent2D{ .width = 0, .height = 0 };
+        while (actual_extent.width == 0 or actual_extent.height == 0) {
+            var w: c_int = undefined;
+            var h: c_int = undefined;
+            sdl.SDL_Vulkan_GetDrawableSize(window, &w, &h);
+            actual_extent = .{ .width = @intCast(u32, w), .height = @intCast(u32, h) };
+            _ = sdl.SDL_WaitEvent(null);
+        }
+
+        try self.gc.vkd.deviceWaitIdle(self.gc.dev);
+
+        try self.swapchain.recreate(actual_extent);
 
         destroyFramebuffers(&self.gc, self.allocator, self.framebuffers);
         self.framebuffers = try createFramebuffers(&self.gc, self.allocator, self.mainRenderPass, self.swapchain);
