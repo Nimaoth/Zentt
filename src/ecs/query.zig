@@ -111,6 +111,7 @@ pub fn Query(comptime Components: anytype) type {
         pub const Type = SystemParameterType.Query;
         pub const ComponentTypes = Components;
         pub const ComponentCount = @typeInfo(@TypeOf(Components)).Struct.fields.len;
+        pub const EntityHandle = EntityHandle;
 
         tables: []*ArchetypeTable,
         enabled: bool,

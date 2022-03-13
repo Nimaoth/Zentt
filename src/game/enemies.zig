@@ -30,12 +30,14 @@ const AnimatedSpriteComponent = basic_components.AnimatedSpriteComponent;
 const FollowPlayerMovementComponent = basic_components.FollowPlayerMovementComponent;
 const CameraComponent = basic_components.CameraComponent;
 const Player = @import("player.zig").Player;
+const PhysicsComponent = @import("physics.zig").PhysicsComponent;
 
 pub fn createBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
     _ = (try commands.createEntity())
         .addComponent(FollowPlayerMovementComponent{})
         .addComponent(TransformComponent{ .position = pos })
         .addComponent(SpeedComponent{ .speed = 25 })
+        .addComponent(PhysicsComponent{ .layer = 2, .radius = 10 })
         .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1i") orelse unreachable });
 }
 

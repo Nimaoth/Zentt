@@ -230,17 +230,13 @@ pub fn updateCameraData(self: *Self, matrices: *const SceneMatricesUbo) !void {
     try self.gc.uploadBufferData(frame.scene_matrices_ubo, std.mem.asBytes(matrices));
 }
 
-pub fn beginRender(self: *Self, cmdbuf: vk.CommandBuffer, frame_index: u64, matrices: *SceneMatricesUbo) !void {
-    self.matrices = matrices.*;
+pub fn beginRender(self: *Self, cmdbuf: vk.CommandBuffer, frame_index: u64) !void {
     self.cmdbuf = cmdbuf;
     self.frame_index = frame_index;
 
     const frame = &self.frame_data[frame_index];
 
     frame.resetDescriptorPool();
-
-    // Upload view and projection matrices.
-    try self.gc.uploadBufferData(frame.scene_matrices_ubo, std.mem.asBytes(matrices));
 
     // Bind descriptor set for scene matrices of current frame.
     self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, self.quad_pipeline.layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &self.frame_data[frame_index].descriptor_set), 0, undefined);

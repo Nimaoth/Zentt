@@ -52,6 +52,7 @@ pub fn main() !void {
     try world.addSystem(game.moveSystemFollowPlayer, "Move System Follow Player");
     try world.addSystem(game.bibleSystem, "Bible");
     try world.addSystem(game.enemySpawnSystem, "Enemy spawning");
+    try world.addSystem(game.physicsSystem, "Physics");
 
     try world.addRenderSystem(game.spriteRenderSystem, "Render System Vulkan");
     try world.addRenderSystem(game.animatedSpriteRenderSystem, "Render System Vulkan");
@@ -64,6 +65,9 @@ pub fn main() !void {
 
     var assetdb = try world.addResource(try AssetDB.init(allocator, &app.renderer.gc));
     defer assetdb.deinit();
+
+    var physics_scene = try world.addResource(try game.PhysicsScene.init(allocator, world));
+    defer physics_scene.deinit();
 
     try assets.loadAssets(assetdb);
 
@@ -83,6 +87,7 @@ pub fn main() !void {
         .addComponent(game.TransformComponent{ .position = Vec3.new(100, 0, 0), .size = 1 })
         .addComponent(game.SpeedComponent{ .speed = 150 })
         .addComponent(game.CameraComponent{ .size = 450 })
+        .addComponent(game.PhysicsComponent{ .layer = 1, .radius = 15 })
         .addComponent(game.AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
 
     // Background.
@@ -258,6 +263,7 @@ pub fn main() !void {
         try details.draw(world, selectedEntity, commands);
         try profiler.draw();
         try chunkDebugger.draw(world);
+        try viewport.drawScene();
 
         {
             const scope = profiler.beginScope("runFrameSystems");
@@ -272,7 +278,7 @@ pub fn main() !void {
             const scope = profiler.beginScope("runRenderSystems");
             defer scope.end();
 
-            try app.beginRender();
+            try app.beginRender(viewport.content_size);
             world.runRenderSystems() catch |err| {
                 std.log.err("Failed to run render systems: {}", .{err});
             };

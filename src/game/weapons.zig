@@ -27,6 +27,7 @@ const TransformComponent = basic_components.TransformComponent;
 const SpeedComponent = basic_components.SpeedComponent;
 const SpriteComponent = basic_components.SpriteComponent;
 const Player = @import("player.zig").Player;
+const PhysicsComponent = @import("physics.zig").PhysicsComponent;
 
 pub const BibleResource = struct {
     entity_ids: std.ArrayList(EntityId),
@@ -64,6 +65,7 @@ pub fn createBible(commands: *Commands, assetdb: *AssetDB, bible_res: *BibleReso
     _ = (try commands.createEntityWithId(bible_res.getFreeEntityId()))
         .addComponent(BibleComponent{})
         .addComponent(TransformComponent{})
+        .addComponent(PhysicsComponent{ .layer = 4, .radius = 7 })
         .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("HolyBook.png", .{}) });
 }
 

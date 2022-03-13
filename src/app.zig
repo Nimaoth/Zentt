@@ -131,39 +131,12 @@ pub fn endFrame(self: *Self) !void {
     try self.renderer.endMainRender(self.window, self.windowSize);
 }
 
-pub fn beginRender(self: *Self) !void {
-    const contentSize = blk: {
-        imgui.PushStyleVarVec2(.WindowPadding, .{});
-        defer imgui.PopStyleVar();
-
-        const open = imgui.Begin("Viewport");
-        defer imgui.End();
-
-        const size = imgui.GetContentRegionAvail();
-
-        const aspect_ratio = size.x / size.y;
-        const height = imgui2.variable(endFrame, f32, "Camera Size", 500, true, .{ .min = 1, .max = 1000, .speed = 0.01 }).*;
-
-        self.matrices.proj = Mat4.orthographic(-height * aspect_ratio * 0.5, height * aspect_ratio * 0.5, -height * 0.5, height * 0.5, 1, -1);
-        if (open) {
-            imgui.ImageExt(
-                @ptrCast(**anyopaque, &self.renderer.getSceneImage().descriptor).*,
-                size,
-                .{ .x = 0, .y = 0 },
-                .{ .x = size.x / 1920, .y = size.y / 1080 }, // the size is the size of the scene frame buffer which doesn't get resized.
-                .{ .x = 1, .y = 1, .z = 1, .w = 1 },
-                .{ .x = 0, .y = 0, .z = 0, .w = 0 },
-            );
-        }
-
-        break :blk size;
-    };
-
+pub fn beginRender(self: *Self, contentSize: imgui.Vec2) !void {
     const frame = try self.renderer.beginSceneRender(
         .{ .width = @floatToInt(u32, std.math.max(contentSize.x, 1)), .height = @floatToInt(u32, std.math.max(contentSize.y, 1)) },
     );
 
-    try self.sprite_renderer.beginRender(frame.cmdbuf, frame.frame_index, &self.matrices);
+    try self.sprite_renderer.beginRender(frame.cmdbuf, frame.frame_index);
 }
 
 pub fn endRender(self: *Self) !void {
