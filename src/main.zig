@@ -89,7 +89,7 @@ pub fn main() !void {
     try world.addRenderSystem(game.animatedSpriteRenderSystem, "Render System Vulkan");
 
     _ = try world.addResource(game.Time{});
-    var commands = try world.addResource(Commands.init(allocator));
+    var commands = try world.addResource(Commands.init(allocator, world));
     defer commands.deinit();
 
     var input = try world.addResource(game.Input{});
@@ -104,6 +104,8 @@ pub fn main() !void {
 
     try world.addResourcePtr(app.renderer);
     try world.addResourcePtr(app.sprite_renderer);
+    var bible_res = try world.addResource(game.BibleResource.init(allocator, world));
+    defer bible_res.deinit();
 
     _ = (try commands.createEntity())
         .addComponent(game.Player{})
@@ -116,11 +118,6 @@ pub fn main() !void {
     _ = (try commands.createEntity())
         .addComponent(game.TransformComponent{ .position = Vec3.new(0, 0, 100), .size = 1000 })
         .addComponent(game.SpriteComponent{ .texture = try assetdb.getTextureByPath("Forest_119.png", .{}), .tiling = Vec2.new(1000, 1000) });
-
-    try game.createBible(commands, assetdb);
-    try game.createBible(commands, assetdb);
-    try game.createBible(commands, assetdb);
-    try game.createBible(commands, assetdb);
 
     // {
     // const animation_count = assetdb.sprite_animations.count();
@@ -164,7 +161,7 @@ pub fn main() !void {
     //     }
     // }
 
-    _ = try commands.applyCommands(world);
+    _ = try commands.applyCommands();
 
     var details = Details.init(allocator);
     defer details.deinit();
@@ -325,7 +322,7 @@ pub fn main() !void {
 
             try profiler.record("Num commands (req)", @intToFloat(f64, commands.commands.items.len));
 
-            commands.applyCommands(world) catch |err| {
+            commands.applyCommands() catch |err| {
                 std.log.err("applyCommands failed: {}", .{err});
             };
         }

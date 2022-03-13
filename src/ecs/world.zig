@@ -291,17 +291,29 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
     // }
 }
 
+pub fn reserveEntityId(self: *Self) EntityId {
+    const id = self.nextEntityId;
+    self.nextEntityId += 1;
+    return id;
+}
+
+pub fn createEntityWithId(self: *Self, id: EntityId) !Entity {
+    if (self.entities.contains(id)) {
+        std.log.err("createEntityWithId({}): Entity with this id already exists.", .{id});
+        return error.EntityWithIdAlreayExists;
+    }
+
+    const entity = try self.baseArchetypeTable.addEntity(id, .{});
+    try self.entities.put(id, entity);
+    return entity;
+}
+
 pub fn createEntity(self: *Self) !Entity {
     if (self.entities.count() > 1_000_000) {
         return error.TooManyEntities;
     }
 
-    const entityId = self.nextEntityId;
-    self.nextEntityId += 1;
-
-    const entity = try self.baseArchetypeTable.addEntity(entityId, .{});
-    try self.entities.put(entityId, entity);
-    return entity;
+    return self.createEntityWithId(self.reserveEntityId());
 }
 
 pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {

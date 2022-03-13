@@ -28,12 +28,40 @@ const SpeedComponent = basic_components.SpeedComponent;
 const SpriteComponent = basic_components.SpriteComponent;
 const Player = @import("player.zig").Player;
 
+pub const BibleResource = struct {
+    entity_ids: std.ArrayList(EntityId),
+    world: *World,
+
+    pub fn init(allocator: std.mem.Allocator, world: *World) @This() {
+        return @This(){
+            .entity_ids = std.ArrayList(EntityId).init(allocator),
+            .world = world,
+        };
+    }
+
+    pub fn deinit(self: *const @This()) void {
+        self.entity_ids.deinit();
+    }
+
+    pub fn getFreeEntityId(self: *@This()) EntityId {
+        if (self.entity_ids.items.len > 0) {
+            return self.entity_ids.pop();
+        } else {
+            return self.world.reserveEntityId();
+        }
+    }
+
+    pub fn returnEntityId(self: *@This(), entity_id: EntityId) !void {
+        try self.entity_ids.append(entity_id);
+    }
+};
+
 pub const BibleComponent = struct {
     age: f32 = 0,
 };
 
-pub fn createBible(commands: *Commands, assetdb: *AssetDB) !void {
-    _ = (try commands.createEntity())
+pub fn createBible(commands: *Commands, assetdb: *AssetDB, bible_res: *BibleResource) !void {
+    _ = (try commands.createEntityWithId(bible_res.getFreeEntityId()))
         .addComponent(BibleComponent{})
         .addComponent(TransformComponent{})
         .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("HolyBook.png", .{}) });
@@ -41,11 +69,12 @@ pub fn createBible(commands: *Commands, assetdb: *AssetDB) !void {
 
 pub fn bibleSystem(
     time: *const Time,
-    player_query: Query(.{ Player, TransformComponent }),
-    query: Query(.{ BibleComponent, TransformComponent }),
     commands: *Commands,
     assetdb: *AssetDB,
     profiler: *Profiler,
+    bible_res: *BibleResource,
+    player_query: Query(.{ Player, TransformComponent }),
+    query: Query(.{ BibleComponent, TransformComponent }),
 ) !void {
     const scope = profiler.beginScope("bibleSystem");
     defer scope.end();
@@ -64,7 +93,7 @@ pub fn bibleSystem(
     const base_cooldown = imgui2.variable(bibleSystem, f32, "Bible cooldown", 5, true, .{ .min = 1 }).*;
     const cooldown = base_cooldown * player.player.cooldown_modifier;
 
-    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 1, true, .{ .min = 1 }).*;
+    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 2, true, .{ .min = 1 }).*;
     const amount = base_amount + player.player.amount_modifier;
 
     const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 50, true, .{ .min = 1 }).*;
@@ -95,6 +124,7 @@ pub fn bibleSystem(
 
         if (entity.bible.age > max_age) {
             try commands.destroyEntity(entity.id);
+            try bible_res.returnEntityId(entity.id);
         }
     }
 
@@ -103,7 +133,7 @@ pub fn bibleSystem(
         last_spawn_time.* = @floatCast(f32, time.now);
         var k: i32 = 0;
         while (k < amount) : (k += 1) {
-            try createBible(commands, assetdb);
+            try createBible(commands, assetdb, bible_res);
         }
     }
 }
