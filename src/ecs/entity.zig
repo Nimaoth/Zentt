@@ -4,9 +4,9 @@ const Chunk = @import("chunk.zig");
 pub const EntityId = u64;
 pub const ComponentId = u64;
 
-id: u64,
-chunk: *Chunk,
-index: u64,
+id: u64 = 0,
+chunk: *Chunk = undefined,
+index: u64 = 0,
 
 const Self = @This();
 

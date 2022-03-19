@@ -33,6 +33,7 @@ const Self = @This();
 world: *World,
 app: *App,
 content_size: imgui.Vec2 = .{},
+screen_matrix: Mat4 = Mat4.identity(),
 
 pub fn init(
     world: *World,
@@ -65,6 +66,21 @@ pub fn drawScene(self: *Self) !void {
     }
 }
 
+pub fn prepare(self: *Self) void {
+    const open = imgui.Begin("Viewport");
+    defer imgui.End();
+
+    if (open) {
+        const canvas_p0 = imgui.GetWindowContentRegionMin().toZal().add(imgui.GetWindowPos().toZal()); // ImDrawList API uses screen coordinates!
+        var canvas_sz = imgui.GetWindowContentRegionMax().toZal().sub(imgui.GetWindowContentRegionMin().toZal()); // Resize canvas to what's available
+        if (canvas_sz.x() <= 1 or canvas_sz.y() <= 1) {
+            return;
+        }
+        const canvas_p1 = Vec2.new(canvas_p0.x() + canvas_sz.x(), canvas_p0.y() + canvas_sz.y());
+        self.screen_matrix = Mat4.orthographic(canvas_p0.x(), canvas_p1.x(), canvas_p0.y(), canvas_p1.y(), 1, -1).inv();
+    }
+}
+
 pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
     const open = imgui.Begin("Viewport");
     defer imgui.End();
@@ -83,7 +99,7 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
         _ = aspectRatio;
 
         var drawList = imgui.GetWindowDrawList() orelse return null;
-        drawList.PushClipRect(canvas_p0.toImgui(), canvas_p1.toImgui());
+        drawList.PushClipRect(canvas_p0.toImgui2(), canvas_p1.toImgui2());
         defer drawList.PopClipRect();
 
         var using_gizmo = false;
@@ -104,16 +120,9 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                 // Transform positions into screen space
                 const view = self.app.sprite_renderer.matrices.view;
                 const proj = self.app.sprite_renderer.matrices.proj;
-                const screen = Mat4.orthographic(canvas_p0.x(), canvas_p1.x(), canvas_p0.y(), canvas_p1.y(), 1, -1).inv();
 
-                const p0_world = Vec3.new(position.x() - size.x(), position.y() - size.y(), 0); // Invert y
-                const p1_world = Vec3.new(position.x() + size.x(), position.y() + size.y(), 0); // Invert y
-                const p0_view = view.mulByVec3(p0_world, 1);
-                const p1_view = view.mulByVec3(p1_world, 1);
-                const p0_clip = proj.mulByVec3(p0_view, 1);
-                const p1_clip = proj.mulByVec3(p1_view, 1);
-                const p0_screen = screen.mulByVec3(p0_clip, 1);
-                const p1_screen = screen.mulByVec3(p1_clip, 1);
+                const p0_screen = self.world2ToViewport(position.xy().sub(size));
+                const p1_screen = self.world2ToViewport(position.xy().add(size));
 
                 const p0 = Vec2.new(p0_screen.x(), p0_screen.y());
                 const p1 = Vec2.new(p1_screen.x(), p1_screen.y());
@@ -128,8 +137,8 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
                 while (i < thickness) : (i += 1) {
                     const f = @intToFloat(f32, i);
                     drawList.AddRect(
-                        p0.sub(Vec2.from(.{ .x = f, .y = f })).toImgui(),
-                        p1.add(Vec2.from(.{ .x = f, .y = f })).toImgui(),
+                        p0.sub(Vec2.from(.{ .x = f, .y = f })).toImgui2(),
+                        p1.add(Vec2.from(.{ .x = f, .y = f })).toImgui2(),
                         if (i == 0) 0xff000000 else color,
                     );
                 }
@@ -193,4 +202,18 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
     }
 
     return viewport_click_location;
+}
+
+pub fn world2ToViewport(self: *Self, position: Vec2) Vec2 {
+    return self.world3ToViewport(Vec3.new(position.x(), position.y(), 0));
+}
+
+pub fn world3ToViewport(self: *Self, position: Vec3) Vec2 {
+    const view = self.app.sprite_renderer.matrices.view;
+    const proj = self.app.sprite_renderer.matrices.proj;
+
+    const p0_view = view.mulByVec3(position, 1);
+    const p0_clip = proj.mulByVec3(p0_view, 1);
+    const p0_screen = self.screen_matrix.mulByVec3(p0_clip, 1);
+    return p0_screen.xy();
 }

@@ -95,7 +95,7 @@ pub fn bibleSystem(
     const base_cooldown = imgui2.variable(bibleSystem, f32, "Bible cooldown", 5, true, .{ .min = 1 }).*;
     const cooldown = base_cooldown * player.player.cooldown_modifier;
 
-    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 1, true, .{ .min = 1 }).*;
+    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 0, true, .{ .min = 1 }).*;
     const amount = base_amount + player.player.amount_modifier;
 
     const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 75, true, .{ .min = 1 }).*;

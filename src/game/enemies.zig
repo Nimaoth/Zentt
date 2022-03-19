@@ -52,8 +52,8 @@ pub fn moveSystemFollowPlayer(
     const scope = profiler.beginScope("moveSystemFollowPlayer");
     defer scope.end();
 
-    const min_despawn_distance = imgui2.variable(moveSystemFollowPlayer, f32, "Min despawn distance", 25, true, .{ .min = 0 }).*;
-    const max_despawn_distance = imgui2.variable(moveSystemFollowPlayer, f32, "Max despawn distance", 500, true, .{ .min = 0 }).*;
+    const min_despawn_distance = imgui2.variable(moveSystemFollowPlayer, f32, "Min despawn distance", 0, true, .{ .min = 0 }).*;
+    const max_despawn_distance = imgui2.variable(moveSystemFollowPlayer, f32, "Max despawn distance", 2000, true, .{ .min = 0 }).*;
     const min_despawn_distance_sq = min_despawn_distance * min_despawn_distance;
     const max_despawn_distance_sq = max_despawn_distance * max_despawn_distance;
 
@@ -114,11 +114,12 @@ pub fn enemySpawnSystem(
         return;
     };
 
-    const distance_modifier = imgui2.variable(enemySpawnSystem, f32, "Spawn distance mod", 1, true, .{ .min = 0 }).*;
-    var min_distance_from_player = player.camera.size * distance_modifier;
+    const distance_modifier = imgui2.variable(enemySpawnSystem, f32, "Spawn distance", 500, true, .{ .min = 0 }).*;
+    // var min_distance_from_player = player.camera.size * distance_modifier;
+    var min_distance_from_player = distance_modifier;
     var max_distance_from_player = min_distance_from_player + 100;
 
-    const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 5, true, .{ .min = 0 }).*;
+    const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 0, true, .{ .min = 0 }).*;
 
     const delta = @floatCast(f32, time.delta);
     if (delta == 0)

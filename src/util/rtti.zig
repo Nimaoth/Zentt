@@ -26,6 +26,10 @@ pub fn typeInfo(comptime T: type) *const TypeInfo {
     if (T == *anyopaque)
         return typeInfo(void);
 
+    if (comptime std.mem.indexOf(u8, @typeName(T), ".cimport") != null) {
+        return typeInfo(void);
+    }
+
     var result = &struct {
         var x: TypeInfo = .{
             .hash = 0,

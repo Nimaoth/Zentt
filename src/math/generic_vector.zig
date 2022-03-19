@@ -52,7 +52,7 @@ pub fn GenericVector(comptime dimensions: comptime_int, comptime T: type) type {
                     return GenericVector(4, T).new(self.x(), self.y(), z, w);
                 }
 
-                pub fn toImgui(self: Self) imgui.Vec2 {
+                pub fn toImgui2(self: Self) imgui.Vec2 {
                     return imgui.Vec2{ .x = self.x(), .y = self.y() };
                 }
             },
@@ -90,6 +90,10 @@ pub fn GenericVector(comptime dimensions: comptime_int, comptime T: type) type {
                     const vy = (lz * rx) - (lx * rz);
                     const vz = (lx * ry) - (ly * rx);
                     return new(vx, vy, vz);
+                }
+
+                pub fn xy(self: Self) GenericVector(2, T) {
+                    return GenericVector(2, T).new(self.x(), self.y());
                 }
 
                 pub fn toVec4(self: Self, w: T) GenericVector(4, T) {
@@ -321,6 +325,18 @@ pub fn GenericVector(comptime dimensions: comptime_int, comptime T: type) type {
             return .{ .data = result };
         }
 
+        /// Division betwen two given vector.
+        pub fn div(lhs: Self, rhs: Self) Self {
+            const result = lhs.data / rhs.data;
+            return .{ .data = result };
+        }
+
+        /// Division betwen two given vector.
+        pub fn divFloor(lhs: Self, rhs: Self) Self {
+            const result = @divFloor(lhs.data, rhs.data);
+            return .{ .data = result };
+        }
+
         /// Construct vector from the max components in two vectors
         pub fn max(a: Self, b: Self) Self {
             const result = @maximum(a.data, b.data);
@@ -350,6 +366,17 @@ pub fn GenericVector(comptime dimensions: comptime_int, comptime T: type) type {
             for (result) |_, i| {
                 result[i] = root.lerp(T, left_vector.data[i], right_vector.data[i], t);
             }
+            return .{ .data = result };
+        }
+
+        /// 
+        pub fn bit_and(lhs: Self, rhs: Self) Self {
+            const result = lhs.data & rhs.data;
+            return .{ .data = result };
+        }
+
+        pub fn bit_or(lhs: Self, rhs: Self) Self {
+            const result = lhs.data | rhs.data;
             return .{ .data = result };
         }
     };

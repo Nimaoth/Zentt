@@ -88,6 +88,7 @@ pub fn main() !void {
         .addComponent(game.SpeedComponent{ .speed = 150 })
         .addComponent(game.CameraComponent{ .size = 450 })
         .addComponent(game.PhysicsComponent{ .layer = 1, .radius = 15 })
+        .addComponent(game.GridCenterComponent{})
         .addComponent(game.AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
 
     // Background.
@@ -147,8 +148,9 @@ pub fn main() !void {
     try details.registerDefaultComponent(game.CameraComponent{ .size = 400 });
 
     var viewport = Viewport.init(world, app);
+    try world.addResourcePtr(&viewport);
 
-    var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.id else 0;
+    var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.*.id else 0;
 
     var chunkDebugger = ChunkDebugger.init(allocator);
     defer chunkDebugger.deinit();
@@ -209,6 +211,8 @@ pub fn main() !void {
             imgui.LabelText("Entities: ", "%lld", world.entities.count());
         }
         imgui.End();
+
+        viewport.prepare();
 
         try profiler.record("Frame", frameTime);
 
