@@ -195,7 +195,8 @@ pub const PhysicsScene = struct {
     collisions: [2]std.ArrayList(u64),
     index: usize = 0,
 
-    stale_collisions: std.ArrayList([]u64),
+    stale_collisions1: std.ArrayList([]u64),
+    stale_collisions2: std.ArrayList([]u64),
 
     grid: std.ArrayList(GridCell),
     grid_size_base: usize,
@@ -208,7 +209,7 @@ pub const PhysicsScene = struct {
     center_location: Vec2 = Vec2.zero(),
 
     pub fn init(allocator: std.mem.Allocator, world: *World) !Self {
-        const grid_size_base = 5;
+        const grid_size_base = 6;
         const grid_size = 1 << grid_size_base;
         var grid = std.ArrayList(GridCell).init(allocator);
         try grid.resize(grid_size * grid_size);
@@ -222,14 +223,15 @@ pub const PhysicsScene = struct {
                 try std.ArrayList(u64).initCapacity(allocator, 1024),
                 try std.ArrayList(u64).initCapacity(allocator, 1024),
             },
-            .stale_collisions = std.ArrayList([]u64).init(allocator),
+            .stale_collisions1 = std.ArrayList([]u64).init(allocator),
+            .stale_collisions2 = std.ArrayList([]u64).init(allocator),
             .potential_collisions = std.ArrayList(EntityHandlePair).init(allocator),
             .manifolds = std.ArrayList(Manifold).init(allocator),
             .grid = grid,
             .grid_size_base = grid_size_base,
             .grid_size_mask = (1 << grid_size_base) - 1,
             .grid_size = grid_size,
-            .grid_cell_size = 100,
+            .grid_cell_size = 50,
         };
     }
 
@@ -244,21 +246,31 @@ pub const PhysicsScene = struct {
         self.potential_collisions.deinit();
         self.manifolds.deinit();
 
-        for (self.stale_collisions.items) |data| {
+        for (self.stale_collisions1.items) |data| {
             self.allocator.free(data);
         }
-        self.stale_collisions.deinit();
+        self.stale_collisions1.deinit();
+
+        for (self.stale_collisions2.items) |data| {
+            self.allocator.free(data);
+        }
+        self.stale_collisions2.deinit();
     }
 
-    pub fn swapCollisions(self: *Self) void {
+    pub fn swapCollisions(self: *Self) !void {
         self.index = (self.index + 1) & 0b1;
         self.collisions[self.index].clearRetainingCapacity();
 
-        for (self.stale_collisions.items) |data| {
-            std.log.debug("Freeing stale collision", .{});
+        for (self.stale_collisions2.items) |data| {
+            std.log.info("Freeing stale collision", .{});
             self.allocator.free(data);
         }
-        self.stale_collisions.clearRetainingCapacity();
+        self.stale_collisions2.clearRetainingCapacity();
+
+        for (self.stale_collisions1.items) |data| {
+            try self.stale_collisions2.append(data);
+        }
+        self.stale_collisions1.clearRetainingCapacity();
     }
 
     pub fn reserveSpaceForCollidingEntities(self: *Self, entity: *const EntityHandle) !void {
@@ -267,7 +279,7 @@ pub const PhysicsScene = struct {
             // Not enough space for collisions
             std.log.debug("Not enough space for collisions", .{});
             const old_capacity = self.collisions[self.index].capacity;
-            try self.stale_collisions.append(self.collisions[self.index].toOwnedSlice());
+            try self.stale_collisions1.append(self.collisions[self.index].toOwnedSlice());
             try self.collisions[self.index].ensureTotalCapacity(old_capacity * 2);
         }
 
@@ -345,7 +357,7 @@ pub fn physicsSystem(
 
     scene.clearGrid();
     scene.setCenterLocation(grid_center.transform.position.xy());
-    scene.swapCollisions();
+    try scene.swapCollisions();
 
     // Collect entities into grid.
     {
