@@ -35,7 +35,8 @@ const EntityHandle = PhysicsQuery.EntityHandle;
 pub const GridCenterComponent = struct {};
 
 pub const PhysicsComponent = struct {
-    layer: u32 = 1,
+    own_layer: u64 = 0,
+    target_layer: u64 = 1,
     radius: f32 = 50,
     restitution: f32 = 0,
     dynamic_friction: f32 = 0,
@@ -413,7 +414,12 @@ pub fn physicsSystem(
                             if (entity_a.physics.inverse_mass == 0 and entity_b.physics.inverse_mass == 0)
                                 continue;
 
-                            try scene.potential_collisions.append(.{ .a = entity_a, .b = entity_b });
+                            // Only add if a->target_layer & b->own_layer and a->own_layer & b->target_layer
+                            var layer_a_with_b = entity_a.physics.target_layer & entity_b.physics.own_layer;
+                            var layer_b_with_a = entity_b.physics.target_layer & entity_a.physics.own_layer;
+                            if (layer_a_with_b != 0 and layer_b_with_a != 0) {
+                                try scene.potential_collisions.append(.{ .a = entity_a, .b = entity_b });
+                            }
                         }
                     }
                 }

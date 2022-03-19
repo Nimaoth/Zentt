@@ -28,6 +28,7 @@ const SpeedComponent = basic_components.SpeedComponent;
 const SpriteComponent = basic_components.SpriteComponent;
 const Player = @import("player.zig").Player;
 const PhysicsComponent = @import("physics.zig").PhysicsComponent;
+const HealthComponent = basic_components.HealthComponent;
 
 pub const BibleResource = struct {
     entity_ids: std.ArrayList(EntityId),
@@ -65,7 +66,7 @@ pub fn createBible(commands: *Commands, assetdb: *AssetDB, bible_res: *BibleReso
     _ = (try commands.createEntityWithId(bible_res.getFreeEntityId()))
         .addComponent(BibleComponent{})
         .addComponent(TransformComponent{})
-        .addComponent(PhysicsComponent{ .layer = 4, .radius = 7, .push_factor = 0 })
+        .addComponent(PhysicsComponent{ .own_layer = 0b0100, .target_layer = 0b0010, .radius = 7, .push_factor = 0 })
         .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("HolyBook.png", .{}) });
 }
 
@@ -73,14 +74,10 @@ pub fn bibleSystem(
     time: *const Time,
     commands: *Commands,
     assetdb: *AssetDB,
-    profiler: *Profiler,
     bible_res: *BibleResource,
     player_query: Query(.{ Player, TransformComponent }),
     query: Query(.{ BibleComponent, TransformComponent, PhysicsComponent }),
 ) !void {
-    const scope = profiler.beginScope("bibleSystem");
-    defer scope.end();
-
     const player = player_query.iter().next() orelse {
         std.log.err("bibleSystem: No player found.", .{});
         return;
@@ -89,7 +86,7 @@ pub fn bibleSystem(
     const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 40, true, .{ .min = 5 }).*;
     const range = base_range * player.player.area_modifier;
 
-    const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 30000, true, .{ .min = 1 }).*;
+    const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 3, true, .{ .min = 1 }).*;
     const max_age = base_max_age * player.player.duration_modifier;
 
     const base_cooldown = imgui2.variable(bibleSystem, f32, "Bible cooldown", 5, true, .{ .min = 1 }).*;
@@ -100,6 +97,9 @@ pub fn bibleSystem(
 
     const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 75, true, .{ .min = 1 }).*;
     const speed = base_speed * player.player.speed_modifier;
+
+    const base_damage = imgui2.variable(bibleSystem, f32, "Bible damage", 0.5, true, .{ .min = 0, .speed = 0.1 }).*;
+    const damage = base_damage * player.player.damage_modifier;
 
     var last_spawn_time = imgui2.variable(bibleSystem, f32, "last_spawn_time", 0, false, .{ .min = 5 });
 
@@ -127,6 +127,14 @@ pub fn bibleSystem(
         if (entity.bible.age > max_age) {
             try commands.destroyEntity(entity.id);
             try bible_res.returnEntityId(entity.id);
+        }
+
+        for (entity.physics.colliding_entities_new) |e| {
+            if (entity.physics.startedCollidingWith(e)) {
+                if (bible_res.world.getComponent(e, HealthComponent) catch continue) |health| {
+                    health.health -= damage;
+                }
+            }
         }
     }
 

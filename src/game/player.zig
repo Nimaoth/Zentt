@@ -32,6 +32,8 @@ pub const Player = struct {
     damage_modifier: f32 = 1,
     cooldown_modifier: f32 = 1,
     amount_modifier: i32 = 0,
+
+    velocity: Vec3 = Vec3.zero(),
 };
 
 pub fn moveSystemPlayer(
@@ -52,6 +54,7 @@ pub fn moveSystemPlayer(
         if (input.down) dir = dir.add(Vec3.new(0, -1, 0));
 
         const vel = dir.norm().scale(entity.speed.speed);
+        entity.player.velocity = vel;
         entity.transform.position = entity.transform.position.add(vel.scale(delta));
 
         for (entity.physics.colliding_entities_new) |e| {

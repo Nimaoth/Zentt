@@ -51,6 +51,7 @@ pub fn main() !void {
     try world.addSystem(game.moveSystemPlayer, "Move System Player");
     try world.addSystem(game.moveSystemFollowPlayer, "Move System Follow Player");
     try world.addSystem(game.bibleSystem, "Bible");
+    try world.addSystem(game.axeSystem, "Axe");
     try world.addSystem(game.enemySpawnSystem, "Enemy spawning");
     try world.addSystem(game.physicsSystem, "Physics");
 
@@ -76,8 +77,12 @@ pub fn main() !void {
 
     try world.addResourcePtr(app.renderer);
     try world.addResourcePtr(app.sprite_renderer);
+
     var bible_res = try world.addResource(game.BibleResource.init(allocator, world));
     defer bible_res.deinit();
+
+    var axe_res = try world.addResource(game.AxeResource.init(allocator, world));
+    defer axe_res.deinit();
 
     var enemy_spawner = try world.addResource(game.EnemySpawner.init(allocator, world));
     defer enemy_spawner.deinit();
@@ -87,7 +92,8 @@ pub fn main() !void {
         .addComponent(game.TransformComponent{ .position = Vec3.new(100, 0, 0), .size = 1 })
         .addComponent(game.SpeedComponent{ .speed = 150 })
         .addComponent(game.CameraComponent{ .size = 450 })
-        .addComponent(game.PhysicsComponent{ .layer = 1, .radius = 15, .inverse_mass = 0 })
+        .addComponent(game.PhysicsComponent{ .own_layer = 0b0001, .target_layer = 0b0010, .radius = 15, .inverse_mass = 0 })
+        .addComponent(game.HealthComponent{ .health = 100 })
         .addComponent(game.GridCenterComponent{})
         .addComponent(game.AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
 

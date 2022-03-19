@@ -437,8 +437,8 @@ pub fn loadAssets(assetdb: *AssetDB) !void {
     _ = try assetdb.defineSpriteAnimationFromInTexturePack("ArmorSpeari", 5, "ArmorSpear_i");
     _ = try assetdb.defineSpriteAnimationFromInTexturePack("Armor", 5, "Armor_");
     _ = try assetdb.defineSpriteAnimationFromInTexturePack("Armori", 5, "Armor_i");
-    _ = try assetdb.defineSpriteAnimationFromInTexturePack("Bat1", 5, "Bat1_");
-    _ = try assetdb.defineSpriteAnimationFromInTexturePack("Bat1i", 5, "Bat1_i");
+    _ = try assetdb.defineSpriteAnimationFromInTexturePack("Bat1", 2, "Bat1_");
+    _ = try assetdb.defineSpriteAnimationFromInTexturePack("Bat1i", 2.5, "Bat1_i");
     _ = try assetdb.defineSpriteAnimationFromInTexturePack("Bat2", 5, "Bat2_");
     _ = try assetdb.defineSpriteAnimationFromInTexturePack("Bat2i", 5, "Bat2_i");
     _ = try assetdb.defineSpriteAnimationFromInTexturePack("Bat3", 5, "Bat3_");

@@ -29,6 +29,7 @@ pub fn animatedSpriteRenderSystem(
     profiler: *Profiler,
     renderer: *Renderer,
     sprite_renderer: *SpriteRenderer,
+    commands: *Commands,
     time: *const Time,
     cameras: Query(.{ TransformComponent, CameraComponent }),
     query: Query(.{ TransformComponent, AnimatedSpriteComponent }),
@@ -54,7 +55,7 @@ pub fn animatedSpriteRenderSystem(
     }
 
     var iter = query.iter();
-    while (iter.next()) |entity| {
+    entity_loop: while (iter.next()) |entity| {
         const position = entity.transform.position;
         const rotation = entity.transform.rotation;
         const size = entity.transform.size;
@@ -64,6 +65,10 @@ pub fn animatedSpriteRenderSystem(
             entity.animated_sprite.time += delta;
             while (entity.animated_sprite.time >= entity.animated_sprite.anim.length) {
                 entity.animated_sprite.time -= entity.animated_sprite.anim.length;
+                if (entity.animated_sprite.destroy_at_end) {
+                    _ = try commands.destroyEntity(entity.id);
+                    continue :entity_loop;
+                }
             }
         }
 

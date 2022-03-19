@@ -29,15 +29,22 @@ const SpriteComponent = basic_components.SpriteComponent;
 const AnimatedSpriteComponent = basic_components.AnimatedSpriteComponent;
 const FollowPlayerMovementComponent = basic_components.FollowPlayerMovementComponent;
 const CameraComponent = basic_components.CameraComponent;
+const HealthComponent = basic_components.HealthComponent;
 const Player = @import("player.zig").Player;
 const PhysicsComponent = @import("physics.zig").PhysicsComponent;
 
-pub fn createBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
+pub fn createDyingBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
+    _ = (try commands.createEntity())
+        .addComponent(TransformComponent{ .position = pos })
+        .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1") orelse unreachable, .destroy_at_end = true });
+}
+pub fn createBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3, health: f32) !void {
     _ = (try commands.createEntity())
         .addComponent(FollowPlayerMovementComponent{})
         .addComponent(TransformComponent{ .position = pos })
-        .addComponent(SpeedComponent{ .speed = 1 })
-        .addComponent(PhysicsComponent{ .layer = 2, .radius = 10 })
+        .addComponent(SpeedComponent{ .speed = 50 })
+        .addComponent(PhysicsComponent{ .own_layer = 0b0010, .target_layer = 0b0111, .radius = 10 })
+        .addComponent(HealthComponent{ .health = health })
         .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1i") orelse unreachable });
 }
 
@@ -46,8 +53,9 @@ pub fn moveSystemFollowPlayer(
     time: *const Time,
     spawner: *EnemySpawner,
     commands: *Commands,
+    assetdb: *AssetDB,
     players: Query(.{ Player, TransformComponent }),
-    query: Query(.{ FollowPlayerMovementComponent, TransformComponent, SpeedComponent }),
+    query: Query(.{ FollowPlayerMovementComponent, TransformComponent, SpeedComponent, HealthComponent }),
 ) !void {
     const scope = profiler.beginScope("moveSystemFollowPlayer");
     defer scope.end();
@@ -73,8 +81,9 @@ pub fn moveSystemFollowPlayer(
         entity.transform.position = entity.transform.position.add(vel.scale(delta));
 
         const distance = toPlayer.lengthSq();
-        if (distance < min_despawn_distance_sq or distance > max_despawn_distance_sq) {
+        if (entity.health.health <= 0 or distance < min_despawn_distance_sq or distance > max_despawn_distance_sq) {
             try commands.destroyEntity(entity.id);
+            try createDyingBat(commands, assetdb, entity.transform.position);
             spawner.current_count -= 1;
         }
     }
@@ -118,6 +127,8 @@ pub fn enemySpawnSystem(
     const max_distance_from_player = min_distance_from_player + 100;
 
     const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 10, true, .{ .min = 0 }).*;
+    const base_health = imgui2.variable(enemySpawnSystem, f32, "Bat health", 10, true, .{ .min = 0, .speed = 0.1 }).*;
+    const health = base_health;
 
     const delta = @floatCast(f32, time.delta);
     if (delta == 0)
@@ -130,7 +141,7 @@ pub fn enemySpawnSystem(
         const offset = Vec3.new(@cos(angle), -@sin(angle), 0);
         const distance = math.lerp(f32, min_distance_from_player, max_distance_from_player, rand.float(f32));
         const position = player.transform.position.add(offset.scale(distance));
-        try createBat(commands, assetdb, position);
+        try createBat(commands, assetdb, position, health);
         spawner.current_count += 1;
     }
 }

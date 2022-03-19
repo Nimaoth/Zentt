@@ -27,6 +27,10 @@ pub const CameraComponent = struct {
     size: f32,
 };
 
+pub const HealthComponent = struct {
+    health: f32 = 10,
+};
+
 pub const SpeedComponent = struct {
     speed: f32,
 };
@@ -45,6 +49,7 @@ pub const SpriteComponent = struct {
 pub const AnimatedSpriteComponent = struct {
     anim: *AssetDB.SpriteAnimationAsset,
     time: f32 = 0,
+    destroy_at_end: bool = false,
 
     pub fn getCurrentTextureIndex(self: *const @This()) usize {
         return @floatToInt(usize, (self.time / self.anim.length) * @intToFloat(f32, self.anim.sprites.len));
