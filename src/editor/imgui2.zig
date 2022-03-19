@@ -491,6 +491,15 @@ pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
         return;
     }
 
+    if (typeInfo == Rtti.typeInfo([]usize)) {
+        const entities = @ptrCast(*[]usize, @alignCast(@alignOf(*usize), value.ptr)).*;
+        for (entities) |e| {
+            var x = e;
+            anyDynamic(Rtti.typeInfo(usize), std.mem.asBytes(&x)[0..]);
+        }
+        return;
+    }
+
     if (typeInfo == Rtti.typeInfo(*AssetDB.SpriteAnimationAsset)) {
         const asset = @ptrCast(**AssetDB.SpriteAnimationAsset, @alignCast(@alignOf(*u8), value.ptr)).*;
         anyDynamic(Rtti.typeInfo(AssetDB.SpriteAnimationAsset), std.mem.asBytes(asset));
@@ -635,7 +644,28 @@ pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
 
         .Pointer => |ti| {
             switch (ti.size) {
-                .Slice => {},
+                .Slice => {
+                    const slice = @ptrCast(*[]u8, @alignCast(@alignOf(*u8), value.ptr)).*;
+                    var bytes = slice;
+                    bytes.len *= ti.child.size;
+
+                    imgui.PushIDPtr(value.ptr);
+                    defer imgui.PopID();
+
+                    const open = imgui.CollapsingHeaderBoolPtrExt(
+                        "Array",
+                        null,
+                        imgui.TreeNodeFlags.CollapsingHeader.with(.{ .DefaultOpen = true, .AllowItemOverlap = true }).without(.{ .Framed = true }),
+                    );
+
+                    if (open) {
+                        var i: usize = 0;
+                        while (i < bytes.len) : (i += ti.child.size) {
+                            const element = bytes[i..(i + ti.child.size)];
+                            anyDynamic(ti.child, element);
+                        }
+                    }
+                },
 
                 else => {},
             }

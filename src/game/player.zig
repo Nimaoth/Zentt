@@ -22,6 +22,9 @@ const Input = basic_components.Input;
 const TransformComponent = basic_components.TransformComponent;
 const SpeedComponent = basic_components.SpeedComponent;
 
+const physics = @import("physics.zig");
+const PhysicsComponent = physics.PhysicsComponent;
+
 pub const Player = struct {
     area_modifier: f32 = 1,
     speed_modifier: f32 = 1,
@@ -29,34 +32,12 @@ pub const Player = struct {
     damage_modifier: f32 = 1,
     cooldown_modifier: f32 = 1,
     amount_modifier: i32 = 0,
-
-    pub fn moveSystemPlayer(
-        time: *const Time,
-        input: *const Input,
-        query: Query(.{ Player, TransformComponent, SpeedComponent }),
-    ) !void {
-        const delta = @floatCast(f32, time.delta);
-        if (delta == 0)
-            return;
-
-        var iter = query.iter();
-        while (iter.next()) |entity| {
-            var dir = Vec3.zero();
-            if (input.left) dir = dir.add(Vec3.new(-1, 0, 0));
-            if (input.right) dir = dir.add(Vec3.new(1, 0, 0));
-            if (input.up) dir = dir.add(Vec3.new(0, 1, 0));
-            if (input.down) dir = dir.add(Vec3.new(0, -1, 0));
-
-            const vel = dir.norm().scale(entity.speed.speed);
-            entity.transform.position = entity.transform.position.add(vel.scale(delta));
-        }
-    }
 };
 
 pub fn moveSystemPlayer(
     time: *const Time,
     input: *const Input,
-    query: Query(.{ Player, TransformComponent, SpeedComponent }),
+    query: Query(.{ Player, TransformComponent, SpeedComponent, PhysicsComponent }),
 ) !void {
     const delta = @floatCast(f32, time.delta);
     if (delta == 0)
@@ -72,5 +53,16 @@ pub fn moveSystemPlayer(
 
         const vel = dir.norm().scale(entity.speed.speed);
         entity.transform.position = entity.transform.position.add(vel.scale(delta));
+
+        for (entity.physics.colliding_entities_new) |e| {
+            if (entity.physics.startedCollidingWith(e)) {
+                std.log.debug("Collided begin {}", .{e});
+            }
+        }
+        for (entity.physics.colliding_entities_old) |e| {
+            if (entity.physics.stoppedCollidingWith(e)) {
+                std.log.debug("Collided end   {}", .{e});
+            }
+        }
     }
 }

@@ -36,7 +36,7 @@ pub fn createBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
     _ = (try commands.createEntity())
         .addComponent(FollowPlayerMovementComponent{})
         .addComponent(TransformComponent{ .position = pos })
-        .addComponent(SpeedComponent{ .speed = 25 })
+        .addComponent(SpeedComponent{ .speed = 1 })
         .addComponent(PhysicsComponent{ .layer = 2, .radius = 10 })
         .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1i") orelse unreachable });
 }
@@ -114,12 +114,10 @@ pub fn enemySpawnSystem(
         return;
     };
 
-    const distance_modifier = imgui2.variable(enemySpawnSystem, f32, "Spawn distance", 500, true, .{ .min = 0 }).*;
-    // var min_distance_from_player = player.camera.size * distance_modifier;
-    var min_distance_from_player = distance_modifier;
-    var max_distance_from_player = min_distance_from_player + 100;
+    const min_distance_from_player = imgui2.variable(enemySpawnSystem, f32, "Spawn distance", 150, true, .{ .min = 0 }).*;
+    const max_distance_from_player = min_distance_from_player + 100;
 
-    const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 0, true, .{ .min = 0 }).*;
+    const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 10, true, .{ .min = 0 }).*;
 
     const delta = @floatCast(f32, time.delta);
     if (delta == 0)

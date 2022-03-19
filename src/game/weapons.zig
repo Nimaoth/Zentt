@@ -65,7 +65,7 @@ pub fn createBible(commands: *Commands, assetdb: *AssetDB, bible_res: *BibleReso
     _ = (try commands.createEntityWithId(bible_res.getFreeEntityId()))
         .addComponent(BibleComponent{})
         .addComponent(TransformComponent{})
-        .addComponent(PhysicsComponent{ .layer = 4, .radius = 7 })
+        .addComponent(PhysicsComponent{ .layer = 4, .radius = 7, .push_factor = 0 })
         .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("HolyBook.png", .{}) });
 }
 
@@ -76,7 +76,7 @@ pub fn bibleSystem(
     profiler: *Profiler,
     bible_res: *BibleResource,
     player_query: Query(.{ Player, TransformComponent }),
-    query: Query(.{ BibleComponent, TransformComponent }),
+    query: Query(.{ BibleComponent, TransformComponent, PhysicsComponent }),
 ) !void {
     const scope = profiler.beginScope("bibleSystem");
     defer scope.end();
@@ -89,13 +89,13 @@ pub fn bibleSystem(
     const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 40, true, .{ .min = 5 }).*;
     const range = base_range * player.player.area_modifier;
 
-    const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 3, true, .{ .min = 1 }).*;
+    const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 30000, true, .{ .min = 1 }).*;
     const max_age = base_max_age * player.player.duration_modifier;
 
     const base_cooldown = imgui2.variable(bibleSystem, f32, "Bible cooldown", 5, true, .{ .min = 1 }).*;
     const cooldown = base_cooldown * player.player.cooldown_modifier;
 
-    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 0, true, .{ .min = 1 }).*;
+    const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 2, true, .{ .min = 1 }).*;
     const amount = base_amount + player.player.amount_modifier;
 
     const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 75, true, .{ .min = 1 }).*;

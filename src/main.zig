@@ -48,7 +48,7 @@ pub fn main() !void {
     var world = try World.init(allocator);
     defer world.deinit();
     defer world.dumpGraph() catch {};
-    try world.addSystem(game.Player.moveSystemPlayer, "Move System Player");
+    try world.addSystem(game.moveSystemPlayer, "Move System Player");
     try world.addSystem(game.moveSystemFollowPlayer, "Move System Follow Player");
     try world.addSystem(game.bibleSystem, "Bible");
     try world.addSystem(game.enemySpawnSystem, "Enemy spawning");
@@ -87,7 +87,7 @@ pub fn main() !void {
         .addComponent(game.TransformComponent{ .position = Vec3.new(100, 0, 0), .size = 1 })
         .addComponent(game.SpeedComponent{ .speed = 150 })
         .addComponent(game.CameraComponent{ .size = 450 })
-        .addComponent(game.PhysicsComponent{ .layer = 1, .radius = 15 })
+        .addComponent(game.PhysicsComponent{ .layer = 1, .radius = 15, .inverse_mass = 0 })
         .addComponent(game.GridCenterComponent{})
         .addComponent(game.AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
 

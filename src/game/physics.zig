@@ -41,6 +41,33 @@ pub const PhysicsComponent = struct {
     dynamic_friction: f32 = 0,
     static_friction: f32 = 0,
     inverse_mass: f32 = 1,
+    push_factor: f32 = 1,
+
+    colliding_entities: usize = 0,
+    colliding_entities_old: []EntityId = &.{},
+    colliding_entities_new: []EntityId = &.{},
+
+    /// Returns true if this component started colliding with the given entity.
+    /// Assumes this component is colliding the given entity this frame.
+    pub fn startedCollidingWith(self: *const @This(), entity: EntityId) bool {
+        return !std.mem.containsAtLeast(EntityId, self.colliding_entities_old, 1, &.{entity});
+    }
+
+    /// Returns true if this component stopped colliding with the given entity.
+    /// Assumes this component was colliding the given entity last frame.
+    pub fn stoppedCollidingWith(self: *const @This(), entity: EntityId) bool {
+        return !std.mem.containsAtLeast(EntityId, self.colliding_entities_new, 1, &.{entity});
+    }
+
+    /// Returns true if this component is colliding with the given entity.
+    pub fn isCollidingWith(self: *const @This(), entity: EntityId) bool {
+        return std.mem.containsAtLeast(EntityId, self.colliding_entities_new, 1, &.{entity});
+    }
+
+    /// Returns true if this component was colliding with the given entity last frame.
+    pub fn wasCollidingWith(self: *const @This(), entity: EntityId) bool {
+        return std.mem.containsAtLeast(EntityId, self.colliding_entities_old, 1, &.{entity});
+    }
 };
 
 pub const PhysicsActor = struct {
@@ -88,7 +115,7 @@ const Manifold = struct {
 
     pub fn circleVsCircle(a: *EntityHandle, b: *EntityHandle) ?Self {
         const n = b.transform.position.sub(a.transform.position).xy();
-        const r = a.physics.radius + b.physics.radius;
+        const r = a.physics.radius * a.transform.size + b.physics.radius * b.transform.size;
         var radius_sq = r * r;
 
         const len_sq = n.lengthSq();
@@ -111,7 +138,7 @@ const Manifold = struct {
             return Self{
                 .a = a,
                 .b = b,
-                .penetration = a.physics.radius,
+                .penetration = a.physics.radius * a.transform.size,
                 .normal = Vec2.new(1, 0),
                 .restitution = std.math.min(a.physics.restitution, b.physics.restitution),
                 .dynamic_friction = @sqrt(a.physics.dynamic_friction * b.physics.dynamic_friction),
@@ -125,8 +152,8 @@ const Manifold = struct {
         const percent = 0.4; // Penetration percentage to correct
 
         const correction = self.normal.toVec3(0).scale(percent * std.math.max(self.penetration - k_slop, 0) / (self.a.physics.inverse_mass + self.b.physics.inverse_mass));
-        self.a.transform.position = self.a.transform.position.sub(correction.scale(self.a.physics.inverse_mass));
-        self.b.transform.position = self.b.transform.position.add(correction.scale(self.b.physics.inverse_mass));
+        self.a.transform.position = self.a.transform.position.sub(correction.scale(self.a.physics.inverse_mass * self.a.physics.push_factor));
+        self.b.transform.position = self.b.transform.position.add(correction.scale(self.b.physics.inverse_mass * self.b.physics.push_factor));
     }
 };
 
@@ -159,11 +186,16 @@ const GridCell = struct {
 pub const PhysicsScene = struct {
     const Self = @This();
 
+    allocator: std.mem.Allocator,
     world: *World,
-    collisions: [2]std.AutoHashMap(EntityPair, CollisionInfo),
+
     potential_collisions: std.ArrayList(EntityHandlePair),
     manifolds: std.ArrayList(Manifold),
+
+    collisions: [2]std.ArrayList(u64),
     index: usize = 0,
+
+    stale_collisions: std.ArrayList([]u64),
 
     grid: std.ArrayList(GridCell),
     grid_size_base: usize,
@@ -184,11 +216,13 @@ pub const PhysicsScene = struct {
             cell.* = GridCell.init(allocator);
         }
         return Self{
+            .allocator = allocator,
             .world = world,
             .collisions = .{
-                std.AutoHashMap(EntityPair, CollisionInfo).init(allocator),
-                std.AutoHashMap(EntityPair, CollisionInfo).init(allocator),
+                try std.ArrayList(u64).initCapacity(allocator, 1024),
+                try std.ArrayList(u64).initCapacity(allocator, 1024),
             },
+            .stale_collisions = std.ArrayList([]u64).init(allocator),
             .potential_collisions = std.ArrayList(EntityHandlePair).init(allocator),
             .manifolds = std.ArrayList(Manifold).init(allocator),
             .grid = grid,
@@ -209,6 +243,37 @@ pub const PhysicsScene = struct {
         self.grid.deinit();
         self.potential_collisions.deinit();
         self.manifolds.deinit();
+
+        for (self.stale_collisions.items) |data| {
+            self.allocator.free(data);
+        }
+        self.stale_collisions.deinit();
+    }
+
+    pub fn swapCollisions(self: *Self) void {
+        self.index = (self.index + 1) & 0b1;
+        self.collisions[self.index].clearRetainingCapacity();
+
+        for (self.stale_collisions.items) |data| {
+            std.log.debug("Freeing stale collision", .{});
+            self.allocator.free(data);
+        }
+        self.stale_collisions.clearRetainingCapacity();
+    }
+
+    pub fn reserveSpaceForCollidingEntities(self: *Self, entity: *const EntityHandle) !void {
+        const count = entity.physics.colliding_entities;
+        if (self.collisions[self.index].unusedCapacitySlice().len < count) {
+            // Not enough space for collisions
+            std.log.debug("Not enough space for collisions", .{});
+            const old_capacity = self.collisions[self.index].capacity;
+            try self.stale_collisions.append(self.collisions[self.index].toOwnedSlice());
+            try self.collisions[self.index].ensureTotalCapacity(old_capacity * 2);
+        }
+
+        const entities_index = self.collisions[self.index].items.len;
+        self.collisions[self.index].appendNTimesAssumeCapacity(0, count);
+        entity.physics.colliding_entities_new = self.collisions[self.index].items[entities_index..entities_index];
     }
 
     pub fn clearGrid(self: *Self) void {
@@ -227,7 +292,6 @@ pub const PhysicsScene = struct {
         const world_location = entity.transform.position;
         const world_cell = self.worldLocationToWorldCell(world_location.xy());
         const relative_cell = self.worldCellToRelativeCell(world_cell); // used for bounds check
-        // if (relative_cell.x() & self.grid_size_mask != relative_cell.x() or relative_cell.y() & self.grid_size_mask != relative_cell.y()) {
         if (!Vec2i.eql(relative_cell, relative_cell.bit_and(Vec2i.set(@intCast(i64, self.grid_size_mask))))) {
             // Out of bounds
             return;
@@ -281,6 +345,7 @@ pub fn physicsSystem(
 
     scene.clearGrid();
     scene.setCenterLocation(grid_center.transform.position.xy());
+    scene.swapCollisions();
 
     // Collect entities into grid.
     {
@@ -291,6 +356,10 @@ pub fn physicsSystem(
             }
 
             try scene.insertEntity(&entity);
+
+            // Also reset some stuff.
+            entity.physics.colliding_entities = 0;
+            entity.physics.colliding_entities_old = entity.physics.colliding_entities_new;
         }
     }
 
@@ -326,6 +395,12 @@ pub fn physicsSystem(
                         for (cell_b.entities.items) |*entity_b| {
                             if (entity_a.id == entity_b.id or (x0 == x and y0 == y and entity_a.id < entity_b.id))
                                 continue;
+
+                            // Ignore collisions of two entities which have infinite mass for now.
+                            // Maybe we'll want to actually handle collisions between these later.
+                            if (entity_a.physics.inverse_mass == 0 and entity_b.physics.inverse_mass == 0)
+                                continue;
+
                             try scene.potential_collisions.append(.{ .a = entity_a, .b = entity_b });
                         }
                     }
@@ -347,13 +422,36 @@ pub fn physicsSystem(
     for (scene.potential_collisions.items) |pair| {
         if (Manifold.circleVsCircle(pair.a, pair.b)) |m| {
             try scene.manifolds.append(m);
+            pair.a.physics.colliding_entities += 1;
+            pair.b.physics.colliding_entities += 1;
         }
     }
+
+    // Reserve colliding_entities arrays for all entities.
+    {
+        var iter = query.iter();
+        while (iter.next()) |entity| {
+            try scene.reserveSpaceForCollidingEntities(&entity);
+        }
+    }
+
     imgui2.variable(physicsSystem, usize, "Manifolds", 0, true, .{}).* = scene.manifolds.items.len;
 
     if (imgui2.variable(physicsSystem, bool, "Draw actual collisions", false, true, .{}).*) {
         // Draw potential_collisions
         try drawDebugManifolds(scene, viewport);
+    }
+
+    // Collect collisions
+    for (scene.manifolds.items) |*m| {
+        const a = m.a;
+        const b = m.b;
+        std.debug.assert(a.physics.colliding_entities_new.len < a.physics.colliding_entities);
+        std.debug.assert(b.physics.colliding_entities_new.len < b.physics.colliding_entities);
+        a.physics.colliding_entities_new.len += 1;
+        b.physics.colliding_entities_new.len += 1;
+        a.physics.colliding_entities_new[a.physics.colliding_entities_new.len - 1] = b.id;
+        b.physics.colliding_entities_new[b.physics.colliding_entities_new.len - 1] = a.id;
     }
 
     // Integrate forces
