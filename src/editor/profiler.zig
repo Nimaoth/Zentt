@@ -7,18 +7,39 @@ const Vec2 = imgui.Vec2;
 
 const Self = @This();
 
+fn Measurement(comptime T: type) type {
+    return struct {
+        index: usize = 0,
+        samples: usize = 0,
+        accumulator: T = 0,
+    };
+}
+
+pub var g_profiler: ?*Self = null;
+
 allocator: std.mem.Allocator,
-timings: std.StringHashMap(std.fifo.LinearFifo(f64, .Dynamic)),
+timings: std.StringHashMap(std.fifo.LinearFifo(Measurement(f64), .Dynamic)),
+counts: std.StringHashMap(std.fifo.LinearFifo(Measurement(u64), .Dynamic)),
 maxRecordBufferCount: usize = 400,
 smoothCount: usize = 25,
 scale: f64 = 20,
 selected: ?[]const u8 = null,
+index: u64 = 0,
 
-pub fn init(allocator: std.mem.Allocator) Self {
-    return Self{
+pub fn init(allocator: std.mem.Allocator, init_global: bool) !*Self {
+    var self = try allocator.create(Self);
+
+    self.* = Self{
         .allocator = allocator,
-        .timings = std.StringHashMap(std.fifo.LinearFifo(f64, .Dynamic)).init(allocator),
+        .timings = std.StringHashMap(std.fifo.LinearFifo(Measurement(f64), .Dynamic)).init(allocator),
+        .counts = std.StringHashMap(std.fifo.LinearFifo(Measurement(u64), .Dynamic)).init(allocator),
     };
+
+    if (init_global) {
+        g_profiler = self;
+    }
+
+    return self;
 }
 
 pub fn deinit(self: *Self) void {
@@ -27,19 +48,60 @@ pub fn deinit(self: *Self) void {
         fifo.deinit();
     }
     self.timings.deinit();
+
+    var iter2 = self.counts.valueIterator();
+    while (iter2.next()) |fifo| {
+        fifo.deinit();
+    }
+    self.counts.deinit();
+
+    self.allocator.destroy(self);
 }
 
-pub fn record(self: *Self, name: []const u8, time: f64) !void {
-    if (self.timings.getPtr(name)) |value| {
-        if (value.count >= self.maxRecordBufferCount) {
-            _ = value.readItem();
-        }
-        try value.writeItem(time);
-    } else {
-        var fifo = std.fifo.LinearFifo(f64, .Dynamic).init(self.allocator);
-        try fifo.writeItem(time);
-        try self.timings.put(name, fifo);
+pub fn beginFrame(self: *Self) !void {
+    self.index += 1;
+
+    var iter = self.timings.valueIterator();
+    while (iter.next()) |fifo| {
+        if (fifo.count >= self.maxRecordBufferCount) _ = fifo.readItem();
+        try fifo.writeItem(.{ .index = self.index });
     }
+}
+
+pub fn lastMeasurement(comptime T: type, fifo: *std.fifo.LinearFifo(T, .Dynamic)) *T {
+    std.debug.assert(fifo.count > 0);
+
+    var index = fifo.head + (fifo.count - 1);
+    index &= fifo.buf.len - 1;
+    return &fifo.buf[index];
+}
+
+fn recordIntoFifo(self: *Self, comptime T: type, measurements: *std.StringHashMap(std.fifo.LinearFifo(Measurement(T), .Dynamic)), name: []const u8, value: T, samples: u64) !void {
+    if (measurements.getPtr(name)) |fifo| {
+        if (fifo.count == 0) try fifo.writeItem(.{ .index = self.index });
+
+        var last = lastMeasurement(Measurement(T), fifo);
+        if (last.index != self.index) {
+            if (fifo.count >= self.maxRecordBufferCount) _ = fifo.readItem();
+            try fifo.writeItem(.{ .index = self.index });
+            last = lastMeasurement(Measurement(T), fifo);
+        }
+
+        last.samples += samples;
+        last.accumulator += value;
+    } else {
+        var fifo = std.fifo.LinearFifo(Measurement(T), .Dynamic).init(self.allocator);
+        try fifo.writeItem(.{ .index = self.index, .samples = 1, .accumulator = value });
+        try measurements.put(name, fifo);
+    }
+}
+
+pub fn recordCount(self: *Self, name: []const u8, value: u64, samples: u64) !void {
+    try self.recordIntoFifo(u64, &self.counts, name, value, samples);
+}
+
+pub fn recordTime(self: *Self, name: []const u8, value: f64, samples: u64) !void {
+    try self.recordIntoFifo(f64, &self.timings, name, value, samples);
 }
 
 pub fn draw(self: *Self) !void {
@@ -105,17 +167,23 @@ pub fn draw(self: *Self) !void {
                     self.selected = entry.key_ptr.*;
                 }
 
-                _ = imgui.TableSetColumnIndex(1);
-
                 if (entry.value_ptr.count > 0) {
-                    var sum: f64 = 0;
+                    var accumulator: f64 = 0;
+                    var avgAccumulator: f64 = 0;
+                    var samplesAccumulator: f64 = 0;
                     var i: usize = 0;
                     while (i < self.smoothCount and i < entry.value_ptr.count) : (i += 1) {
-                        sum += entry.value_ptr.peekItem(entry.value_ptr.count - i - 1);
+                        const measurement = entry.value_ptr.peekItem(entry.value_ptr.count - i - 1);
+                        accumulator += measurement.accumulator;
+                        avgAccumulator += if (measurement.samples > 0) measurement.accumulator / @intToFloat(f64, measurement.samples) else 0;
+                        samplesAccumulator += @intToFloat(f64, measurement.samples);
                     }
 
-                    const avg = sum / @intToFloat(f64, i);
-                    imgui.Text("%f", @floatCast(f32, avg));
+                    _ = imgui.TableSetColumnIndex(1);
+                    const avg = accumulator / @intToFloat(f64, i);
+                    const avgAvg = avgAccumulator / @intToFloat(f64, i);
+                    const avgSamples = samplesAccumulator / @intToFloat(f64, i);
+                    imgui.Text("%.3f  %.3f (%.2f)", @floatCast(f32, avg), @floatCast(f32, avgAvg), @floatCast(f32, avgSamples));
                     if (imgui.IsItemHovered()) {
                         self.selected = entry.key_ptr.*;
                     }
@@ -151,11 +219,11 @@ pub fn draw(self: *Self) !void {
 
             var i: usize = 0;
             while (i < entry.value_ptr.count) : (i += 1) {
-                const sample = entry.value_ptr.peekItem(i);
+                const measurement = entry.value_ptr.peekItem(i);
                 const x1 = @intToFloat(f32, i) / @intToFloat(f32, self.maxRecordBufferCount) * canvas_sz.x + canvas_p0.x;
                 const x2 = @intToFloat(f32, i + 1) / @intToFloat(f32, self.maxRecordBufferCount) * canvas_sz.x + canvas_p0.x;
 
-                const y = @floatCast(f32, canvas_sz.y - sample * self.scale) + canvas_p0.y;
+                const y = @floatCast(f32, canvas_sz.y - measurement.accumulator * self.scale) + canvas_p0.y;
 
                 if (i > 0) {
                     drawList.AddLine(.{ .x = x1, .y = prevY }, .{ .x = x2, .y = y }, color);
@@ -181,23 +249,32 @@ pub fn draw(self: *Self) !void {
 }
 
 pub const ScopedProfile = struct {
-    profiler: *Self,
     name: []const u8,
     start: i128,
+    samples: u64 = 1,
 
-    pub fn end(self: *const ScopedProfile) void {
-        const now = std.time.nanoTimestamp();
-        const delta = now - self.start;
-        const deltaMs = @intToFloat(f64, delta) / std.time.ns_per_ms;
-        self.profiler.record(self.name, deltaMs) catch {};
+    pub inline fn end(self: *const ScopedProfile) void {
+        if (g_profiler) |profiler| {
+            const now = std.time.nanoTimestamp();
+            const delta = now - self.start;
+            const deltaMs = @intToFloat(f64, delta) / std.time.ns_per_ms;
+            profiler.recordTime(self.name, deltaMs, self.samples) catch {};
+        }
     }
 };
 
-pub fn beginScope(self: *Self, name: []const u8) ScopedProfile {
+pub inline fn beginScope(name: []const u8) ScopedProfile {
     return ScopedProfile{
-        .profiler = self,
         .name = name,
-        .start = std.time.nanoTimestamp(),
+        .start = if (g_profiler != null) std.time.nanoTimestamp() else 0,
+    };
+}
+
+pub inline fn beginScopeN(name: []const u8, samples: u64) ScopedProfile {
+    return ScopedProfile{
+        .name = name,
+        .start = if (g_profiler != null) std.time.nanoTimestamp() else 0,
+        .samples = samples,
     };
 }
 

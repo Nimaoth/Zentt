@@ -28,7 +28,7 @@ isRunning: bool,
 window: *sdl.SDL_Window,
 renderer: *Renderer,
 sprite_renderer: *SpriteRenderer,
-profiler: Profiler,
+profiler: *Profiler,
 
 windowSize: vk.Extent2D,
 
@@ -76,13 +76,14 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .window = window,
         .renderer = renderer,
         .sprite_renderer = sprite_renderer,
-        .profiler = Profiler.init(allocator),
+        .profiler = try Profiler.init(allocator, true),
         .windowSize = extent,
         .matrices = .{
             .view = Mat4.identity(),
             .proj = Mat4.orthographic(-100, 100, -100, 100, 1, -1),
         },
     };
+
     return self;
 }
 
@@ -119,6 +120,8 @@ pub fn beginFrame(self: *Self) !void {
         imgui2.newFrame();
         imgui2.dockspace();
     }
+
+    try self.profiler.beginFrame();
 }
 
 pub fn endFrame(self: *Self) !void {

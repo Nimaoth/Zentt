@@ -278,7 +278,7 @@ pub const PhysicsScene = struct {
         const count = entity.physics.colliding_entities;
         if (self.collisions[self.index].unusedCapacitySlice().len < count) {
             // Not enough space for collisions
-            std.log.debug("Not enough space for collisions", .{});
+            std.log.info("Not enough space for collisions", .{});
             const old_capacity = self.collisions[self.index].capacity;
             try self.stale_collisions1.append(self.collisions[self.index].toOwnedSlice());
             try self.collisions[self.index].ensureTotalCapacity(old_capacity * 2);
@@ -332,7 +332,6 @@ pub const PhysicsScene = struct {
 };
 
 pub fn physicsSystem(
-    profiler: *Profiler,
     time: *const Time,
     sprite_renderer: *SpriteRenderer,
     commands: *Commands,
@@ -342,7 +341,7 @@ pub fn physicsSystem(
     query: PhysicsQuery,
     grid_centers: Query(.{ GridCenterComponent, TransformComponent }),
 ) !void {
-    const scope = profiler.beginScope("physicsSystem");
+    const scope = Profiler.beginScope("physicsSystem");
     defer scope.end();
 
     const draw_debug_entities = imgui2.variable(physicsSystem, bool, "(Physics) Draw entities", false, true, .{}).*;

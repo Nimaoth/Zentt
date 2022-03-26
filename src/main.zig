@@ -72,7 +72,7 @@ pub fn main() !void {
 
     try assets.loadAssets(assetdb);
 
-    var profiler = &app.profiler;
+    var profiler = app.profiler;
     try world.addResourcePtr(profiler);
 
     try world.addResourcePtr(app.renderer);
@@ -88,10 +88,17 @@ pub fn main() !void {
     defer enemy_spawner.deinit();
 
     _ = (try commands.createEntity())
-        .addComponent(game.Player{})
+        .addComponent(game.Player{
+        .area_modifier = 1.6,
+        .speed_modifier = 2,
+        .duration_modifier = 1.18,
+        .damage_modifier = 77,
+        .cooldown_modifier = 1,
+        .amount_modifier = 0,
+    })
         .addComponent(game.TransformComponent{ .position = Vec3.new(100, 0, 0), .size = 1 })
         .addComponent(game.SpeedComponent{ .speed = 150 })
-        .addComponent(game.CameraComponent{ .size = 450 })
+        .addComponent(game.CameraComponent{ .size = 1000 })
         .addComponent(game.PhysicsComponent{ .own_layer = 0b0001, .target_layer = 0b0010, .radius = 15, .inverse_mass = 0 })
         .addComponent(game.HealthComponent{ .health = 100 })
         .addComponent(game.GridCenterComponent{})
@@ -156,7 +163,7 @@ pub fn main() !void {
     var viewport = Viewport.init(world, app);
     try world.addResourcePtr(&viewport);
 
-    var selectedEntity: EntityId = if (world.entities.valueIterator().next()) |it| it.*.id else 0;
+    var selectedEntity: EntityId = if (world.entities().next()) |it| it.*.id else 0;
 
     var chunkDebugger = ChunkDebugger.init(allocator);
     defer chunkDebugger.deinit();
@@ -214,13 +221,13 @@ pub fn main() !void {
         if (imgui.Begin("Stats")) {
             imgui.LabelText("Frame time: ", "%.2f", frameTimeSmoothed);
             imgui.LabelText("FPS: ", "%.1f", fps);
-            imgui.LabelText("Entities: ", "%lld", world.entities.count());
+            imgui.LabelText("Entities: ", "%lld", world.entities().count());
         }
         imgui.End();
 
         viewport.prepare();
 
-        try profiler.record("Frame", frameTime);
+        try profiler.recordTime("Frame", frameTime, 1);
 
         {
             if (imgui.Begin("Entities")) {
@@ -234,15 +241,30 @@ pub fn main() !void {
                     .RowBg = true,
                     .Sortable = true,
                 };
+
+                if (imgui.BeginTable("Entity Maps", 2, tableFlags, .{}, 0)) {
+                    defer imgui.EndTable();
+                    for (world.entityMaps.items) |*map, i| {
+                        imgui.PushIDPtr(map);
+                        defer imgui.PopID();
+
+                        imgui.TableNextRow(.{}, 0);
+                        _ = imgui.TableSetColumnIndex(0);
+                        imgui.Text("%d", i);
+                        _ = imgui.TableSetColumnIndex(1);
+                        imgui.Text("%d", map.count());
+                    }
+                }
+
                 tableFlags = tableFlags.with(imgui.TableFlags.Borders);
                 if (imgui.BeginTable("Entities", 4, tableFlags, .{}, 0)) {
                     defer imgui.EndTable();
 
                     var i: u64 = 0;
-                    var entityIter = world.entities.iterator();
+                    var entityIter = world.entities();
                     while (entityIter.next()) |entry| : (i += 1) {
                         if (i > 100) break;
-                        const entityId = entry.key_ptr.*;
+                        const entityId = entry.*.id;
                         imgui.PushIDInt64(entityId);
                         defer imgui.PopID();
 
@@ -276,7 +298,7 @@ pub fn main() !void {
         try viewport.drawScene();
 
         {
-            const scope = profiler.beginScope("runFrameSystems");
+            const scope = Profiler.beginScope("runFrameSystems");
             defer scope.end();
 
             world.runFrameSystems() catch |err| {
@@ -285,7 +307,7 @@ pub fn main() !void {
         }
 
         {
-            const scope = profiler.beginScope("runRenderSystems");
+            const scope = Profiler.beginScope("runRenderSystems");
             defer scope.end();
 
             try app.beginRender(viewport.content_size);
@@ -298,11 +320,6 @@ pub fn main() !void {
         var viewport_click_location: ?Vec2 = try viewport.draw(selectedEntity);
 
         {
-            const scope = profiler.beginScope("applyCommands");
-            defer scope.end();
-
-            try profiler.record("Num commands (req)", @intToFloat(f64, commands.commands.items.len));
-
             commands.applyCommands() catch |err| {
                 std.log.err("applyCommands failed: {}", .{err});
             };
@@ -313,7 +330,7 @@ pub fn main() !void {
         if (viewport_click_location) |loc| {
             //
             const id = try app.renderer.getIdAt(@floatToInt(usize, loc.x()), @floatToInt(usize, loc.y()));
-            if (world.entities.get(id)) |_| {
+            if (world.getEntity(id)) |_| {
                 selectedEntity = id;
             } else if (id == 0) {
                 selectedEntity = id;

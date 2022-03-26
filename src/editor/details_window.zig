@@ -49,7 +49,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
     var tagBuffer = std.mem.zeroes([1024]u8);
 
     _ = imgui.Begin("Details");
-    if (world.entities.get(entityId)) |entity| {
+    if (world.getEntity(entityId)) |entity| {
         imgui.PushIDInt64(entityId);
         defer imgui.PopID();
 
@@ -59,18 +59,13 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
             imgui2.property("Tag");
             if (tag.name.len < tagBuffer.len) {
                 imgui.Text("%.*s", tag.name.len, tag.name.ptr);
-                // std.mem.copy(u8, tagBuffer[0..], tag.name);
-                // if (imgui.InputText(null, &tagBuffer, tagBuffer.len)) {
-                //     const len = std.mem.indexOf(u8, tagBuffer[0..], &.{0}) orelse unreachable;
-                //     std.mem.copy(u8, @bitCast([]u8, tag.name), tagBuffer[0..len]);
-                // }
             } else {
                 imgui.Text("Too long.");
             }
         }
 
         // Zero sized components
-        var component_id_iter = entity.chunk.table.archetype.components.iterator();
+        var component_id_iter = entity.entity.chunk.table.archetype.components.iterator();
         while (component_id_iter.next()) |component_id| {
             imgui.PushIDInt(@intCast(i32, component_id));
             defer imgui.PopID();
@@ -90,7 +85,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
 
         // Components with data
         // chunk.components only includes non zero sized components.
-        for (entity.chunk.components) |components, i| {
+        for (entity.entity.chunk.components) |components, i| {
             imgui.PushIDInt(@intCast(i32, i));
             defer imgui.PopID();
 
@@ -109,7 +104,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
             }
 
             if (open) {
-                imgui2.anyDynamic(rtti, components.getRaw(entity.index));
+                imgui2.anyDynamic(rtti, components.getRaw(entity.entity.index));
             }
         }
 

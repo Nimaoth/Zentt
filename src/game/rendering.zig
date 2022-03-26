@@ -26,7 +26,6 @@ const AnimatedSpriteComponent = basic_components.AnimatedSpriteComponent;
 const CameraComponent = basic_components.CameraComponent;
 
 pub fn animatedSpriteRenderSystem(
-    profiler: *Profiler,
     renderer: *Renderer,
     sprite_renderer: *SpriteRenderer,
     commands: *Commands,
@@ -34,7 +33,7 @@ pub fn animatedSpriteRenderSystem(
     cameras: Query(.{ TransformComponent, CameraComponent }),
     query: Query(.{ TransformComponent, AnimatedSpriteComponent }),
 ) !void {
-    const scope = profiler.beginScope("animatedSpriteRenderSystem");
+    const scope = Profiler.beginScope("animatedSpriteRenderSystem");
     defer scope.end();
 
     const delta = @floatCast(f32, time.delta);
@@ -87,13 +86,12 @@ pub fn animatedSpriteRenderSystem(
 }
 
 pub fn spriteRenderSystem(
-    profiler: *Profiler,
     renderer: *Renderer,
     sprite_renderer: *SpriteRenderer,
     cameras: Query(.{ TransformComponent, CameraComponent }),
     query: Query(.{ TransformComponent, SpriteComponent }),
 ) !void {
-    const scope = profiler.beginScope("spriteRenderSystem");
+    const scope = Profiler.beginScope("spriteRenderSystem");
     defer scope.end();
 
     if (cameras.iter().next()) |camera| {

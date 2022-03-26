@@ -49,7 +49,6 @@ pub fn createBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3, health: f32)
 }
 
 pub fn moveSystemFollowPlayer(
-    profiler: *Profiler,
     time: *const Time,
     spawner: *EnemySpawner,
     commands: *Commands,
@@ -57,7 +56,7 @@ pub fn moveSystemFollowPlayer(
     players: Query(.{ Player, TransformComponent }),
     query: Query(.{ FollowPlayerMovementComponent, TransformComponent, SpeedComponent, HealthComponent }),
 ) !void {
-    const scope = profiler.beginScope("moveSystemFollowPlayer");
+    const scope = Profiler.beginScope("moveSystemFollowPlayer");
     defer scope.end();
 
     const min_despawn_distance = imgui2.variable(moveSystemFollowPlayer, f32, "Min despawn distance", 0, true, .{ .min = 0 }).*;
@@ -123,10 +122,10 @@ pub fn enemySpawnSystem(
         return;
     };
 
-    const min_distance_from_player = imgui2.variable(enemySpawnSystem, f32, "Spawn distance", 150, true, .{ .min = 0 }).*;
+    const min_distance_from_player = imgui2.variable(enemySpawnSystem, f32, "Spawn distance", 600, true, .{ .min = 0 }).*;
     const max_distance_from_player = min_distance_from_player + 100;
 
-    const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 10, true, .{ .min = 0 }).*;
+    const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 1000, true, .{ .min = 0 }).*;
     const base_health = imgui2.variable(enemySpawnSystem, f32, "Bat health", 10, true, .{ .min = 0, .speed = 0.1 }).*;
     const health = base_health;
 

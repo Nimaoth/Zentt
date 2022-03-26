@@ -104,7 +104,7 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
 
         var using_gizmo = false;
 
-        if (self.world.entities.get(selected_entity)) |entity| {
+        if (self.world.getEntity(selected_entity)) |entity| {
             if (try self.world.getComponent(entity.id, TransformComponent)) |transform| {
                 var texture_size = Vec2.new(1, 1);
 

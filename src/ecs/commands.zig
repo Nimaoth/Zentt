@@ -8,6 +8,8 @@ const EntityBuilder = @import("entity_builder.zig");
 const Query = @import("query.zig").Query;
 const Tag = @import("tag_component.zig").Tag;
 
+const Profiler = @import("../editor/profiler.zig");
+
 const Self = @This();
 
 const TempEntityId = struct {
@@ -116,6 +118,9 @@ pub fn removeComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti
 }
 
 pub fn applyCommands(self: *Self) !void {
+    const scope = Profiler.beginScopeN("applyCommands", self.commands.items.len);
+    defer scope.end();
+
     defer {
         self.commands.clearRetainingCapacity();
         self.componentData.clearRetainingCapacity();

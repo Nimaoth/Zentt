@@ -83,10 +83,10 @@ pub fn bibleSystem(
         return;
     };
 
-    const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 40, true, .{ .min = 5 }).*;
+    const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 250, true, .{ .min = 5 }).*;
     const range = base_range * player.player.area_modifier;
 
-    const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 3, true, .{ .min = 1 }).*;
+    const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 3000, true, .{ .min = 1 }).*;
     const max_age = base_max_age * player.player.duration_modifier;
 
     const base_cooldown = imgui2.variable(bibleSystem, f32, "Bible cooldown", 5, true, .{ .min = 1 }).*;
