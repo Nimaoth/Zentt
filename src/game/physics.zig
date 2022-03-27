@@ -497,10 +497,10 @@ pub fn physicsSystem(
     // Integrate velocities
 
     // Correct positions
-
     for (scene.manifolds.items) |*m| {
         m.positionalCorrection();
     }
+
     // Clear all forces
 }
 

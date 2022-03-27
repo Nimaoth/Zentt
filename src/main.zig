@@ -59,7 +59,6 @@ pub fn main() !void {
     try world.addSystem(game.physicsSystem, "Physics");
 
     try world.addRenderSystem(game.spriteRenderSystem, "Render System Vulkan");
-    try world.addRenderSystem(game.animatedSpriteRenderSystem, "Render System Vulkan");
 
     _ = try world.addResource(game.Time{});
     var commands = try world.addResource(Commands.init(allocator, world));

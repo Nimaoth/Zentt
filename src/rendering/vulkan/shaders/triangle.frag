@@ -20,10 +20,7 @@ void main() {
     f_color.rgb = pow(f_color.rgb, vec3(1/2.2));
     f_id = pc.id;
 
-    // if (f_color.a == 0) {
-    //     gl_FragDepth = 1;
-    //     // discard;
-    // } else {
-    //     gl_FragDepth = gl_FragCoord.z;
-    // }
+    if (f_color.a == 0) {
+        discard;
+    }
 }
