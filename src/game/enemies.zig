@@ -32,7 +32,7 @@ const CameraComponent = basic_components.CameraComponent;
 const HealthComponent = basic_components.HealthComponent;
 const Player = @import("player.zig").Player;
 const PhysicsComponent = @import("physics.zig").PhysicsComponent;
-const gems = @import("gem.zig");
+const Gem = @import("gem.zig");
 
 pub fn createDyingBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
     _ = (try commands.createEntity())
@@ -56,12 +56,15 @@ pub fn moveSystemFollowPlayer(
     assetdb: *AssetDB,
     players: Query(.{ Player, TransformComponent }),
     query: Query(.{ FollowPlayerMovementComponent, TransformComponent, SpeedComponent, HealthComponent }),
+    gems: Query(.{ Gem.GemComponent, TransformComponent }),
 ) !void {
     const scope = Profiler.beginScope("moveSystemFollowPlayer");
     defer scope.end();
 
     const max_despawn_distance = imgui2.variable(moveSystemFollowPlayer, f32, "Max despawn distance", 2000, true, .{ .min = 0 }).*;
     const max_despawn_distance_sq = max_despawn_distance * max_despawn_distance;
+
+    const max_gem_count = imgui2.variable(moveSystemFollowPlayer, u64, "Max gem count.", 100, true, .{ .min = 0 }).*;
 
     const delta = @floatCast(f32, time.delta);
     if (delta == 0)
@@ -82,27 +85,43 @@ pub fn moveSystemFollowPlayer(
         if (entity.health.health <= 0 or distance > max_despawn_distance_sq) {
             try commands.destroyEntity(entity.ref);
             try createDyingBat(commands, assetdb, entity.transform.position);
-            try gems.createGem(commands, assetdb, entity.transform.position, 1);
+            try spawner.gems_to_spawn.append(.{ .position = entity.transform.position, .xp = 1 });
             spawner.current_count -= 1;
         }
     }
+
+    const current_gems = gems.count();
+    if (current_gems < max_gem_count) {
+        const max_gems_to_spawn = max_gem_count - gems.count();
+        for (spawner.gems_to_spawn.items[0..std.math.min(spawner.gems_to_spawn.items.len, max_gems_to_spawn)]) |*gts| {
+            try Gem.createGem(commands, assetdb, gts.position, gts.xp);
+        }
+    }
+    spawner.gems_to_spawn.clearRetainingCapacity();
 }
+
+pub const GemToSpawn = struct {
+    position: Vec3,
+    xp: f32,
+};
 
 pub const EnemySpawner = struct {
     current_count: u64 = 0,
     world: *World,
     prng: std.rand.DefaultPrng,
+    gems_to_spawn: std.ArrayList(GemToSpawn),
 
     pub fn init(allocator: std.mem.Allocator, world: *World) @This() {
         _ = allocator;
         return @This(){
             .world = world,
             .prng = std.rand.DefaultPrng.init(123),
+            .gems_to_spawn = std.ArrayList(GemToSpawn).init(allocator),
         };
     }
 
     pub fn deinit(self: *const @This()) void {
-        _ = self;
+        self.gems_to_spawn.deinit();
     }
 
     pub fn rand(self: *@This()) std.rand.Random {

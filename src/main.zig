@@ -92,10 +92,10 @@ pub fn main() !void {
 
     _ = (try commands.createEntity())
         .addComponent(game.Player{
-        .area_modifier = 1.6,
-        .speed_modifier = 2,
-        .duration_modifier = 1.18,
-        .damage_modifier = 77,
+        .area_modifier = 1,
+        .speed_modifier = 1,
+        .duration_modifier = 1,
+        .damage_modifier = 1,
         .cooldown_modifier = 1,
         .amount_modifier = 0,
     })

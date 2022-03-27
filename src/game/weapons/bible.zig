@@ -101,6 +101,8 @@ pub fn bibleSystem(
     const base_damage = imgui2.variable(bibleSystem, f32, "Bible damage", 0.5, true, .{ .min = 0, .speed = 0.1 }).*;
     const damage = base_damage * player.player.damage_modifier;
 
+    const push_amount = imgui2.variable(bibleSystem, f32, "Bible push amount", 100, true, .{ .min = 0, .speed = 0.1 }).*;
+
     var last_spawn_time = imgui2.variable(bibleSystem, f32, "last_spawn_time", 0, false, .{ .min = 5 });
 
     const delta = @floatCast(f32, time.delta);
@@ -134,6 +136,10 @@ pub fn bibleSystem(
                 if (bible_res.world.getComponent(e, HealthComponent) catch continue) |health| {
                     health.health -= damage;
                 }
+            }
+
+            if (bible_res.world.getComponent(e, TransformComponent) catch continue) |t| {
+                t.position = t.position.add(offset.scale(push_amount * delta));
             }
         }
     }
