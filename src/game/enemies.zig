@@ -79,7 +79,7 @@ pub fn moveSystemFollowPlayer(
 
         const distance = toPlayer.lengthSq();
         if (entity.health.health <= 0 or distance > max_despawn_distance_sq) {
-            try commands.destroyEntity(entity.id);
+            try commands.destroyEntity(entity.ref);
             try createDyingBat(commands, assetdb, entity.transform.position);
             spawner.current_count -= 1;
         }
@@ -121,7 +121,8 @@ pub fn enemySpawnSystem(
     };
 
     const min_spawn_distance = imgui2.variable(enemySpawnSystem, f32, "Spawn distance", 200, true, .{ .min = 0 }).*;
-    const max_spawn_distance = min_spawn_distance + 100;
+    const spawn_distance_width = imgui2.variable(enemySpawnSystem, f32, "Spawn distance width", 200, true, .{ .min = 0 }).*;
+    const max_spawn_distance = min_spawn_distance + spawn_distance_width;
 
     const desired_count = imgui2.variable(enemySpawnSystem, i32, "Desired enemies", 10, true, .{ .min = 0 }).*;
     const base_health = imgui2.variable(enemySpawnSystem, f32, "Bat health", 10, true, .{ .min = 0, .speed = 0.1 }).*;

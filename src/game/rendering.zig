@@ -65,7 +65,7 @@ pub fn animatedSpriteRenderSystem(
             while (entity.animated_sprite.time >= entity.animated_sprite.anim.length) {
                 entity.animated_sprite.time -= entity.animated_sprite.anim.length;
                 if (entity.animated_sprite.destroy_at_end) {
-                    _ = try commands.destroyEntity(entity.id);
+                    _ = try commands.destroyEntity(entity.ref);
                     continue :entity_loop;
                 }
             }

@@ -4,6 +4,7 @@ const ArchetypeTable = @import("archetype_table.zig");
 const Chunk = @import("chunk.zig");
 const Archetype = @import("archetype.zig");
 const Entity = @import("entity.zig");
+const EntityRef = Entity.Ref;
 const DotPrinter = @import("dot_printer.zig");
 const Query = @import("query.zig").Query;
 const SystemParameterType = @import("system_parameter_type.zig").SystemParameterType;
@@ -18,23 +19,6 @@ const Profiler = @import("../editor/profiler.zig");
 
 pub const EntityId = u64;
 pub const ComponentId = u64;
-
-pub const EntityRef = struct {
-    id: EntityId,
-    entity: *Entity,
-
-    pub fn get(self: *const @This()) ?*Entity {
-        if (self.isValid()) {
-            return self.entity;
-        } else {
-            return null;
-        }
-    }
-
-    pub fn isValid(self: *const @This()) bool {
-        return self.id == self.entity.id and self.id != 0;
-    }
-};
 
 const System = struct {
     const InvokeFunction = fn (world: *Self) anyerror!void;
@@ -72,10 +56,10 @@ entityArena: std.heap.ArenaAllocator,
 resourceAllocator: std.heap.ArenaAllocator,
 
 archetypeTables: std.HashMap(*ArchetypeTable, *ArchetypeTable, ArchetypeTable.HashTableContext, 80),
+archetypeTablesArray: std.ArrayList(*ArchetypeTable),
 baseArchetypeTable: *ArchetypeTable,
 entityPool: std.ArrayList(*Entity),
 
-entityMaps: std.ArrayList(EntityMap),
 nextEntityId: EntityId = 1,
 components: std.AutoHashMap(Rtti.TypeId, ComponentInfo),
 componentIdToComponentType: std.ArrayList(Rtti.TypeId),
@@ -102,21 +86,14 @@ pub fn init(allocator: std.mem.Allocator) !*Self {
         .entityArena = std.heap.ArenaAllocator.init(allocator),
         .resourceAllocator = std.heap.ArenaAllocator.init(allocator),
         .archetypeTables = @TypeOf(world.archetypeTables).init(allocator),
+        .archetypeTablesArray = @TypeOf(world.archetypeTablesArray).init(allocator),
         .entityPool = @TypeOf(world.entityPool).init(allocator),
-        .entityMaps = @TypeOf(world.entityMaps).init(allocator),
         .components = @TypeOf(world.components).init(allocator),
         .componentIdToComponentType = @TypeOf(world.componentIdToComponentType).init(allocator),
         .frameSystems = @TypeOf(world.frameSystems).init(allocator),
         .renderSystems = @TypeOf(world.renderSystems).init(allocator),
         .resources = @TypeOf(world.resources).init(allocator),
     };
-
-    const entity_maps_size = 128;
-    try world.entityMaps.resize(entity_maps_size);
-    world.entity_maps_mask = entity_maps_size - 1;
-    for (world.entityMaps.items) |*map| {
-        map.* = EntityMap.init(allocator);
-    }
 
     // Create archetype table for empty entities.
     var archetype = try world.createArchetypeStruct(.{});
@@ -133,12 +110,9 @@ pub fn deinit(self: *Self) void {
     self.frameSystems.deinit();
     self.renderSystems.deinit();
     self.archetypeTables.deinit();
+    self.archetypeTablesArray.deinit();
     self.globalPool.deinit();
     self.resourceAllocator.deinit();
-    for (self.entityMaps.items) |*map| {
-        map.deinit();
-    }
-    self.entityMaps.deinit();
     self.entityPool.deinit();
     self.entityArena.deinit();
     self.components.deinit();
@@ -280,6 +254,23 @@ fn createSystemInvokeFunction(comptime system: anytype) !System.InvokeFunction {
             }
 
             try @call(.{}, system, args);
+
+            inline for (argsTypeInfo.fields) |field| {
+                const ParamType = field.field_type;
+                const paramTypeInfo = @typeInfo(ParamType);
+
+                // Pointer to the argument we want to fill out.
+                var argPtr = &@field(args, field.name);
+
+                if (paramTypeInfo == .Struct) {
+                    if (@hasDecl(ParamType, "Type")) {
+                        const systemParamType: SystemParameterType = ParamType.Type;
+                        switch (systemParamType) {
+                            .Query => argPtr.deinit(),
+                        }
+                    }
+                }
+            }
         }
     };
 
@@ -304,48 +295,13 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
     const archetype = try world.createArchetypeStruct(ComponentTypes);
 
     var tables = try world.getDirectSupersetTables(archetype);
-    queryArg.* = ParamType.init(tables.items, true);
+    queryArg.* = ParamType.init(tables.allocator, tables.items, true);
 }
 
-const EntityIterator = struct {
-    world: *Self,
-    map_iter: EntityMap.ValueIterator,
-    map_index: usize = 0,
+const AllEntitiesQuery = Query(.{});
 
-    pub fn next(self: *@This()) ?**Entity {
-        if (self.map_index >= self.world.entityMaps.items.len)
-            return null;
-        if (self.map_iter.next()) |e|
-            return e;
-        self.map_index += 1;
-        if (self.map_index < self.world.entityMaps.items.len) {
-            self.map_iter = self.world.entityMaps.items[self.map_index].valueIterator();
-            return self.map_iter.next();
-        } else {
-            return null;
-        }
-    }
-
-    // Returns the total number of entities
-    pub fn count(self: *const @This()) usize {
-        var c: usize = 0;
-        for (self.world.entityMaps.items) |*map| {
-            c += map.count();
-        }
-        return c;
-    }
-};
-
-pub fn entities(self: *Self) EntityIterator {
-    return .{
-        .world = self,
-        .map_iter = self.entityMaps.items[0].valueIterator(),
-    };
-}
-
-inline fn getEntityMap(self: *Self, entity_id: EntityId) *EntityMap {
-    const index = entity_id & self.entity_maps_mask;
-    return &self.entityMaps.items[index];
+pub fn entities(self: *Self) AllEntitiesQuery.Iterator {
+    return AllEntitiesQuery.init(undefined, self.archetypeTablesArray.items, false).iter();
 }
 
 pub fn reserveEntityId(self: *Self) EntityId {
@@ -354,51 +310,51 @@ pub fn reserveEntityId(self: *Self) EntityId {
     return id;
 }
 
+pub fn reserveEntity(self: *Self, id: EntityId) !EntityRef {
+    var entity = if (self.entityPool.items.len > 0) self.entityPool.pop() else try self.entityArena.allocator().create(Entity);
+    // Set id to zero because the entity doesn't actually exist at this point in any archetype table,
+    // but entity.chunk is not nullable so we can't just set this to null.
+    entity.id = 0;
+    return EntityRef{ .id = id, .entity = entity };
+}
+
 pub fn getEntity(self: *Self, id: EntityId) ?EntityRef {
-    if (self.getEntityMap(id).get(id)) |entity| {
-        return EntityRef{ .id = id, .entity = entity };
-    } else {
-        return null;
+    var iter = self.entities();
+    while (iter.next()) |entity| {
+        if (entity.id == id)
+            return entity.ref;
     }
+    return null;
+}
+
+pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
+    return self.getEntity(entityId) != null;
+}
+
+pub fn createEntityFromReserved(self: *Self, entity_ref: EntityRef) !void {
+    const scope = Profiler.beginScope("createEntityFromReserved");
+    defer scope.end();
+
+    entity_ref.entity.id = entity_ref.id;
+    try self.baseArchetypeTable.addEntity(entity_ref.entity, .{});
 }
 
 pub fn createEntityWithId(self: *Self, id: EntityId) !EntityRef {
-    const scope = Profiler.beginScope("createEntity");
+    const scope = Profiler.beginScope("createEntityWithId");
     defer scope.end();
 
-    var entity = if (self.entityPool.items.len > 0) self.entityPool.pop() else try self.entityArena.allocator().create(Entity);
-    entity.* = try self.baseArchetypeTable.addEntity(id, .{});
-
-    if (try self.getEntityMap(id).fetchPut(id, entity)) |old| {
-        std.log.err("Failed to add entity: entity with id {} already exists", .{entity.id});
-
-        _ = self.baseArchetypeTable.removeEntity(entity.*) orelse unreachable; // Unreachable should be ok since we remove the entity we just added.
-        try self.entityPool.append(entity);
-        try self.getEntityMap(old.key).put(old.key, old.value);
-
-        return error.EntityWithIdAlreayExists;
-    }
-
-    return EntityRef{ .id = id, .entity = entity };
+    var entity_ref = try self.reserveEntity(id);
+    try self.createEntityFromReserved(entity_ref);
+    return entity_ref;
 }
 
 pub fn createEntity(self: *Self) !EntityRef {
     return self.createEntityWithId(self.reserveEntityId());
 }
 
-pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
-    return self.getEntityMap(entityId).contains(entityId);
-}
-
-pub fn deleteEntity(self: *Self, entityId: EntityId) !void {
-    const entity_map = self.getEntityMap(entityId);
-    if (entity_map.get(entityId)) |entity| {
-        _ = entity_map.remove(entityId);
-        if (entity.chunk.removeEntity(entity.index)) |update| {
-            // Another entity moved while removing entity, so update the index.
-            var otherEntity = self.getEntityMap(update.entityId).getEntry(update.entityId) orelse unreachable;
-            otherEntity.value_ptr.*.index = update.newIndex;
-        }
+pub fn deleteEntity(self: *Self, entity_ref: EntityRef) !void {
+    if (entity_ref.get()) |entity| {
+        entity.chunk.removeEntity(entity.index);
         entity.* = .{};
         try self.entityPool.append(entity);
     } else {
@@ -406,8 +362,8 @@ pub fn deleteEntity(self: *Self, entityId: EntityId) !void {
     }
 }
 
-pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !EntityRef {
-    if (self.getEntityMap(entityId).get(entityId)) |entity| {
+pub fn addComponent(self: *Self, entity_ref: EntityRef, component: anytype) !void {
+    if (entity_ref.get()) |entity| {
         const rtti: Rtti = Rtti.typeId(@TypeOf(component));
         const componentId: u64 = try self.getComponentId(@TypeOf(component));
         var newComponents = BitSet.initEmpty();
@@ -419,23 +375,17 @@ pub fn addComponent(self: *Self, entityId: EntityId, component: anytype) !Entity
         const old_entity = entity.*;
 
         // copy existing entity to new table
-        entity.* = try newTable.copyEntityWithComponentInto(entity, component);
+        try newTable.copyEntityWithComponentInto(entity, component);
 
         // Remove old entity
-        if (old_entity.chunk.table.removeEntity(old_entity)) |update| {
-            // Another entity moved while removing entity, so update the index.
-            var other = self.getEntityMap(update.entityId).getEntry(update.entityId) orelse unreachable;
-            other.value_ptr.index = update.newIndex;
-        }
-
-        return .{ .id = entity.id, .entity = entity };
+        old_entity.chunk.table.removeEntity(old_entity);
     } else {
         return error.InvalidEntity;
     }
 }
 
-pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.TypeId, componentData: []const u8) !EntityRef {
-    if (self.getEntityMap(entityId).get(entityId)) |entity| {
+pub fn addComponentRaw(self: *Self, entity_ref: EntityRef, componentType: Rtti.TypeId, componentData: []const u8) !void {
+    if (entity_ref.get()) |entity| {
         const componentId: u64 = try self.getComponentIdForRtti(componentType);
         var newComponents = BitSet.initEmpty();
         newComponents.set(componentId);
@@ -446,23 +396,17 @@ pub fn addComponentRaw(self: *Self, entityId: EntityId, componentType: Rtti.Type
         const old_entity = entity.*;
 
         // copy existing entity to new table
-        entity.* = try newTable.copyEntityWithComponentIntoRaw(entity.*, componentType, componentData);
+        try newTable.copyEntityWithComponentIntoRaw(entity, componentType, componentData);
 
         // Remove old entity
-        if (old_entity.chunk.table.removeEntity(old_entity)) |update| {
-            // Another entity moved while removing entity, so update the index.
-            var other = self.getEntityMap(update.entityId).getEntry(update.entityId) orelse unreachable;
-            other.value_ptr.*.index = update.newIndex;
-        }
-
-        return EntityRef{ .id = entity.id, .entity = entity };
+        old_entity.chunk.removeEntity(old_entity.index);
     } else {
         return error.InvalidEntity;
     }
 }
 
-pub fn removeComponent(self: *Self, entityId: EntityId, componentType: Rtti.TypeId) !EntityRef {
-    if (self.getEntityMap(entityId).get(entityId)) |entity| {
+pub fn removeComponent(self: *Self, entity_ref: EntityRef, componentType: Rtti.TypeId) !void {
+    if (entity_ref.get()) |entity| {
         const componentId: u64 = try self.getComponentIdForRtti(componentType);
         var componentIds = BitSet.initEmpty();
         componentIds.set(componentId);
@@ -473,16 +417,10 @@ pub fn removeComponent(self: *Self, entityId: EntityId, componentType: Rtti.Type
         const old_entity = entity.*;
 
         // copy existing entity to new table
-        entity.* = try newTable.copyEntityIntoRaw(entity.*);
+        try newTable.copyEntityIntoRaw(entity);
 
         // Remove old entity
-        if (old_entity.chunk.table.removeEntity(old_entity)) |update| {
-            // Another entity moved while removing entity, so update the index.
-            var other = self.getEntityMap(update.entityId).getEntry(update.entityId) orelse unreachable;
-            other.value_ptr.*.index = update.newIndex;
-        }
-
-        return EntityRef{ .id = entity.id, .entity = entity };
+        old_entity.chunk.removeEntity(old_entity.index);
     } else {
         return error.InvalidEntity;
     }
@@ -495,8 +433,8 @@ pub fn getComponentType(self: *const Self, componentId: ComponentId) ?Rtti.TypeI
     return self.componentIdToComponentType.items[componentId];
 }
 
-pub fn getComponent(self: *Self, entityId: EntityId, comptime ComponentType: type) !?*ComponentType {
-    if (self.getEntityMap(entityId).get(entityId)) |entity| {
+pub fn getComponent(self: *Self, entity_ref: EntityRef, comptime ComponentType: type) !?*ComponentType {
+    if (entity_ref.get()) |entity| {
         // Check if entity has the specified component.
         const componentId = try self.getComponentId(ComponentType);
         if (!entity.chunk.table.archetype.components.isSet(componentId)) {
@@ -513,8 +451,8 @@ pub fn getComponent(self: *Self, entityId: EntityId, comptime ComponentType: typ
     }
 }
 
-pub fn hasComponent(self: *Self, entityId: EntityId, componentType: Rtti.TypeId) !bool {
-    if (self.getEntityMap(entityId).get(entityId)) |entity| {
+pub fn hasComponent(self: *Self, entity_ref: EntityRef, componentType: Rtti.TypeId) !bool {
+    if (entity_ref.get()) |entity| {
         // Check if entity has the specified component.
         const componentId = try self.getComponentIdForRtti(componentType);
         return entity.chunk.table.archetype.components.isSet(componentId);
@@ -584,6 +522,7 @@ fn createArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable {
     }
 
     try self.archetypeTables.put(table, table);
+    try self.archetypeTablesArray.append(table);
     return table;
 }
 
@@ -598,7 +537,7 @@ fn getOrCreateArchetypeTable(self: *Self, archetype: Archetype) !*ArchetypeTable
 
 /// Returns a list of all archetype tables which include all components of 'archetype'
 fn getDirectSupersetTables(self: *Self, archetype: Archetype) !std.ArrayList(*ArchetypeTable) {
-    var result = std.ArrayList(*ArchetypeTable).init(self.globalPool.allocator());
+    var result = std.ArrayList(*ArchetypeTable).init(self.allocator);
 
     var table = try self.getOrCreateArchetypeTable(archetype);
     try result.append(table);

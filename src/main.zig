@@ -23,7 +23,9 @@ const Details = @import("editor/details_window.zig");
 const ChunkDebugger = @import("editor/chunk_debugger.zig");
 const Viewport = @import("editor/viewport.zig");
 
-const EntityId = @import("ecs/entity.zig").EntityId;
+const Entity = @import("ecs/entity.zig");
+const EntityId = Entity.EntityId;
+const EntityRef = Entity.Ref;
 const ComponentId = @import("ecs/entity.zig").ComponentId;
 const World = @import("ecs/world.zig");
 const EntityBuilder = @import("ecs/entity_builder.zig");
@@ -163,7 +165,8 @@ pub fn main() !void {
     var viewport = Viewport.init(world, app);
     try world.addResourcePtr(&viewport);
 
-    var selectedEntity: EntityId = if (world.entities().next()) |it| it.*.id else 0;
+    // var selectedEntity: EntityRef = if (world.entities().next()) |it| it.ref else .{};
+    var selectedEntity: EntityRef = .{};
 
     var chunkDebugger = ChunkDebugger.init(allocator);
     defer chunkDebugger.deinit();
@@ -242,49 +245,35 @@ pub fn main() !void {
                     .Sortable = true,
                 };
 
-                if (imgui.BeginTable("Entity Maps", 2, tableFlags, .{}, 0)) {
-                    defer imgui.EndTable();
-                    for (world.entityMaps.items) |*map, i| {
-                        imgui.PushIDPtr(map);
-                        defer imgui.PopID();
-
-                        imgui.TableNextRow(.{}, 0);
-                        _ = imgui.TableSetColumnIndex(0);
-                        imgui.Text("%d", i);
-                        _ = imgui.TableSetColumnIndex(1);
-                        imgui.Text("%d", map.count());
-                    }
-                }
-
                 tableFlags = tableFlags.with(imgui.TableFlags.Borders);
                 if (imgui.BeginTable("Entities", 4, tableFlags, .{}, 0)) {
                     defer imgui.EndTable();
 
                     var i: u64 = 0;
                     var entityIter = world.entities();
-                    while (entityIter.next()) |entry| : (i += 1) {
+                    while (entityIter.next()) |entity| : (i += 1) {
                         if (i > 100) break;
-                        const entityId = entry.*.id;
-                        imgui.PushIDInt64(entityId);
+
+                        imgui.PushIDInt64(entity.id);
                         defer imgui.PopID();
 
                         imgui.TableNextRow(.{}, 0);
                         _ = imgui.TableSetColumnIndex(0);
-                        imgui.Text("%d", entityId);
+                        imgui.Text("%d", entity.id);
 
                         _ = imgui.TableSetColumnIndex(1);
-                        if (try world.getComponent(entityId, Tag)) |tag| {
+                        if (try world.getComponent(entity.ref, Tag)) |tag| {
                             imgui.Text("%.*s", tag.name.len, tag.name.ptr);
                         }
 
                         _ = imgui.TableSetColumnIndex(2);
                         if (imgui.Button("Select")) {
-                            selectedEntity = entityId;
+                            selectedEntity = entity.ref;
                         }
 
                         _ = imgui.TableSetColumnIndex(3);
                         if (imgui.Button("Destroy")) {
-                            try commands.destroyEntity(entityId);
+                            try commands.destroyEntity(entity.ref);
                         }
                     }
                 }
@@ -328,12 +317,11 @@ pub fn main() !void {
         try app.endFrame();
 
         if (viewport_click_location) |loc| {
-            //
             const id = try app.renderer.getIdAt(@floatToInt(usize, loc.x()), @floatToInt(usize, loc.y()));
-            if (world.getEntity(id)) |_| {
-                selectedEntity = id;
+            if (world.getEntity(id)) |entity_ref| {
+                selectedEntity = entity_ref;
             } else if (id == 0) {
-                selectedEntity = id;
+                selectedEntity = .{};
             }
         }
     }

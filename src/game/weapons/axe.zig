@@ -93,7 +93,7 @@ pub fn axeSystem(
     const base_area = imgui2.variable(axeSystem, f32, "Axe base area", 1, true, .{ .min = 1, .speed = 0.1 }).*;
     const area = base_area * player.player.area_modifier;
 
-    const base_max_age = imgui2.variable(axeSystem, f32, "Axe max age", 3, false, .{ .min = 1, .speed = 0.1 }).*;
+    const base_max_age = imgui2.variable(axeSystem, f32, "Axe max age", 3, true, .{ .min = 1, .speed = 0.1 }).*;
     const max_age = base_max_age * player.player.duration_modifier;
 
     const base_cooldown = imgui2.variable(axeSystem, f32, "Axe cooldown", 3, true, .{ .min = 0.1 }).*;
@@ -131,7 +131,7 @@ pub fn axeSystem(
         entity.axe.age += delta;
 
         if (entity.axe.age > max_age) {
-            try commands.destroyEntity(entity.id);
+            try commands.destroyEntity(entity.ref);
             try axe_res.returnEntityId(entity.id);
         }
 
@@ -152,7 +152,9 @@ pub fn axeSystem(
 
         var k: i32 = 0;
         while (k < amount) : (k += 1) {
-            const velocity = Vec3.new(rand.floatNorm(f32) * dir_stddev, 1, 0).norm().scale(speed).add(player.player.velocity.scale(player_velocity_factor));
+            // const velocity = Vec3.new(rand.floatNorm(f32) * dir_stddev, 1, 0).norm().scale(speed).add(player.player.velocity.scale(player_velocity_factor));
+            _ = dir_stddev;
+            const velocity = Vec3.new(rand.floatNorm(f32), rand.floatNorm(f32), 0).norm().scale(speed).add(player.player.velocity.scale(player_velocity_factor));
             try createAxe(commands, assetdb, axe_res, player.transform.position, velocity);
         }
     }

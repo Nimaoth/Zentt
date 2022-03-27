@@ -1,7 +1,9 @@
 const std = @import("std");
 
 const Rtti = @import("../util/rtti.zig");
-const EntityId = @import("entity.zig").EntityId;
+const Entity = @import("entity.zig");
+const EntityRef = Entity.Ref;
+const EntityId = Entity.EntityId;
 const ComponentId = @import("entity.zig").ComponentId;
 const World = @import("world.zig");
 const EntityBuilder = @import("entity_builder.zig");
@@ -14,7 +16,7 @@ const Self = @This();
 
 const TempEntityId = struct {
     commands: ?*Self = null,
-    entity_id: EntityId = 0,
+    entity_ref: EntityRef = .{},
 
     pub fn addComponent(self: TempEntityId, component: anytype) TempEntityId {
         if (self.commands == null)
@@ -28,22 +30,22 @@ const TempEntityId = struct {
         return self.commands.?.removeComponentRaw(self, componentType) catch return .{};
     }
 
-    pub fn build(self: TempEntityId) EntityId {
-        return self.entity_id;
+    pub fn build(self: TempEntityId) EntityRef {
+        return self.entity_ref;
     }
 };
 
 const Commands = union(enum) {
-    CreateEntity: EntityId,
-    DestroyEntity: EntityId,
+    CreateEntity: EntityRef,
+    DestroyEntity: EntityRef,
     AddComponent: struct {
-        entity_id: EntityId,
+        entity_ref: EntityRef,
         componentType: Rtti.TypeId,
         componentDataIndex: usize,
         componentDataLen: usize,
     },
     RemoveComponent: struct {
-        entity_id: EntityId,
+        entity_ref: EntityRef,
         componentType: Rtti.TypeId,
     },
 };
@@ -69,24 +71,24 @@ pub fn getComponentData(self: *const Self, index: usize, len: usize) []const u8 
     return self.componentData.items[index..(index + len)];
 }
 
-pub fn getEntity(self: *Self, entity_id: EntityId) !TempEntityId {
-    return TempEntityId{ .commands = self, .entity_id = entity_id };
+pub fn getEntity(self: *Self, entity_ref: EntityRef) !TempEntityId {
+    return TempEntityId{ .commands = self, .entity_ref = entity_ref };
 }
 
 pub fn createEntity(self: *Self) !TempEntityId {
-    const entity = TempEntityId{ .commands = self, .entity_id = self.world.reserveEntityId() };
-    try self.commands.append(.{ .CreateEntity = entity.entity_id });
+    const entity = TempEntityId{ .commands = self, .entity_ref = try self.world.reserveEntity(self.world.reserveEntityId()) };
+    try self.commands.append(.{ .CreateEntity = entity.entity_ref });
     return entity;
 }
 
 pub fn createEntityWithId(self: *Self, entity_id: EntityId) !TempEntityId {
-    const entity = TempEntityId{ .commands = self, .entity_id = entity_id };
-    try self.commands.append(.{ .CreateEntity = entity.entity_id });
+    const entity = TempEntityId{ .commands = self, .entity_ref = try self.world.reserveEntity(entity_id) };
+    try self.commands.append(.{ .CreateEntity = entity.entity_ref });
     return entity;
 }
 
-pub fn destroyEntity(self: *Self, entity_id: EntityId) !void {
-    try self.commands.append(.{ .DestroyEntity = entity_id });
+pub fn destroyEntity(self: *Self, entity_ref: EntityRef) !void {
+    try self.commands.append(.{ .DestroyEntity = entity_ref });
 }
 
 pub fn addComponent(self: *Self, entity: TempEntityId, component: anytype) !TempEntityId {
@@ -97,7 +99,7 @@ pub fn addComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti.Ty
     const dataStartIndex = self.componentData.items.len;
     try self.componentData.appendSlice(data);
     try self.commands.append(.{ .AddComponent = .{
-        .entity_id = entity.entity_id,
+        .entity_ref = entity.entity_ref,
         .componentType = componentType,
         .componentDataIndex = dataStartIndex,
         .componentDataLen = data.len,
@@ -111,7 +113,7 @@ pub fn removeComponent(self: *Self, entity: TempEntityId, comptime ComponentType
 
 pub fn removeComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti.TypeId) !TempEntityId {
     try self.commands.append(.{ .RemoveComponent = .{
-        .entity_id = entity.entity_id,
+        .entity_ref = entity.entity_ref,
         .componentType = componentType,
     } });
     return entity;
@@ -128,21 +130,21 @@ pub fn applyCommands(self: *Self) !void {
 
     for (self.commands.items) |command| {
         switch (command) {
-            .CreateEntity => |entity_id| {
-                _ = try self.world.createEntityWithId(entity_id);
+            .CreateEntity => |entity_ref| {
+                try self.world.createEntityFromReserved(entity_ref);
             },
 
-            .DestroyEntity => |entity_id| {
-                try self.world.deleteEntity(entity_id);
+            .DestroyEntity => |entity_ref| {
+                try self.world.deleteEntity(entity_ref);
             },
 
             .AddComponent => |data| {
                 const componentData = self.getComponentData(data.componentDataIndex, data.componentDataLen);
-                _ = try self.world.addComponentRaw(data.entity_id, data.componentType, componentData);
+                try self.world.addComponentRaw(data.entity_ref, data.componentType, componentData);
             },
 
             .RemoveComponent => |data| {
-                _ = try self.world.removeComponent(data.entity_id, data.componentType);
+                try self.world.removeComponent(data.entity_ref, data.componentType);
             },
         }
     }

@@ -57,15 +57,15 @@ pub fn moveSystemPlayer(
         entity.player.velocity = vel;
         entity.transform.position = entity.transform.position.add(vel.scale(delta));
 
-        for (entity.physics.colliding_entities_new) |e| {
-            if (entity.physics.startedCollidingWith(e)) {
-                std.log.debug("Collided begin {}", .{e});
-            }
-        }
-        for (entity.physics.colliding_entities_old) |e| {
-            if (entity.physics.stoppedCollidingWith(e)) {
-                std.log.debug("Collided end   {}", .{e});
-            }
-        }
+        // for (entity.physics.colliding_entities_new) |e| {
+        //     if (entity.physics.startedCollidingWith(e)) {
+        //         std.log.debug("Collided begin {}", .{e});
+        //     }
+        // }
+        // for (entity.physics.colliding_entities_old) |e| {
+        //     if (entity.physics.stoppedCollidingWith(e)) {
+        //         std.log.debug("Collided end   {}", .{e});
+        //     }
+        // }
     }
 }

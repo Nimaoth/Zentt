@@ -17,7 +17,9 @@ const Viewport = @import("../editor/viewport.zig");
 
 const StringFormatter = @import("../util/string_formatter.zig");
 
-const EntityId = @import("../ecs/entity.zig").EntityId;
+const Entity = @import("../ecs/entity.zig");
+const EntityRef = Entity.Ref;
+
 const World = @import("../ecs/world.zig");
 const Query = @import("../ecs/query.zig").Query;
 const Commands = @import("../ecs/commands.zig");
@@ -45,39 +47,58 @@ pub const PhysicsComponent = struct {
     push_factor: f32 = 1,
 
     colliding_entities: usize = 0,
-    colliding_entities_old: []EntityId = &.{},
-    colliding_entities_new: []EntityId = &.{},
+    colliding_entities_old: []EntityRef = &.{},
+    colliding_entities_new: []EntityRef = &.{},
 
     /// Returns true if this component started colliding with the given entity.
     /// Assumes this component is colliding the given entity this frame.
-    pub fn startedCollidingWith(self: *const @This(), entity: EntityId) bool {
-        return !std.mem.containsAtLeast(EntityId, self.colliding_entities_old, 1, &.{entity});
+    pub fn startedCollidingWith(self: *const @This(), entity: EntityRef) bool {
+        var contains = false;
+        for (self.colliding_entities_old) |ref| {
+            if (ref.id == entity.id and ref.entity == entity.entity) {
+                contains = true;
+                break;
+            }
+        }
+        return !contains;
+        // return !std.mem.containsAtLeast(EntityRef, self.colliding_entities_old, 1, &.{entity});
     }
 
     /// Returns true if this component stopped colliding with the given entity.
     /// Assumes this component was colliding the given entity last frame.
-    pub fn stoppedCollidingWith(self: *const @This(), entity: EntityId) bool {
-        return !std.mem.containsAtLeast(EntityId, self.colliding_entities_new, 1, &.{entity});
+    pub fn stoppedCollidingWith(self: *const @This(), entity: EntityRef) bool {
+        var contains = false;
+        for (self.colliding_entities_new) |ref| {
+            if (ref.id == entity.id and ref.entity == entity.entity) {
+                contains = true;
+                break;
+            }
+        }
+        return !contains;
+        // return !std.mem.containsAtLeast(EntityRef, self.colliding_entities_new, 1, &.{entity});
     }
 
     /// Returns true if this component is colliding with the given entity.
-    pub fn isCollidingWith(self: *const @This(), entity: EntityId) bool {
-        return std.mem.containsAtLeast(EntityId, self.colliding_entities_new, 1, &.{entity});
+    pub fn isCollidingWith(self: *const @This(), entity: EntityRef) bool {
+        for (self.colliding_entities_new) |ref| {
+            if (ref.id == entity.id and ref.entity == entity.entity) {
+                return true;
+            }
+        }
+        return false;
+        // return std.mem.containsAtLeast(EntityRef, self.colliding_entities_new, 1, &.{entity});
     }
 
     /// Returns true if this component was colliding with the given entity last frame.
-    pub fn wasCollidingWith(self: *const @This(), entity: EntityId) bool {
-        return std.mem.containsAtLeast(EntityId, self.colliding_entities_old, 1, &.{entity});
+    pub fn wasCollidingWith(self: *const @This(), entity: EntityRef) bool {
+        for (self.colliding_entities_old) |ref| {
+            if (ref.id == entity.id and ref.entity == entity.entity) {
+                return true;
+            }
+        }
+        return false;
+        // return std.mem.containsAtLeast(EntityRef, self.colliding_entities_old, 1, &.{entity});
     }
-};
-
-pub const PhysicsActor = struct {
-    //
-};
-
-const EntityPair = struct {
-    a: EntityId,
-    b: EntityId,
 };
 
 const EntityHandlePair = struct {
@@ -158,10 +179,6 @@ const Manifold = struct {
     }
 };
 
-const CollisionInfo = struct {
-    //
-};
-
 const GridCell = struct {
     entities: std.ArrayList(EntityHandle),
 
@@ -193,11 +210,11 @@ pub const PhysicsScene = struct {
     potential_collisions: std.ArrayList(EntityHandlePair),
     manifolds: std.ArrayList(Manifold),
 
-    collisions: [2]std.ArrayList(u64),
+    collisions: [2]std.ArrayList(EntityRef),
     index: usize = 0,
 
-    stale_collisions1: std.ArrayList([]u64),
-    stale_collisions2: std.ArrayList([]u64),
+    stale_collisions1: std.ArrayList([]EntityRef),
+    stale_collisions2: std.ArrayList([]EntityRef),
 
     grid: std.ArrayList(GridCell),
     grid_size_base: usize,
@@ -221,11 +238,11 @@ pub const PhysicsScene = struct {
             .allocator = allocator,
             .world = world,
             .collisions = .{
-                try std.ArrayList(u64).initCapacity(allocator, 1024),
-                try std.ArrayList(u64).initCapacity(allocator, 1024),
+                try std.ArrayList(EntityRef).initCapacity(allocator, 1024),
+                try std.ArrayList(EntityRef).initCapacity(allocator, 1024),
             },
-            .stale_collisions1 = std.ArrayList([]u64).init(allocator),
-            .stale_collisions2 = std.ArrayList([]u64).init(allocator),
+            .stale_collisions1 = std.ArrayList([]EntityRef).init(allocator),
+            .stale_collisions2 = std.ArrayList([]EntityRef).init(allocator),
             .potential_collisions = std.ArrayList(EntityHandlePair).init(allocator),
             .manifolds = std.ArrayList(Manifold).init(allocator),
             .grid = grid,
@@ -285,7 +302,7 @@ pub const PhysicsScene = struct {
         }
 
         const entities_index = self.collisions[self.index].items.len;
-        self.collisions[self.index].appendNTimesAssumeCapacity(0, count);
+        self.collisions[self.index].appendNTimesAssumeCapacity(.{ .id = 0, .entity = undefined }, count);
         entity.physics.colliding_entities_new = self.collisions[self.index].items[entities_index..entities_index];
     }
 
@@ -467,8 +484,8 @@ pub fn physicsSystem(
         std.debug.assert(b.physics.colliding_entities_new.len < b.physics.colliding_entities);
         a.physics.colliding_entities_new.len += 1;
         b.physics.colliding_entities_new.len += 1;
-        a.physics.colliding_entities_new[a.physics.colliding_entities_new.len - 1] = b.id;
-        b.physics.colliding_entities_new[b.physics.colliding_entities_new.len - 1] = a.id;
+        a.physics.colliding_entities_new[a.physics.colliding_entities_new.len - 1] = b.ref;
+        b.physics.colliding_entities_new[b.physics.colliding_entities_new.len - 1] = a.ref;
     }
 
     // Integrate forces

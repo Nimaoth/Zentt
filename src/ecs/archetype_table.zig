@@ -3,6 +3,7 @@ const std = @import("std");
 const Archetype = @import("archetype.zig");
 const Chunk = @import("chunk.zig");
 const Entity = @import("entity.zig");
+const EntityRef = Entity.Ref;
 
 const BitSet = @import("../util/bit_set.zig");
 const Rtti = @import("../util/rtti.zig");
@@ -82,14 +83,9 @@ pub fn getEntityCount(self: *const Self) usize {
     return count;
 }
 
-pub fn removeEntity(self: *Self, entity: Entity) ?Chunk.EntityIndexUpdate {
-    std.debug.assert(entity.chunk.table == self);
-    return entity.chunk.removeEntity(entity.index);
-}
-
-pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
+pub fn addEntity(self: *Self, entity: *Entity, components: anytype) !void {
     // @todo: check if the provided components match the archetype
-    const entity: Entity = try self.firstChunk.addEntity(entityId);
+    try self.firstChunk.addEntity(entity);
 
     const typeInfo = @typeInfo(@TypeOf(components)).Struct;
     inline for (typeInfo.fields) |field| {
@@ -97,70 +93,70 @@ pub fn addEntity(self: *Self, entityId: u64, components: anytype) !Entity {
         const index = self.getListIndexForType(componentType) orelse unreachable;
         try entity.chunk.setComponentRaw(index, entity.index, std.mem.asBytes(&@field(components, field.name)));
     }
-
-    return entity;
 }
 
-pub fn copyEntityWithComponentIntoRaw(self: *Self, entity: Entity, componentType: Rtti.TypeId, componentData: []const u8) !Entity {
+pub fn copyEntityWithComponentIntoRaw(self: *Self, entity: *Entity, componentType: Rtti.TypeId, componentData: []const u8) !void {
     // @todo: check if the provided components match the archetype
+
+    const old_entity = entity.*;
+
     // Add entity
-    const newEntity: Entity = try self.firstChunk.addEntity(entity.id);
+    try self.firstChunk.addEntity(entity);
 
     // Add new component
-    std.debug.assert(self.typeToList.count() == newEntity.chunk.components.len);
+    std.debug.assert(self.typeToList.count() == entity.chunk.components.len);
     if (componentType.typeInfo.size > 0) {
-        try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType) orelse unreachable, newEntity.index, componentData);
+        try entity.chunk.setComponentRaw(self.getListIndexForType(componentType) orelse unreachable, entity.index, componentData);
     }
 
     // Copy existing components
-    for (entity.chunk.components) |*componentList| {
-        var oldData = componentList.getRaw(entity.index);
+    for (old_entity.chunk.components) |*componentList| {
+        var oldData = componentList.getRaw(old_entity.index);
         const newComponentIndex = self.getListIndexForType(componentList.componentType) orelse unreachable;
-        try newEntity.chunk.setComponentRaw(newComponentIndex, newEntity.index, oldData);
+        try entity.chunk.setComponentRaw(newComponentIndex, entity.index, oldData);
     }
-
-    return newEntity;
 }
 
-pub fn copyEntityIntoRaw(self: *Self, entity: Entity) !Entity {
+pub fn copyEntityIntoRaw(self: *Self, entity: *Entity) !void {
     // @todo: check if the provided components match the archetype
+
+    const old_entity = entity.*;
+
     // Add entity
-    const new_entity: Entity = try self.firstChunk.addEntity(entity.id);
+    try self.firstChunk.addEntity(entity);
 
     // Copy existing components
-    for (entity.chunk.components) |*component_list| {
+    for (old_entity.chunk.components) |*component_list| {
         if (self.getListIndexForType(component_list.componentType)) |index| {
-            var old_data = component_list.getRaw(entity.index);
-            try new_entity.chunk.setComponentRaw(index, new_entity.index, old_data);
+            var old_data = component_list.getRaw(old_entity.index);
+            try entity.chunk.setComponentRaw(index, entity.index, old_data);
         }
     }
-
-    return new_entity;
 }
 
-pub fn copyEntityWithComponentInto(self: *Self, entity: Entity, newComponent: anytype) !Entity {
+pub fn copyEntityWithComponentInto(self: *Self, entity: *Entity, newComponent: anytype) !void {
     // @todo: check if the provided components match the archetype
 
     const ComponentType = @TypeOf(newComponent);
 
+    const old_entity = entity.*;
+
     // Add entity
-    const newEntity: Entity = try self.firstChunk.addEntity(entity.id);
+    try self.firstChunk.addEntity(entity);
 
     // Add new component
     const componentType = Rtti.typeId(ComponentType);
-    std.debug.assert(self.typeToList.count() == newEntity.chunk.components.len);
+    std.debug.assert(self.typeToList.count() == entity.chunk.components.len);
     if (componentType.size > 0) {
-        try newEntity.chunk.setComponentRaw(self.getListIndexForType(componentType), newEntity.index, std.mem.asBytes(&newComponent)) orelse unreachable;
+        try entity.chunk.setComponentRaw(self.getListIndexForType(componentType), entity.index, std.mem.asBytes(&newComponent)) orelse unreachable;
     }
 
     // Copy existing components
-    for (entity.chunk.components) |*componentList| {
-        var oldData = componentList.getRaw(entity.index);
-        const newComponentIndex = newEntity.chunk.table.getListIndexForType(componentList.componentType) orelse unreachable;
-        try newEntity.chunk.setComponentRaw(newComponentIndex, newEntity.index, oldData);
+    for (old_entity.chunk.components) |*componentList| {
+        var oldData = componentList.getRaw(old_entity.index);
+        const newComponentIndex = entity.chunk.table.getListIndexForType(componentList.componentType) orelse unreachable;
+        try entity.chunk.setComponentRaw(newComponentIndex, entity.index, oldData);
     }
-
-    return newEntity;
 }
 
 pub fn format(self: *const Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {

@@ -21,7 +21,9 @@ const World = @import("../ecs/world.zig");
 const App = @import("../app.zig");
 
 const Rtti = @import("../util/rtti.zig");
-const EntityId = @import("../ecs/entity.zig").EntityId;
+const Entity = @import("../ecs/entity.zig");
+const EntityRef = Entity.Ref;
+const EntityId = Entity.EntityId;
 
 const game = @import("../game/game.zig");
 const TransformComponent = game.TransformComponent;
@@ -81,7 +83,7 @@ pub fn prepare(self: *Self) void {
     }
 }
 
-pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
+pub fn draw(self: *Self, selected_entity: EntityRef) !?Vec2 {
     const open = imgui.Begin("Viewport");
     defer imgui.End();
 
@@ -104,13 +106,13 @@ pub fn draw(self: *Self, selected_entity: EntityId) !?Vec2 {
 
         var using_gizmo = false;
 
-        if (self.world.getEntity(selected_entity)) |entity| {
-            if (try self.world.getComponent(entity.id, TransformComponent)) |transform| {
+        if (selected_entity.isValid()) {
+            if (try self.world.getComponent(selected_entity, TransformComponent)) |transform| {
                 var texture_size = Vec2.new(1, 1);
 
-                if (try self.world.getComponent(entity.id, SpriteComponent)) |sprite| {
+                if (try self.world.getComponent(selected_entity, SpriteComponent)) |sprite| {
                     texture_size = sprite.texture.getSize();
-                } else if (try self.world.getComponent(entity.id, AnimatedSpriteComponent)) |animated_sprite| {
+                } else if (try self.world.getComponent(selected_entity, AnimatedSpriteComponent)) |animated_sprite| {
                     texture_size = animated_sprite.getCurrentTexture().getSize();
                 }
 

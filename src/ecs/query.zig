@@ -6,7 +6,10 @@ const SystemParameterType = @import("system_parameter_type.zig").SystemParameter
 
 const Rtti = @import("../util/rtti.zig");
 
-pub const EntityId = u64;
+const Entity = @import("entity.zig");
+const EntityId = Entity.EntityId;
+const EntityRef = Entity.Ref;
+
 pub const ComponentId = u64;
 
 pub fn Query(comptime Components: anytype) type {
@@ -52,6 +55,18 @@ pub fn Query(comptime Components: anytype) type {
             return self.componentIndexMap[index];
         }
 
+        pub fn count(self: *const Self) usize {
+            var result: usize = 0;
+            for (self.tables) |table| {
+                var chunk: ?*Chunk = table.firstChunk;
+                while (chunk) |c| {
+                    result += c.count;
+                    chunk = c.next;
+                }
+            }
+            return result;
+        }
+
         pub fn next(self: *Self) ?EntityHandle {
             if (self.tableIndex >= self.tables.len) {
                 return null;
@@ -87,7 +102,8 @@ pub fn Query(comptime Components: anytype) type {
             self.entityIndex += 1;
 
             var result: EntityHandle = undefined;
-            result.id = chunk.getEntityId(index);
+            result.ref = chunk.getEntityRef(index);
+            result.id = result.ref.id;
 
             const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
             const resultTypeInfo = @typeInfo(EntityHandle).Struct;
@@ -96,9 +112,9 @@ pub fn Query(comptime Components: anytype) type {
                 std.debug.assert(@TypeOf(ComponentType) == type);
                 if (@sizeOf(ComponentType) > 0) {
                     var data = chunk.getComponentRaw(self.mapComponentIndex(i), index);
-                    @field(result, resultTypeInfo.fields[i + 1].name) = @ptrCast(*ComponentType, @alignCast(@alignOf(ComponentType), data.ptr));
+                    @field(result, resultTypeInfo.fields[i + 2].name) = @ptrCast(*ComponentType, @alignCast(@alignOf(ComponentType), data.ptr));
                 } else {
-                    @field(result, resultTypeInfo.fields[i + 1].name) = 0;
+                    @field(result, resultTypeInfo.fields[i + 2].name) = 0;
                 }
             }
 
@@ -112,16 +128,25 @@ pub fn Query(comptime Components: anytype) type {
         pub const ComponentTypes = Components;
         pub const ComponentCount = @typeInfo(@TypeOf(Components)).Struct.fields.len;
         pub const EntityHandle = EntityHandle;
+        pub const Iterator = Iterator;
 
+        allocator: std.mem.Allocator,
         tables: []*ArchetypeTable,
-        enabled: bool,
+        free_tables: bool,
         componentCount: i64 = ComponentCount,
 
-        pub fn init(tables: []*ArchetypeTable, enabled: bool) @This() {
+        pub fn init(allocator: std.mem.Allocator, tables: []*ArchetypeTable, free_tables: bool) @This() {
             return @This(){
+                .allocator = allocator,
                 .tables = tables,
-                .enabled = enabled,
+                .free_tables = free_tables,
             };
+        }
+
+        pub fn deinit(self: *const Self) void {
+            if (self.free_tables) {
+                self.allocator.free(self.tables);
+            }
         }
 
         pub fn iter(self: *const Self) Iterator {
@@ -216,14 +241,22 @@ fn getEntityHandle(comptime Components: anytype) type {
         const T = @TypeOf(Components);
         const typeInfo = @typeInfo(T).Struct;
 
-        var fields: [typeInfo.fields.len + 1]std.builtin.TypeInfo.StructField = undefined;
+        var fields: [typeInfo.fields.len + 2]std.builtin.TypeInfo.StructField = undefined;
 
         fields[0] = .{
             .name = "id",
             .field_type = EntityId,
             .default_value = null,
             .is_comptime = false,
-            .alignment = @alignOf([]u64),
+            .alignment = @alignOf(EntityId),
+        };
+
+        fields[1] = .{
+            .name = "ref",
+            .field_type = EntityRef,
+            .default_value = null,
+            .is_comptime = false,
+            .alignment = @alignOf(EntityRef),
         };
 
         // Fill field type info for all components with non-zero size
@@ -232,16 +265,16 @@ fn getEntityHandle(comptime Components: anytype) type {
 
             std.debug.assert(@TypeOf(ComponentType) == type);
             if (@sizeOf(ComponentType) > 0) {
-                fields[index + 1] = .{
-                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
+                fields[index + 2] = .{
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 2)])),
                     .field_type = *ComponentType,
                     .default_value = null,
                     .is_comptime = false,
                     .alignment = @alignOf(*ComponentType),
                 };
             } else {
-                fields[index + 1] = .{
-                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
+                fields[index + 2] = .{
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 2)])),
                     .field_type = u8,
                     .default_value = @intCast(u8, 0),
                     .is_comptime = false,

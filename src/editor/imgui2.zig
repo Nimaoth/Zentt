@@ -655,7 +655,7 @@ pub fn anyDynamic(typeInfo: *const Rtti.TypeInfo, value: []u8) void {
                     const open = imgui.CollapsingHeaderBoolPtrExt(
                         "Array",
                         null,
-                        imgui.TreeNodeFlags.CollapsingHeader.with(.{ .DefaultOpen = true, .AllowItemOverlap = true }).without(.{ .Framed = true }),
+                        imgui.TreeNodeFlags.CollapsingHeader.with(.{ .DefaultOpen = false, .AllowItemOverlap = true }).without(.{ .Framed = true }),
                     );
 
                     if (open) {

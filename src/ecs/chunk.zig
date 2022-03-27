@@ -1,11 +1,12 @@
 const std = @import("std");
 
+const Rtti = @import("../util/rtti.zig");
 const ArchetypeTable = @import("archetype_table.zig");
 const Chunk = @import("chunk.zig");
 const Entity = @import("entity.zig");
-const Rtti = @import("../util/rtti.zig");
+const EntityRef = Entity.Ref;
 
-pub const EntityId = u64;
+pub const EntityId = Entity.Id;
 pub const ComponentId = u64;
 
 const Self = @This();
@@ -32,7 +33,7 @@ pool: []u8,
 capacity: u64,
 count: u64 = 0,
 
-entityIds: []EntityId,
+entity_refs: []EntityRef,
 
 /// Contains data about non zero sized components.
 /// To get all components you have to go through table.archetype.components
@@ -52,8 +53,8 @@ pub fn init(table: *ArchetypeTable, capacity: u64, allocator: std.mem.Allocator)
     size += componentsSize;
 
     // entity ids
-    const entityIdsSize = capacity * @sizeOf(EntityId);
-    size = std.mem.alignForward(size, @alignOf(EntityId));
+    const entityIdsSize = capacity * @sizeOf(EntityRef);
+    size = std.mem.alignForward(size, @alignOf(EntityRef));
     const entityIdsIndex = size;
     size += entityIdsSize;
 
@@ -72,8 +73,8 @@ pub fn init(table: *ArchetypeTable, capacity: u64, allocator: std.mem.Allocator)
     const pool = try allocator.alignedAlloc(u8, 4096, size);
 
     //
-    var entityIds = std.mem.bytesAsSlice(EntityId, pool[entityIdsIndex..(entityIdsIndex + entityIdsSize)]);
-    std.mem.set(u64, entityIds, 0);
+    var entity_refs = std.mem.bytesAsSlice(EntityRef, pool[entityIdsIndex..(entityIdsIndex + entityIdsSize)]);
+    std.mem.set(EntityRef, entity_refs, .{});
 
     // Fill components array
     var components = std.mem.bytesAsSlice(Components, pool[componentsIndex..(componentsIndex + componentsSize)]);
@@ -101,7 +102,7 @@ pub fn init(table: *ArchetypeTable, capacity: u64, allocator: std.mem.Allocator)
         .allocator = allocator,
         .pool = pool,
         .capacity = capacity,
-        .entityIds = entityIds,
+        .entity_refs = entity_refs,
         .components = components,
         .table = table,
     };
@@ -133,9 +134,9 @@ pub fn getComponents(self: *const Self, componentIndex: u64) *Components {
     return &self.components[componentIndex];
 }
 
-pub fn getEntityId(self: *Self, index: u64) u64 {
+pub fn getEntityRef(self: *Self, index: u64) EntityRef {
     std.debug.assert(index < self.count);
-    return self.entityIds[index];
+    return self.entity_refs[index];
 }
 
 pub fn getComponentRaw(self: *Self, componentIndex: u64, dataIndex: u64) []u8 {
@@ -144,16 +145,17 @@ pub fn getComponentRaw(self: *Self, componentIndex: u64, dataIndex: u64) []u8 {
     return components.getRaw(dataIndex);
 }
 
-pub fn addEntity(self: *Self, entityId: EntityId) !Entity {
+pub fn addEntity(self: *Self, entity: *Entity) !void {
     var chunk = self;
     while (chunk.isFull()) {
         chunk = try chunk.getOrCreateNext();
     }
 
-    const index = chunk.count;
-    chunk.entityIds[index] = entityId;
+    entity.chunk = chunk;
+    entity.index = chunk.count;
+
+    chunk.entity_refs[entity.index] = .{ .id = entity.id, .entity = entity };
     chunk.count += 1;
-    return Entity{ .id = entityId, .chunk = chunk, .index = index };
 }
 
 pub fn setComponentRaw(self: *Self, componentIndex: u64, dataIndex: u64, data: []const u8) !void {
@@ -162,15 +164,13 @@ pub fn setComponentRaw(self: *Self, componentIndex: u64, dataIndex: u64, data: [
     components.setRaw(dataIndex, data);
 }
 
-pub const EntityIndexUpdate = struct { entityId: u64, newIndex: u64 };
-
-pub fn removeEntity(self: *Self, index: u64) ?EntityIndexUpdate {
+pub fn removeEntity(self: *Self, index: u64) void {
     std.debug.assert(index < self.count);
 
     self.count -= 1;
     if (index < self.count) {
-        self.entityIds[index] = self.entityIds[self.count];
-        self.entityIds[self.count] = 0;
+        self.entity_refs[index] = self.entity_refs[self.count];
+        self.entity_refs[self.count] = .{ .id = 0, .entity = undefined };
 
         for (self.components) |*componentList| {
             var source = componentList.getRaw(self.count);
@@ -178,9 +178,6 @@ pub fn removeEntity(self: *Self, index: u64) ?EntityIndexUpdate {
             std.mem.copy(u8, target, source);
         }
 
-        // The index of the last entity changed because it was moved to the current index i.
-        // Update the index stored in the entities map in the world.
-        return EntityIndexUpdate{ .entityId = self.entityIds[index], .newIndex = index };
+        self.entity_refs[index].entity.index = index;
     }
-    return null;
 }

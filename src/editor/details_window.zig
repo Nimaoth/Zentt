@@ -1,6 +1,7 @@
 const std = @import("std");
 
-const EntityId = @import("../ecs/entity.zig").EntityId;
+const Entity = @import("../ecs/entity.zig");
+const EntityRef = Entity.Ref;
 const ComponentId = @import("../ecs/entity.zig").ComponentId;
 const World = @import("../ecs/world.zig");
 const Tag = @import("../ecs/tag_component.zig").Tag;
@@ -43,18 +44,18 @@ pub fn registerDefaultComponent(self: *Self, component: anytype) !void {
     }
 }
 
-pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands) !void {
+pub fn draw(self: *Self, world: *World, entity_ref: EntityRef, commands: *Commands) !void {
     self.resetTextBuffer();
 
     var tagBuffer = std.mem.zeroes([1024]u8);
 
     _ = imgui.Begin("Details");
-    if (world.getEntity(entityId)) |entity| {
-        imgui.PushIDInt64(entityId);
+    if (entity_ref.get()) |entity| {
+        imgui.PushIDInt64(entity.id);
         defer imgui.PopID();
 
         var has_tag = false;
-        if (try world.getComponent(entityId, Tag)) |tag| {
+        if (try world.getComponent(entity_ref, Tag)) |tag| {
             has_tag = true;
             imgui2.property("Tag");
             if (tag.name.len < tagBuffer.len) {
@@ -65,7 +66,7 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
         }
 
         // Zero sized components
-        var component_id_iter = entity.entity.chunk.table.archetype.components.iterator();
+        var component_id_iter = entity.chunk.table.archetype.components.iterator();
         while (component_id_iter.next()) |component_id| {
             imgui.PushIDInt(@intCast(i32, component_id));
             defer imgui.PopID();
@@ -79,13 +80,13 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
 
             imgui.SameLineExt(imgui.GetWindowContentRegionWidth() - imgui.CalcTextSize("X").x - 10, -1);
             if (imgui.SmallButton("X")) {
-                _ = (try commands.getEntity(entityId)).removeComponentRaw(component_type);
+                _ = (try commands.getEntity(entity_ref)).removeComponentRaw(component_type);
             }
         }
 
         // Components with data
         // chunk.components only includes non zero sized components.
-        for (entity.entity.chunk.components) |components, i| {
+        for (entity.chunk.components) |components, i| {
             imgui.PushIDInt(@intCast(i32, i));
             defer imgui.PopID();
 
@@ -100,30 +101,30 @@ pub fn draw(self: *Self, world: *World, entityId: EntityId, commands: *Commands)
 
             imgui.SameLineExt(imgui.GetWindowContentRegionWidth() - imgui.CalcTextSize("X").x - 10, -1);
             if (imgui.SmallButton("X")) {
-                _ = (try commands.getEntity(entityId)).removeComponentRaw(components.componentType);
+                _ = (try commands.getEntity(entity_ref)).removeComponentRaw(components.componentType);
             }
 
             if (open) {
-                imgui2.anyDynamic(rtti, components.getRaw(entity.entity.index));
+                imgui2.anyDynamic(rtti, components.getRaw(entity.index));
             }
         }
 
         // Buttons for adding components
         if (has_tag) {
             if (imgui.SmallButton("Add Tag")) {
-                const entityHandle = try commands.getEntity(entityId);
+                const entityHandle = try commands.getEntity(entity_ref);
                 _ = try commands.addComponent(entityHandle, Tag{ .name = "foo" });
             }
         }
 
         var components_iter = self.default_componenets.iterator();
         while (components_iter.next()) |entry| {
-            if (try world.hasComponent(entityId, entry.key_ptr.*))
+            if (try world.hasComponent(entity_ref, entry.key_ptr.*))
                 continue;
 
             const name = try self.format("Add {}", .{entry.key_ptr.*});
             if (imgui.SmallButton(name.ptr)) {
-                const entityHandle = try commands.getEntity(entityId);
+                const entityHandle = try commands.getEntity(entity_ref);
                 if (entry.value_ptr.*) |data| {
                     _ = try commands.addComponentRaw(entityHandle, entry.key_ptr.*, data);
                 } else {
