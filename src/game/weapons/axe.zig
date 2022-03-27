@@ -99,7 +99,7 @@ pub fn axeSystem(
     const base_cooldown = imgui2.variable(axeSystem, f32, "Axe cooldown", 3, true, .{ .min = 0.1 }).*;
     const cooldown = base_cooldown * player.player.cooldown_modifier;
 
-    const base_amount = imgui2.variable(axeSystem, i32, "Axe amount", 2, true, .{ .min = 1 }).*;
+    const base_amount = imgui2.variable(axeSystem, i32, "Axe amount", 0, true, .{ .min = 1 }).*;
     const amount = base_amount + player.player.amount_modifier;
 
     const base_speed = imgui2.variable(axeSystem, f32, "Axe speed", 200, true, .{ .min = 1 }).*;

@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const imgui2 = @import("../editor/imgui2.zig");
+const imgui2 = @import("../../editor/imgui2.zig");
 
-const math = @import("../math.zig");
+const math = @import("../../math.zig");
 const Vec2 = math.Vec2;
 const Vec3 = math.Vec3;
 const Vec4 = math.Vec4;
@@ -10,24 +10,24 @@ const Mat4 = math.Mat4;
 
 const Allocator = std.mem.Allocator;
 
-const Renderer = @import("../rendering/renderer.zig");
-const SpriteRenderer = @import("../rendering/sprite_renderer.zig");
-const AssetDB = @import("../rendering/assetdb.zig");
+const Renderer = @import("../../rendering/renderer.zig");
+const SpriteRenderer = @import("../../rendering/sprite_renderer.zig");
+const AssetDB = @import("../../rendering/assetdb.zig");
 
-const Profiler = @import("../editor/profiler.zig");
+const Profiler = @import("../../editor/profiler.zig");
 
-const EntityId = @import("../ecs/entity.zig").EntityId;
-const World = @import("../ecs/world.zig");
-const Query = @import("../ecs/query.zig").Query;
-const Commands = @import("../ecs/commands.zig");
+const EntityId = @import("../../ecs/entity.zig").EntityId;
+const World = @import("../../ecs/world.zig");
+const Query = @import("../../ecs/query.zig").Query;
+const Commands = @import("../../ecs/commands.zig");
 
-const basic_components = @import("basic_components.zig");
+const basic_components = @import("../basic_components.zig");
 const Time = basic_components.Time;
 const TransformComponent = basic_components.TransformComponent;
 const SpeedComponent = basic_components.SpeedComponent;
 const SpriteComponent = basic_components.SpriteComponent;
-const Player = @import("player.zig").Player;
-const PhysicsComponent = @import("physics.zig").PhysicsComponent;
+const Player = @import("../player.zig").Player;
+const PhysicsComponent = @import("../physics.zig").PhysicsComponent;
 const HealthComponent = basic_components.HealthComponent;
 
 pub const BibleResource = struct {
@@ -66,7 +66,7 @@ pub fn createBible(commands: *Commands, assetdb: *AssetDB, bible_res: *BibleReso
     _ = (try commands.createEntityWithId(bible_res.getFreeEntityId()))
         .addComponent(BibleComponent{})
         .addComponent(TransformComponent{})
-        .addComponent(PhysicsComponent{ .own_layer = 0b0100, .target_layer = 0b0010, .radius = 7, .push_factor = 0 })
+        .addComponent(PhysicsComponent{ .own_layer = 0b0100, .target_layer = 0b0010, .radius = 7, .inverse_mass = 99999, .push_factor = 0 })
         .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("HolyBook.png", .{}) });
 }
 
@@ -83,7 +83,7 @@ pub fn bibleSystem(
         return;
     };
 
-    const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 250, true, .{ .min = 5 }).*;
+    const base_range = imgui2.variable(bibleSystem, f32, "Bible base range", 75, true, .{ .min = 5 }).*;
     const range = base_range * player.player.area_modifier;
 
     const base_max_age = imgui2.variable(bibleSystem, f32, "Bible max age", 3000, true, .{ .min = 1 }).*;
@@ -95,7 +95,7 @@ pub fn bibleSystem(
     const base_amount = imgui2.variable(bibleSystem, i32, "Bible amount", 2, true, .{ .min = 1 }).*;
     const amount = base_amount + player.player.amount_modifier;
 
-    const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 75, true, .{ .min = 1 }).*;
+    const base_speed = imgui2.variable(bibleSystem, f32, "Bible speed", 50, true, .{ .min = 1 }).*;
     const speed = base_speed * player.player.speed_modifier;
 
     const base_damage = imgui2.variable(bibleSystem, f32, "Bible damage", 0.5, true, .{ .min = 0, .speed = 0.1 }).*;
