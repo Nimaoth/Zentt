@@ -32,6 +32,12 @@ pub const Player = struct {
     damage_modifier: f32 = 1,
     cooldown_modifier: f32 = 1,
     amount_modifier: i32 = 0,
+    xp_modifier: f32 = 1,
+    attract_range_modifier: f32 = 1,
+
+    level: u64 = 0,
+    xp: f32 = 0,
+    next_level_xp: f32 = 100,
 
     velocity: Vec3 = Vec3.zero(),
 };
@@ -56,6 +62,12 @@ pub fn moveSystemPlayer(
         const vel = dir.norm().scale(entity.speed.speed);
         entity.player.velocity = vel;
         entity.transform.position = entity.transform.position.add(vel.scale(delta));
+
+        if (entity.player.xp >= entity.player.next_level_xp) {
+            entity.player.xp -= entity.player.next_level_xp;
+            entity.player.next_level_xp *= 1.15;
+            entity.player.level += 1;
+        }
 
         // for (entity.physics.colliding_entities_new) |e| {
         //     if (entity.physics.startedCollidingWith(e)) {

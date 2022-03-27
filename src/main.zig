@@ -55,6 +55,7 @@ pub fn main() !void {
     try world.addSystem(game.bibleSystem, "Bible");
     try world.addSystem(game.axeSystem, "Axe");
     try world.addSystem(game.enemySpawnSystem, "Enemy spawning");
+    try world.addSystem(game.gemSystem, "Gem spawning");
     try world.addSystem(game.physicsSystem, "Physics");
 
     try world.addRenderSystem(game.spriteRenderSystem, "Render System Vulkan");

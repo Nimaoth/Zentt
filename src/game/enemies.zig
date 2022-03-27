@@ -32,6 +32,7 @@ const CameraComponent = basic_components.CameraComponent;
 const HealthComponent = basic_components.HealthComponent;
 const Player = @import("player.zig").Player;
 const PhysicsComponent = @import("physics.zig").PhysicsComponent;
+const gems = @import("gem.zig");
 
 pub fn createDyingBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
     _ = (try commands.createEntity())
@@ -81,6 +82,7 @@ pub fn moveSystemFollowPlayer(
         if (entity.health.health <= 0 or distance > max_despawn_distance_sq) {
             try commands.destroyEntity(entity.ref);
             try createDyingBat(commands, assetdb, entity.transform.position);
+            try gems.createGem(commands, assetdb, entity.transform.position, 1);
             spawner.current_count -= 1;
         }
     }
