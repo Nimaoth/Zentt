@@ -79,7 +79,7 @@ pub fn gemSystem(
         }
         if (distance < gem_radius_sq) {
             player.player.xp += entity.gem.xp * xp_modifier;
-            _ = try commands.destroyEntity(entity.ref);
+            _ = try commands.destroyEntity(entity.ref.*);
         }
 
         if (entity.gem.follow_player) {

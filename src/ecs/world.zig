@@ -186,6 +186,27 @@ pub fn getResource(self: *Self, comptime ResourceType: type) !*ResourceType {
     return @ptrCast(*ResourceType, @alignCast(@alignOf(ResourceType), resourcePtr));
 }
 
+pub fn query(self: *Self, comptime Components: anytype) !Query(Components) {
+    const archetype = try self.createArchetypeStruct(Components);
+    var tables = try self.getDirectSupersetTables(archetype);
+    defer tables.deinit();
+    var chunks = std.ArrayList(*Chunk).init(self.allocator);
+    for (tables.items) |table| {
+        var chunk = table.firstChunk;
+        while (true) {
+            if (chunk.count > 0) {
+                try chunks.append(chunk);
+            }
+            if (chunk.next) |next| {
+                chunk = next;
+            } else {
+                break;
+            }
+        }
+    }
+    return Query(Components).init(chunks.allocator, chunks.items, true);
+}
+
 pub fn runFrameSystems(self: *Self) !void {
     for (self.frameSystems.items) |*system| {
         if (system.enabled) {
@@ -295,13 +316,50 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
     const archetype = try world.createArchetypeStruct(ComponentTypes);
 
     var tables = try world.getDirectSupersetTables(archetype);
-    queryArg.* = ParamType.init(tables.allocator, tables.items, true);
+    defer tables.deinit();
+    var chunks = std.ArrayList(*Chunk).init(world.allocator);
+    for (tables.items) |table| {
+        var chunk = table.firstChunk;
+        while (true) {
+            if (chunk.count > 0) {
+                try chunks.append(chunk);
+            }
+            if (chunk.next) |next| {
+                chunk = next;
+            } else {
+                break;
+            }
+        }
+    }
+    queryArg.* = ParamType.init(chunks.allocator, chunks.items, true);
 }
 
 const AllEntitiesQuery = Query(.{});
 
-pub fn entities(self: *Self) AllEntitiesQuery.Iterator {
-    return AllEntitiesQuery.init(undefined, self.archetypeTablesArray.items, false).iter();
+pub fn entities(self: *Self) !AllEntitiesQuery.Iterator {
+    var chunks = std.ArrayList(*Chunk).init(self.allocator);
+    for (self.archetypeTablesArray.items) |table| {
+        var chunk = table.firstChunk;
+        while (true) {
+            if (chunk.count > 0) {
+                try chunks.append(chunk);
+            }
+            if (chunk.next) |next| {
+                chunk = next;
+            } else {
+                break;
+            }
+        }
+    }
+    return AllEntitiesQuery.init(chunks.allocator, chunks.items, false).iterOwned();
+}
+
+pub fn getEntityCount(self: *Self) usize {
+    var result: usize = 0;
+    for (self.archetypeTablesArray.items) |table| {
+        result += table.getEntityCount();
+    }
+    return result;
 }
 
 pub fn reserveEntityId(self: *Self) EntityId {
@@ -319,10 +377,11 @@ pub fn reserveEntity(self: *Self, id: EntityId) !EntityRef {
 }
 
 pub fn getEntity(self: *Self, id: EntityId) ?EntityRef {
-    var iter = self.entities();
+    var iter = self.entities() catch return null;
+    defer iter.deinit();
     while (iter.next()) |entity| {
-        if (entity.id == id)
-            return entity.ref;
+        if (entity.ref.id == id)
+            return entity.ref.*;
     }
     return null;
 }
@@ -363,28 +422,14 @@ pub fn deleteEntity(self: *Self, entity_ref: EntityRef) !void {
 }
 
 pub fn addComponent(self: *Self, entity_ref: EntityRef, component: anytype) !void {
-    if (entity_ref.get()) |entity| {
-        const rtti: Rtti = Rtti.typeId(@TypeOf(component));
-        const componentId: u64 = try self.getComponentId(@TypeOf(component));
-        var newComponents = BitSet.initEmpty();
-        newComponents.set(componentId);
-        var newArchetype = entity.chunk.table.archetype.addComponents(rtti.hash, newComponents);
-
-        var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
-
-        const old_entity = entity.*;
-
-        // copy existing entity to new table
-        try newTable.copyEntityWithComponentInto(entity, component);
-
-        // Remove old entity
-        old_entity.chunk.table.removeEntity(old_entity);
-    } else {
-        return error.InvalidEntity;
-    }
+    const componentType = Rtti.typeId(@TypeOf(component));
+    try self.addComponentRaw(entity_ref, componentType, std.mem.asBytes(&component));
 }
 
 pub fn addComponentRaw(self: *Self, entity_ref: EntityRef, componentType: Rtti.TypeId, componentData: []const u8) !void {
+    const scope = Profiler.beginScope("addComponentRaw");
+    defer scope.end();
+
     if (entity_ref.get()) |entity| {
         const componentId: u64 = try self.getComponentIdForRtti(componentType);
         var newComponents = BitSet.initEmpty();

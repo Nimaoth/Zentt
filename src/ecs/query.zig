@@ -14,111 +14,92 @@ pub const ComponentId = u64;
 
 pub fn Query(comptime Components: anytype) type {
     const EntityHandle = getEntityHandle(Components);
+    const ComponentSlices = getEntityHandles(Components);
 
     const Iterator = struct {
         const Self = @This();
 
-        tables: []*ArchetypeTable,
-        tableIndex: u64 = 0,
-        currentChunk: ?*Chunk,
-        entityIndex: u64 = 0,
-        componentIndexMap: [getNumSizedTypes(Components)]u64 = undefined,
+        allocator: std.mem.Allocator,
+        free_chunks: bool,
 
-        pub fn init(tables: []*ArchetypeTable) @This() {
+        chunks: []*Chunk,
+        chunk_index: usize = 0,
+        entity_index: u64 = 0,
+
+        entity_handles: ComponentSlices = std.mem.zeroes(ComponentSlices),
+        current_entity: EntityHandle = undefined,
+
+        pub fn init(allocator: std.mem.Allocator, chunks: []*Chunk, free_chunks: bool) @This() {
             var result = @This(){
-                .tables = tables,
-                .currentChunk = if (tables.len > 0) tables[0].firstChunk else null,
+                .allocator = allocator,
+                .free_chunks = free_chunks,
+                .chunks = chunks,
             };
-            if (result.tables.len > 0) {
-                result.updateComponentIndexMap();
+
+            if (result.chunks.len > 0) {
+                result.updateForCurrentChunk();
             }
+
             return result;
         }
 
-        pub fn updateComponentIndexMap(self: *Self) void {
-            std.debug.assert(self.tableIndex < self.tables.len);
-            const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
-
-            const table = self.tables[self.tableIndex];
-
-            inline for (typeInfo.fields) |field, index| {
-                const ComponentType = field.default_value orelse unreachable;
-                if (@sizeOf(ComponentType) > 0) {
-                    self.componentIndexMap[index] = table.getListIndexForType(Rtti.typeId(ComponentType)) orelse unreachable;
-                } else {
-                    self.componentIndexMap[index] = 0;
-                }
+        pub fn deinit(self: *const Self) void {
+            if (self.free_chunks) {
+                self.allocator.free(self.chunks);
             }
         }
 
-        pub fn mapComponentIndex(self: *const Self, index: u64) u64 {
-            return self.componentIndexMap[index];
-        }
-
-        pub fn count(self: *const Self) usize {
-            var result: usize = 0;
-            for (self.tables) |table| {
-                var chunk: ?*Chunk = table.firstChunk;
-                while (chunk) |c| {
-                    result += c.count;
-                    chunk = c.next;
-                }
-            }
-            return result;
-        }
-
-        pub fn next(self: *Self) ?EntityHandle {
-            if (self.tableIndex >= self.tables.len) {
-                return null;
-            }
-
-            if (self.entityIndex >= self.currentChunk.?.count) {
-                self.entityIndex = 0;
-                self.currentChunk = self.currentChunk.?.next;
-                while (true) {
-                    if (self.currentChunk != null and self.currentChunk.?.count == 0) {
-                        self.currentChunk = self.currentChunk.?.next;
-                    } else if (self.currentChunk == null) {
-                        // reached end of chunk list, go to next table
-                        self.tableIndex += 1;
-                        if (self.tableIndex < self.tables.len) {
-                            self.currentChunk = self.tables[self.tableIndex].firstChunk;
-                            self.updateComponentIndexMap();
-                        } else {
-                            // reached end of last table, done
-                            return null;
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-
-            std.debug.assert(self.currentChunk != null);
-            std.debug.assert(self.entityIndex < self.currentChunk.?.count);
-
-            const chunk: *Chunk = self.currentChunk orelse unreachable;
-            const index = self.entityIndex;
-            self.entityIndex += 1;
-
-            var result: EntityHandle = undefined;
-            result.ref = chunk.getEntityRef(index);
-            result.id = result.ref.id;
-
+        pub fn updateForCurrentChunk(self: *Self) void {
+            const chunk = self.chunks[self.chunk_index];
             const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
             const resultTypeInfo = @typeInfo(EntityHandle).Struct;
+
+            self.entity_handles.ref = chunk.entity_refs[0..chunk.count];
+
             inline for (typeInfo.fields) |field, i| {
                 const ComponentType = field.default_value orelse unreachable;
                 std.debug.assert(@TypeOf(ComponentType) == type);
                 if (@sizeOf(ComponentType) > 0) {
-                    var data = chunk.getComponentRaw(self.mapComponentIndex(i), index);
-                    @field(result, resultTypeInfo.fields[i + 2].name) = @ptrCast(*ComponentType, @alignCast(@alignOf(ComponentType), data.ptr));
-                } else {
-                    @field(result, resultTypeInfo.fields[i + 2].name) = 0;
+                    const component_index = chunk.table.getListIndexForType(Rtti.typeId(ComponentType)) orelse unreachable;
+                    const components = std.mem.bytesAsSlice(ComponentType, @alignCast(@alignOf(ComponentType), chunk.getComponents(component_index).data));
+                    @field(self.entity_handles, resultTypeInfo.fields[i + 1].name) = components[0..chunk.count];
+                }
+            }
+        }
+
+        pub fn count(self: *const Self) usize {
+            var result: usize = 0;
+            for (self.chunks) |chunk| {
+                result += chunk.count;
+            }
+            return result;
+        }
+
+        pub inline fn next(self: *Self) ?*EntityHandle {
+            if (self.entity_index >= self.entity_handles.ref.len) {
+                if (self.chunk_index + 1 >= self.chunks.len)
+                    return null;
+
+                self.entity_index = 0;
+                self.chunk_index += 1;
+                self.updateForCurrentChunk();
+            }
+
+            self.current_entity.ref = &self.entity_handles.ref[self.entity_index];
+
+            const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
+            const resultTypeInfo = @typeInfo(EntityHandle).Struct;
+            inline for (typeInfo.fields) |field, i| {
+                const field_name = resultTypeInfo.fields[i + 1].name;
+                const ComponentType = field.default_value orelse unreachable;
+                if (@sizeOf(ComponentType) > 0) {
+                    @field(self.current_entity, field_name) = &@field(self.entity_handles, field_name)[self.entity_index];
                 }
             }
 
-            return result;
+            self.entity_index += 1;
+
+            return &self.current_entity;
         }
     };
 
@@ -131,33 +112,37 @@ pub fn Query(comptime Components: anytype) type {
         pub const Iterator = Iterator;
 
         allocator: std.mem.Allocator,
-        tables: []*ArchetypeTable,
-        free_tables: bool,
+        chunks: []*Chunk,
+        free_chunks: bool,
         componentCount: i64 = ComponentCount,
 
-        pub fn init(allocator: std.mem.Allocator, tables: []*ArchetypeTable, free_tables: bool) @This() {
+        pub fn init(allocator: std.mem.Allocator, chunks: []*Chunk, free_chunks: bool) @This() {
             return @This(){
                 .allocator = allocator,
-                .tables = tables,
-                .free_tables = free_tables,
+                .chunks = chunks,
+                .free_chunks = free_chunks,
             };
         }
 
         pub fn deinit(self: *const Self) void {
-            if (self.free_tables) {
-                self.allocator.free(self.tables);
+            if (self.free_chunks) {
+                self.allocator.free(self.chunks);
             }
         }
 
         pub fn iter(self: *const Self) Iterator {
-            return Iterator.init(self.tables);
+            return Iterator.init(self.allocator, self.chunks, false);
+        }
+
+        pub fn iterOwned(self: *const Self) Iterator {
+            return Iterator.init(self.allocator, self.chunks, true);
         }
 
         // Returns the number of entities which match this query.
         pub fn count(self: *const Self) u64 {
             var result: u64 = 0;
-            for (self.tables) |table| {
-                result += table.getEntityCount();
+            for (self.chunks) |chunk| {
+                result += chunk.count;
             }
             return result;
         }
@@ -235,28 +220,20 @@ fn componentNameToFieldName(comptime name: []const u8) []const u8 {
     return buffer[0..];
 }
 
-fn getEntityHandle(comptime Components: anytype) type {
+fn getEntityHandles(comptime Components: anytype) type {
     _ = Components;
     const typeInfo = comptime blk: {
         const T = @TypeOf(Components);
         const typeInfo = @typeInfo(T).Struct;
 
-        var fields: [typeInfo.fields.len + 2]std.builtin.TypeInfo.StructField = undefined;
+        var fields: [typeInfo.fields.len + 1]std.builtin.TypeInfo.StructField = undefined;
 
         fields[0] = .{
-            .name = "id",
-            .field_type = EntityId,
-            .default_value = null,
-            .is_comptime = false,
-            .alignment = @alignOf(EntityId),
-        };
-
-        fields[1] = .{
             .name = "ref",
-            .field_type = EntityRef,
+            .field_type = []const EntityRef,
             .default_value = null,
             .is_comptime = false,
-            .alignment = @alignOf(EntityRef),
+            .alignment = @alignOf([]const EntityRef),
         };
 
         // Fill field type info for all components with non-zero size
@@ -265,16 +242,68 @@ fn getEntityHandle(comptime Components: anytype) type {
 
             std.debug.assert(@TypeOf(ComponentType) == type);
             if (@sizeOf(ComponentType) > 0) {
-                fields[index + 2] = .{
-                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 2)])),
+                fields[index + 1] = .{
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
+                    .field_type = []ComponentType,
+                    .default_value = null,
+                    .is_comptime = false,
+                    .alignment = @alignOf(*ComponentType),
+                };
+            } else {
+                fields[index + 1] = .{
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
+                    .field_type = u8,
+                    .default_value = @intCast(u8, 0),
+                    .is_comptime = false,
+                    .alignment = @alignOf(u8),
+                };
+            }
+        }
+
+        break :blk std.builtin.TypeInfo{
+            .Struct = .{
+                .layout = .Auto,
+                .fields = fields[0..],
+                .decls = &.{},
+                .is_tuple = false,
+            },
+        };
+    };
+    return @Type(typeInfo);
+}
+
+fn getEntityHandle(comptime Components: anytype) type {
+    _ = Components;
+    const typeInfo = comptime blk: {
+        const T = @TypeOf(Components);
+        const typeInfo = @typeInfo(T).Struct;
+
+        var fields: [typeInfo.fields.len + 1]std.builtin.TypeInfo.StructField = undefined;
+
+        fields[0] = .{
+            .name = "ref",
+            .field_type = *const EntityRef,
+            .default_value = null,
+            .is_comptime = false,
+            .alignment = @alignOf(*const EntityRef),
+        };
+
+        // Fill field type info for all components with non-zero size
+        inline for (typeInfo.fields) |field, index| {
+            const ComponentType = field.default_value orelse unreachable;
+
+            std.debug.assert(@TypeOf(ComponentType) == type);
+            if (@sizeOf(ComponentType) > 0) {
+                fields[index + 1] = .{
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
                     .field_type = *ComponentType,
                     .default_value = null,
                     .is_comptime = false,
                     .alignment = @alignOf(*ComponentType),
                 };
             } else {
-                fields[index + 2] = .{
-                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 2)])),
+                fields[index + 1] = .{
+                    .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
                     .field_type = u8,
                     .default_value = @intCast(u8, 0),
                     .is_comptime = false,

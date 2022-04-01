@@ -14,15 +14,18 @@ subsets: std.AutoHashMap(BitSet, *Self),
 archetype: Archetype,
 
 firstChunk: *Chunk,
+firstFreeChunk: ?*Chunk = null,
 
 const Self = @This();
 
 pub fn init(self: *Self, archetype: Archetype, allocator: std.mem.Allocator) !void {
-    self.supersets = std.AutoHashMap(BitSet, *Self).init(allocator);
-    self.subsets = std.AutoHashMap(BitSet, *Self).init(allocator);
-    self.archetype = archetype;
-    self.firstChunk = try Chunk.init(self, 100, allocator);
-    self.typeToList = std.AutoHashMap(Rtti.TypeId, u64).init(allocator);
+    self.* = Self{
+        .supersets = std.AutoHashMap(BitSet, *Self).init(allocator),
+        .subsets = std.AutoHashMap(BitSet, *Self).init(allocator),
+        .archetype = archetype,
+        .firstChunk = try Chunk.init(self, 100, allocator),
+        .typeToList = std.AutoHashMap(Rtti.TypeId, u64).init(allocator),
+    };
     var iter = archetype.components.iterator();
     while (iter.next()) |componentId| {
         const componentType = archetype.world.getComponentType(componentId) orelse unreachable;
@@ -46,30 +49,26 @@ pub fn getListIndexForType(self: *const Self, rtti: Rtti.TypeId) ?u64 {
     return self.typeToList.get(rtti);
 }
 
-// pub fn getTyped(self: *Self, comptime Components: anytype) getType(Components) {
-//     _ = self;
-//     const T = @TypeOf(Components);
-//     const typeInfo = @typeInfo(T).Struct;
+pub fn updateFirstFreeChunk(self: *Self, chunk: *Chunk) void {
+    // @todo @note: using capacity to check if chunk comes before self.firstFreeChunk
+    // only works because right now each chunk has increased capacity.
+    if (self.firstFreeChunk == null or chunk.capacity < self.firstFreeChunk.?.capacity) {
+        self.firstFreeChunk = chunk;
+    }
+}
 
-//     var result: getType(Components) = undefined;
+pub fn getNextFreeChunk(self: *Self) !*Chunk {
+    if (self.firstFreeChunk == null)
+        self.firstFreeChunk = self.firstChunk;
 
-//     result.entities = self.entities.items;
-//     inline for (typeInfo.fields) |field| {
-//         const ComponentType = field.default_value orelse unreachable;
-//         std.debug.assert(@TypeOf(ComponentType) == type);
+    var chunk = self.firstFreeChunk.?;
+    while (chunk.isFull()) {
+        chunk = try chunk.getOrCreateNext();
+    }
 
-//         const componentType = Rtti.init(ComponentType);
-//         const componentId = self.archetype.world.getComponentId(componentType) catch unreachable;
-
-//         if (self.getListForType(componentType)) |componentList| {
-//             std.debug.assert(componentList.componentId == componentId);
-//             @field(result, @typeName(ComponentType)) = std.mem.bytesAsSlice(ComponentType, componentList.data.items);
-//         }
-//     }
-
-//     return result;
-//     // return Archetype.init(self, hash, bitSet);
-// }
+    self.firstFreeChunk = chunk;
+    return chunk;
+}
 
 pub fn getEntityCount(self: *const Self) usize {
     var count: usize = 0;
@@ -85,7 +84,8 @@ pub fn getEntityCount(self: *const Self) usize {
 
 pub fn addEntity(self: *Self, entity: *Entity, components: anytype) !void {
     // @todo: check if the provided components match the archetype
-    try self.firstChunk.addEntity(entity);
+    var free_chunk = try self.getNextFreeChunk();
+    try free_chunk.addEntity(entity);
 
     const typeInfo = @typeInfo(@TypeOf(components)).Struct;
     inline for (typeInfo.fields) |field| {
@@ -101,7 +101,8 @@ pub fn copyEntityWithComponentIntoRaw(self: *Self, entity: *Entity, componentTyp
     const old_entity = entity.*;
 
     // Add entity
-    try self.firstChunk.addEntity(entity);
+    var free_chunk = try self.getNextFreeChunk();
+    try free_chunk.addEntity(entity);
 
     // Add new component
     std.debug.assert(self.typeToList.count() == entity.chunk.components.len);
@@ -123,7 +124,8 @@ pub fn copyEntityIntoRaw(self: *Self, entity: *Entity) !void {
     const old_entity = entity.*;
 
     // Add entity
-    try self.firstChunk.addEntity(entity);
+    var free_chunk = try self.getNextFreeChunk();
+    try free_chunk.addEntity(entity);
 
     // Copy existing components
     for (old_entity.chunk.components) |*component_list| {

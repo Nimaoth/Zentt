@@ -83,7 +83,7 @@ pub fn moveSystemFollowPlayer(
 
         const distance = toPlayer.lengthSq();
         if (entity.health.health <= 0 or distance > max_despawn_distance_sq) {
-            try commands.destroyEntity(entity.ref);
+            try commands.destroyEntity(entity.ref.*);
             try createDyingBat(commands, assetdb, entity.transform.position);
             try spawner.gems_to_spawn.append(.{ .position = entity.transform.position, .xp = 1 });
             spawner.current_count -= 1;

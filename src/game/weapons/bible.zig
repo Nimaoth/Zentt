@@ -127,8 +127,8 @@ pub fn bibleSystem(
         i += 1;
 
         if (entity.bible.age > max_age) {
-            try commands.destroyEntity(entity.ref);
-            try bible_res.returnEntityId(entity.id);
+            try commands.destroyEntity(entity.ref.*);
+            try bible_res.returnEntityId(entity.ref.id);
         }
 
         for (entity.physics.colliding_entities_new) |e| {

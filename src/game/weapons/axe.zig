@@ -131,8 +131,8 @@ pub fn axeSystem(
         entity.axe.age += delta;
 
         if (entity.axe.age > max_age) {
-            try commands.destroyEntity(entity.ref);
-            try axe_res.returnEntityId(entity.id);
+            try commands.destroyEntity(entity.ref.*);
+            try axe_res.returnEntityId(entity.ref.id);
         }
 
         for (entity.physics.colliding_entities_new) |e| {

@@ -224,7 +224,7 @@ pub fn main() !void {
         if (imgui.Begin("Stats")) {
             imgui.LabelText("Frame time: ", "%.2f", frameTimeSmoothed);
             imgui.LabelText("FPS: ", "%.1f", fps);
-            imgui.LabelText("Entities: ", "%lld", world.entities().count());
+            imgui.LabelText("Entities: ", "%lld", world.entity_count());
         }
         imgui.End();
 
@@ -250,30 +250,31 @@ pub fn main() !void {
                     defer imgui.EndTable();
 
                     var i: u64 = 0;
-                    var entityIter = world.entities();
+                    var entityIter = try world.entities();
+                    defer entityIter.deinit();
                     while (entityIter.next()) |entity| : (i += 1) {
                         if (i > 100) break;
 
-                        imgui.PushIDInt64(entity.id);
+                        imgui.PushIDInt64(entity.ref.id);
                         defer imgui.PopID();
 
                         imgui.TableNextRow(.{}, 0);
                         _ = imgui.TableSetColumnIndex(0);
-                        imgui.Text("%d", entity.id);
+                        imgui.Text("%d", entity.ref.id);
 
                         _ = imgui.TableSetColumnIndex(1);
-                        if (try world.getComponent(entity.ref, Tag)) |tag| {
+                        if (try world.getComponent(entity.ref.*, Tag)) |tag| {
                             imgui.Text("%.*s", tag.name.len, tag.name.ptr);
                         }
 
                         _ = imgui.TableSetColumnIndex(2);
                         if (imgui.Button("Select")) {
-                            selectedEntity = entity.ref;
+                            selectedEntity = entity.ref.*;
                         }
 
                         _ = imgui.TableSetColumnIndex(3);
                         if (imgui.Button("Destroy")) {
-                            try commands.destroyEntity(entity.ref);
+                            try commands.destroyEntity(entity.ref.*);
                         }
                     }
                 }

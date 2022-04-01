@@ -11,11 +11,11 @@ pub const ComponentId = u64;
 
 const Self = @This();
 
-const Components = struct {
+pub const Components = struct {
     componentType: Rtti.TypeId,
     data: []u8,
 
-    pub fn getRaw(self: *const @This(), index: u64) []u8 {
+    pub inline fn getRaw(self: *const @This(), index: u64) []u8 {
         const byteIndex = index * self.componentType.typeInfo.size;
         return self.data[byteIndex..(byteIndex + self.componentType.typeInfo.size)];
     }
@@ -37,6 +37,7 @@ entity_refs: []EntityRef,
 
 /// Contains data about non zero sized components.
 /// To get all components you have to go through table.archetype.components
+components_offset: usize,
 components: []Components,
 
 table: *ArchetypeTable,
@@ -103,6 +104,7 @@ pub fn init(table: *ArchetypeTable, capacity: u64, allocator: std.mem.Allocator)
         .pool = pool,
         .capacity = capacity,
         .entity_refs = entity_refs,
+        .components_offset = componentsIndex,
         .components = components,
         .table = table,
     };
@@ -130,7 +132,7 @@ pub fn getOrCreateNext(self: *Self) !*Self {
     return self.next.?;
 }
 
-pub fn getComponents(self: *const Self, componentIndex: u64) *Components {
+pub inline fn getComponents(self: *const Self, componentIndex: u64) *Components {
     return &self.components[componentIndex];
 }
 
@@ -139,7 +141,7 @@ pub fn getEntityRef(self: *Self, index: u64) EntityRef {
     return self.entity_refs[index];
 }
 
-pub fn getComponentRaw(self: *Self, componentIndex: u64, dataIndex: u64) []u8 {
+pub inline fn getComponentRaw(self: *Self, componentIndex: u64, dataIndex: u64) []u8 {
     std.debug.assert(dataIndex < self.count);
     const components = self.getComponents(componentIndex);
     return components.getRaw(dataIndex);
@@ -166,6 +168,8 @@ pub fn setComponentRaw(self: *Self, componentIndex: u64, dataIndex: u64, data: [
 
 pub fn removeEntity(self: *Self, index: u64) void {
     std.debug.assert(index < self.count);
+
+    self.table.updateFirstFreeChunk(self);
 
     self.count -= 1;
     if (index < self.count) {

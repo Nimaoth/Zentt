@@ -381,10 +381,10 @@ pub fn physicsSystem(
         var iter = query.iter();
         while (iter.next()) |entity| {
             if (draw_debug_entities) {
-                try drawDebugInfoForEntity(sprite_renderer, &entity);
+                try drawDebugInfoForEntity(sprite_renderer, entity);
             }
 
-            try scene.insertEntity(&entity);
+            try scene.insertEntity(entity);
 
             // Also reset some stuff.
             entity.physics.colliding_entities = 0;
@@ -422,7 +422,7 @@ pub fn physicsSystem(
                     while (x0 <= x1) : (x0 += 1) {
                         const cell_b = scene.getCell(scene.relativeCellToWorldCell(Vec2i.new(x0, y0)));
                         for (cell_b.entities.items) |*entity_b| {
-                            if (entity_a.id == entity_b.id or (x0 == x and y0 == y and entity_a.id < entity_b.id))
+                            if (entity_a.ref.id == entity_b.ref.id or (x0 == x and y0 == y and entity_a.ref.id < entity_b.ref.id))
                                 continue;
 
                             // Ignore collisions of two entities which have infinite mass for now.
@@ -465,7 +465,7 @@ pub fn physicsSystem(
     {
         var iter = query.iter();
         while (iter.next()) |entity| {
-            try scene.reserveSpaceForCollidingEntities(&entity);
+            try scene.reserveSpaceForCollidingEntities(entity);
         }
     }
 
@@ -484,8 +484,8 @@ pub fn physicsSystem(
         std.debug.assert(b.physics.colliding_entities_new.len < b.physics.colliding_entities);
         a.physics.colliding_entities_new.len += 1;
         b.physics.colliding_entities_new.len += 1;
-        a.physics.colliding_entities_new[a.physics.colliding_entities_new.len - 1] = b.ref;
-        b.physics.colliding_entities_new[b.physics.colliding_entities_new.len - 1] = a.ref;
+        a.physics.colliding_entities_new[a.physics.colliding_entities_new.len - 1] = b.ref.*;
+        b.physics.colliding_entities_new[b.physics.colliding_entities_new.len - 1] = a.ref.*;
     }
 
     // Integrate forces

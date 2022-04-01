@@ -91,7 +91,7 @@ pub fn spriteRenderSystem(
                 while (entity.animated_sprite.time >= entity.animated_sprite.anim.length) {
                     entity.animated_sprite.time -= entity.animated_sprite.anim.length;
                     if (entity.animated_sprite.destroy_at_end) {
-                        _ = try commands.destroyEntity(entity.ref);
+                        _ = try commands.destroyEntity(entity.ref.*);
                         continue :entity_loop;
                     }
                 }
@@ -110,7 +110,7 @@ pub fn spriteRenderSystem(
                     rotation,
                     texture,
                     Vec2.new(1, 1),
-                    @intCast(u32, entity.id),
+                    @intCast(u32, entity.ref.id),
                 );
                 rendered_entities += 1;
             } else {
@@ -141,7 +141,7 @@ pub fn spriteRenderSystem(
                     rotation,
                     entity.sprite.texture,
                     entity.sprite.tiling,
-                    @intCast(u32, entity.id),
+                    @intCast(u32, entity.ref.id),
                 );
                 rendered_entities += 1;
             } else {
