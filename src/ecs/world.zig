@@ -12,10 +12,7 @@ const SystemParameterType = @import("system_parameter_type.zig").SystemParameter
 const Rtti = @import("../util/rtti.zig");
 const BitSet = @import("../util/bit_set.zig");
 
-const imgui = @import("../editor/imgui.zig");
-const imgui2 = @import("../editor/imgui2.zig");
-
-const Profiler = @import("../editor/profiler.zig");
+// const Profiler = @import("../editor/profiler.zig");
 
 pub const EntityId = u64;
 pub const ComponentId = u64;
@@ -151,6 +148,20 @@ pub fn dumpGraph(self: *Self) !void {
     defer dotPrinter.deinit(graphFile.writer());
 
     try dotPrinter.printGraph(graphFile.writer(), self);
+}
+
+pub fn clear(self: *Self) !void {
+    for (self.archetypeTablesArray.items) |table| {
+        var chunk: ?*Chunk = table.firstChunk;
+        while (chunk) |c| {
+            for (c.entity_refs[0..c.count]) |*ref| {
+                try self.entityPool.append(ref.entity);
+            }
+
+            c.count = 0;
+            chunk = c.next;
+        }
+    }
 }
 
 pub fn addResourcePtr(self: *Self, resource: anytype) !void {
@@ -391,16 +402,16 @@ pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
 }
 
 pub fn createEntityFromReserved(self: *Self, entity_ref: EntityRef) !void {
-    const scope = Profiler.beginScope("createEntityFromReserved");
-    defer scope.end();
+    // const scope = Profiler.beginScope("createEntityFromReserved");
+    // defer scope.end();
 
     entity_ref.entity.id = entity_ref.id;
     try self.baseArchetypeTable.addEntity(entity_ref.entity, .{});
 }
 
 pub fn createEntityWithId(self: *Self, id: EntityId) !EntityRef {
-    const scope = Profiler.beginScope("createEntityWithId");
-    defer scope.end();
+    // const scope = Profiler.beginScope("createEntityWithId");
+    // defer scope.end();
 
     var entity_ref = try self.reserveEntity(id);
     try self.createEntityFromReserved(entity_ref);
@@ -427,8 +438,8 @@ pub fn addComponent(self: *Self, entity_ref: EntityRef, component: anytype) !voi
 }
 
 pub fn addComponentRaw(self: *Self, entity_ref: EntityRef, componentType: Rtti.TypeId, componentData: []const u8) !void {
-    const scope = Profiler.beginScope("addComponentRaw");
-    defer scope.end();
+    // const scope = Profiler.beginScope("addComponentRaw");
+    // defer scope.end();
 
     if (entity_ref.get()) |entity| {
         const componentId: u64 = try self.getComponentIdForRtti(componentType);

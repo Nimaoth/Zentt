@@ -3,3 +3,5 @@ zig-out
 *.gv
 .vs
 assets
+benchmarks/bevy/target
+benchmarks/entt/entt

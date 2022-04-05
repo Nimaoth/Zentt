@@ -224,7 +224,7 @@ pub fn main() !void {
         if (imgui.Begin("Stats")) {
             imgui.LabelText("Frame time: ", "%.2f", frameTimeSmoothed);
             imgui.LabelText("FPS: ", "%.1f", fps);
-            imgui.LabelText("Entities: ", "%lld", world.entity_count());
+            imgui.LabelText("Entities: ", "%lld", world.getEntityCount());
         }
         imgui.End();
 

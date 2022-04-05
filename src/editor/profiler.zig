@@ -160,6 +160,9 @@ pub fn draw(self: *Self) !void {
 
             var iter = self.timings.iterator();
             while (iter.next()) |entry| {
+                imgui.PushIDPtr(&entry);
+                defer imgui.PopID();
+
                 imgui.TableNextRow(.{}, 0);
                 _ = imgui.TableSetColumnIndex(0);
                 imgui.Text("%.*s", entry.key_ptr.len, entry.key_ptr.ptr);

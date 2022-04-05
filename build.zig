@@ -74,6 +74,72 @@ pub const ResourceGenStep = struct {
     }
 };
 
+pub fn runBenchmarks(b: *std.build.Builder) void {
+    const run_step = b.step("bench-all", "Run all benchmarks without building.");
+
+    const cmd1 = b.addSystemCommand(&.{"zig-out/bin/bevy_benchmarks.exe"});
+    run_step.dependOn(&cmd1.step);
+
+    const cmd3 = b.addSystemCommand(&.{"zig-out/bin/bench-zentt.exe"});
+    run_step.dependOn(&cmd3.step);
+
+    const cmd2 = b.addSystemCommand(&.{"zig-out/bin/bench-entt.exe"});
+    run_step.dependOn(&cmd2.step);
+}
+
+pub fn buildBenchmarksBevy(b: *std.build.Builder) void {
+    const build_cmd = b.addSystemCommand(&.{ "cargo", "build", "--release", "--manifest-path", "benchmarks/bevy/Cargo.toml", "-Z", "unstable-options", "--out-dir", b.getInstallPath(.bin, "") });
+    const run_cmd = b.addSystemCommand(&.{"zig-out/bin/bevy_benchmarks.exe"});
+
+    build_cmd.step.dependOn(b.getInstallStep());
+    run_cmd.step.dependOn(&build_cmd.step);
+
+    const run_step = b.step("bench-bevy", "Run bevy benchmarks");
+    run_step.dependOn(&run_cmd.step);
+}
+
+pub fn buildBenchmarksEntt(b: *std.build.Builder, target: std.zig.CrossTarget) void {
+    const exe = b.addExecutable("bench-entt", null);
+    exe.setTarget(target);
+    exe.setBuildMode(.ReleaseFast);
+    exe.addIncludeDir("benchmarks/entt/entt/src");
+    exe.addCSourceFile("benchmarks/entt/bench.cpp", &.{ "-std=c++17", "-O3" });
+    exe.linkLibC();
+    exe.linkLibCpp();
+    exe.install();
+
+    const run_cmd = exe.run();
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+
+    const run_step = b.step("bench-entt", "Run entt benchmarks");
+    run_step.dependOn(&run_cmd.step);
+}
+
+pub fn buildBenchmarksZentt(b: *std.build.Builder, target: std.zig.CrossTarget) void {
+    const exe = b.addExecutable("bench-zentt", "src/benchmark.zig");
+    exe.setTarget(target);
+    exe.setBuildMode(.ReleaseFast);
+    exe.install();
+
+    const run_cmd = exe.run();
+    run_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+
+    const run_step = b.step("bench-zentt", "Run zentt benchmarks");
+    run_step.dependOn(&run_cmd.step);
+}
+
+pub fn buildBenchmarks(b: *std.build.Builder, target: std.zig.CrossTarget) void {
+    buildBenchmarksBevy(b);
+    buildBenchmarksEntt(b, target);
+    buildBenchmarksZentt(b, target);
+}
+
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
     // what target to build for. Here we do not override the defaults, which
@@ -84,6 +150,9 @@ pub fn build(b: *std.build.Builder) void {
     // Standard release options allow the person running `zig build` to select
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
+
+    buildBenchmarks(b, target);
+    runBenchmarks(b);
 
     // generator for zig vulkan bindings.
     const generator_exe = b.addExecutable("vulkan-zig-generator", "generator/main.zig");

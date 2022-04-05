@@ -1,0 +1,357 @@
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+#![allow(dead_code)]
+
+use bevy_ecs::{
+    component::Component,
+    entity::Entity,
+    system::{Command, CommandQueue, Commands, Query},
+    world::World,
+};
+
+fn main() {
+    println!("Benchmarking bevy");
+
+    let entity_count = 10_000_000;
+    let iterations = 10;
+
+    create_empty_entities(iterations, entity_count);
+    create_empty_entities_add_one_comp(iterations, entity_count);
+    iter_entities_one_comp(iterations, entity_count);
+
+    // let mut world = World::default();
+
+
+    // println!("Create {} entities", entity_count);
+    // for _ in 0..5 {
+    //     world.clear_entities();
+    //     let time_start = std::time::Instant::now();
+    //     for _ in 0..entity_count {
+    //         world.spawn();
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("Create: {} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+
+    //     let all_entities: Vec<bevy_ecs::entity::Entity> = world.query::<bevy_ecs::entity::Entity>().iter(&world).collect();
+    //     let time_start = std::time::Instant::now();
+    //     for entity in all_entities.iter().rev() {
+    //         world.despawn(*entity);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("Destroy: {} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+
+    
+    // println!("Iterate {} empty entities", entity_count);
+    // world.clear_entities();
+    // for _ in 0..entity_count {
+    //     world.spawn();
+    // }
+    // for _ in 0..5 {
+    //     let time_start = std::time::Instant::now();
+    //     let mut query = world.query::<()>();
+    //     for _ in query.iter(&world) {
+    //         black_box(5);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("{} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+
+
+    // println!("Iterate {} entities with one component", entity_count);
+    // world.clear_entities();
+    // for _ in 0..entity_count {
+    //     world.spawn().insert(PositionComponent{x: 0.0, y: 0.0});
+    // }
+    // for _ in 0..5 {
+    //     let time_start = std::time::Instant::now();
+    //     let mut query = world.query::<(bevy_ecs::entity::Entity, &PositionComponent)>();
+    //     for (entity_id, position) in query.iter(&world) {
+    //         black_box(entity_id);
+    //         black_box(*position);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("{} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+
+    // println!("Iterate {} entities with two components", entity_count);
+    // world.clear_entities();
+    // for _ in 0..entity_count {
+    //     world.spawn().insert(PositionComponent{x: 0.0, y: 0.0}).insert(DirectionComponent{x: 0.0, y: 0.0});
+    // }
+    // for _ in 0..5 {
+    //     let time_start = std::time::Instant::now();
+    //     let mut query = world.query::<(bevy_ecs::entity::Entity, &PositionComponent, &DirectionComponent)>();
+    //     for (entity_id, position, direction) in query.iter(&world) {
+    //         black_box(entity_id);
+    //         black_box(*position);
+    //         black_box(*direction);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("{} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+
+    // println!("Iterate {} entities with two components, but only use one", entity_count);
+    // world.clear_entities();
+    // for _ in 0..entity_count {
+    //     world.spawn().insert(PositionComponent{x: 0.0, y: 0.0}).insert(DirectionComponent{x: 0.0, y: 0.0});
+    // }
+    // for _ in 0..5 {
+    //     let time_start = std::time::Instant::now();
+    //     let mut query = world.query::<(bevy_ecs::entity::Entity, &PositionComponent, &DirectionComponent)>();
+    //     for (_entity_id, position, direction) in query.iter(&world) {
+    //         black_box(*position);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("{} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+
+    // println!("Iterate {} entities with three components", entity_count);
+    // world.clear_entities();
+    // for _ in 0..entity_count {
+    //     world.spawn()
+    //         .insert(PositionComponent{x: 0.0, y: 0.0})
+    //         .insert(DirectionComponent{x: 0.0, y: 0.0})
+    //         .insert(ComflabulationComponent{
+    //             thingy: 0.0,
+    //             dingy: 0,
+    //             mingy: false,
+    //             stringy: ""
+    //         });
+    // }
+    // for _ in 0..5 {
+    //     let time_start = std::time::Instant::now();
+    //     let mut query = world.query::<(bevy_ecs::entity::Entity, &PositionComponent, &DirectionComponent, &ComflabulationComponent)>();
+    //     for (entity_id, position, direction, comflab) in query.iter(&world) {
+    //         black_box(entity_id);
+    //         black_box(*position);
+    //         black_box(*direction);
+    //         black_box(*comflab);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("{} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+
+    // println!("Iterate {} entities with three components, but only use one", entity_count);
+    // world.clear_entities();
+    // for _ in 0..entity_count {
+    //     world.spawn()
+    //         .insert(PositionComponent{x: 0.0, y: 0.0})
+    //         .insert(DirectionComponent{x: 0.0, y: 0.0})
+    //         .insert(ComflabulationComponent{
+    //             thingy: 0.0,
+    //             dingy: 0,
+    //             mingy: false,
+    //             stringy: ""
+    //         });
+    // }
+    // for _ in 0..5 {
+    //     let time_start = std::time::Instant::now();
+    //     let mut query = world.query::<(bevy_ecs::entity::Entity, &PositionComponent, &DirectionComponent, &ComflabulationComponent)>();
+    //     for (_entity_id, position, direction, comflab) in query.iter(&world) {
+    //         black_box(*position);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("{} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+    // println!("Iterate {} entities with three components, with 1/3 components", entity_count);
+    // world.clear_entities();
+    // for _ in 0..entity_count {
+    //     world.spawn()
+    //         .insert(PositionComponent{x: 0.0, y: 0.0})
+    //         .insert(DirectionComponent{x: 0.0, y: 0.0})
+    //         .insert(ComflabulationComponent{
+    //             thingy: 0.0,
+    //             dingy: 0,
+    //             mingy: false,
+    //             stringy: ""
+    //         });
+    // }
+    // for _ in 0..5 {
+    //     let time_start = std::time::Instant::now();
+    //     let mut query = world.query::<&PositionComponent>();
+    //     for position in query.iter(&world) {
+    //         black_box(*position);
+    //     }
+    //     let elapsed = time_start.elapsed();
+    //     println!("{} ms ({} ns per iteration)", elapsed.as_millis(), elapsed.as_nanos() as f64 / entity_count as f64);
+    // }
+}
+
+#[derive(Component, Clone, Copy)]
+struct PositionComponent {
+    x: f32,
+    y: f32,
+}
+
+#[derive(Component, Clone, Copy)]
+struct DirectionComponent  {
+    x: f32,
+    y: f32,
+}
+
+#[derive(Component, Clone, Copy)]
+struct ComflabulationComponent  {
+    thingy: f32,
+    dingy: i32,
+    mingy: bool,
+    stringy: &'static str,
+}
+
+fn create_empty_entities(iterations: u64, entity_count: u64) {
+    println!("  Create {} empty entities", entity_count);
+
+    let mut world = World::default();
+
+    let mut t = Timer::new();
+   
+    for _ in 0..iterations {
+        world.clear_entities();
+        t.start();
+        for _ in 0..entity_count {
+            world.spawn();
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn create_empty_entities_add_one_comp(iterations: u64, entity_count: u64) {
+    println!("  Create {} entities and add PositionComponent", entity_count);
+
+    let mut world = World::default();
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        world.clear_entities();
+        t.start();
+        for _ in 0..entity_count {
+            world.spawn().insert(PositionComponent{x: 0.0, y: 0.0});
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn iter_entities_one_comp(iterations: u64, entity_count: u64) {
+    println!("  Iterate {} entities with PositionComponent", entity_count);
+
+    let mut world = World::default();
+    for _ in 0..entity_count {
+        world.spawn().insert(PositionComponent{x: 0.0, y: 0.0});
+    }
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        let mut query = world.query::<&mut PositionComponent>();
+        t.start();
+        for mut position in query.iter_mut(&mut world) {
+            position.x *= 1.000001;
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+// Utilities
+
+pub fn black_box<T>(dummy: T) -> T {
+    unsafe {
+        let ret = std::ptr::read_volatile(&dummy);
+        std::mem::forget(dummy);
+        ret
+    }
+}
+
+struct RunningMean {
+    count: f64,
+    mean: f64,
+    m2: f64,
+}
+
+struct RunningMeanStats {
+    mean: f64,
+    variance: f64,
+    sample_variance: f64,
+}
+
+impl RunningMean {
+    pub fn new() -> Self {
+        RunningMean { count: 0.0, mean: 0.0, m2: 0.0 }
+    }
+
+    pub fn update(&mut self, value: f64) {
+        self.count += 1.0;
+
+        let delta = value - self.mean;
+        self.mean += delta / self.count;
+
+        let delta2 = value - self.mean;
+        self.m2 += delta * delta2;
+    }
+
+    pub fn get_stats(self) -> RunningMeanStats {
+        return RunningMeanStats {
+            mean: self.mean,
+            variance: (self.m2 / self.count).sqrt(),
+            sample_variance: (self.m2 / (self.count - 1.0)).sqrt(),
+        };
+    }
+}
+
+struct Timer {
+    start_time: std::time::Instant,
+    total_sum_ms: f64,
+    iter_sum_ns: f64,
+    count: f64,
+
+    total: RunningMean,
+    iter: RunningMean,
+}
+
+impl Timer {
+    pub fn new() -> Self {
+        Timer {
+            start_time: std::time::Instant::now(),
+            total_sum_ms: 0.0,
+            iter_sum_ns: 0.0,
+            count: 0.0,
+
+            total: RunningMean::new(),
+            iter: RunningMean::new(),
+        }
+    }
+
+    pub fn start(&mut self) {
+        self.start_time = std::time::Instant::now();
+    }
+
+    pub fn end(&mut self, count: u64) {
+        let now = std::time::Instant::now();
+        let delta = now - self.start_time;
+
+        let total_delta = delta.as_secs_f64() * 1000.0;
+        let iter_delta = delta.as_secs_f64() * (1_000_000_000.0 / (count as f64));
+
+        self.total_sum_ms += total_delta;
+        self.iter_sum_ns += iter_delta;
+
+        self.total.update(total_delta);
+        self.iter.update(iter_delta);
+
+        self.count += 1.0;
+
+        println!("    {:.2}ms ({:.2}ns)", total_delta, iter_delta);
+    }
+
+    pub fn print_avg_stats(self) {
+        // println!("  {:.2}ms ({:.2}ns)",  self.total_sum_ms / self.count, self.iter_sum_ns / self.count );
+
+        let total_result = self.total.get_stats();
+        let iter_result = self.iter.get_stats();
+        println!("  Total: {:.2}ms ({:.2}, {:.2})", total_result.mean, total_result.variance, total_result.sample_variance);
+        println!("  Iter:  {:.2}ns ({:.2}, {:.2})\n", iter_result.mean, iter_result.variance, iter_result.sample_variance);
+    }
+}
