@@ -37,393 +37,22 @@ pub fn main() !void {
     const entity_count = 1_000_000;
     const iterations = 10;
 
-    // try createEntities(allocator, iterations, entity_count);
-    // try createEntitiesAddOneComp(allocator, iterations, entity_count);
-    // try createEntitiesAddFiveComps(allocator, iterations, entity_count);
-    // try createEntitiesAddFiveCompsBundle(allocator, iterations, entity_count);
-    // try createEntitiesAddEightComps(allocator, iterations, entity_count);
-    // try createEntitiesAddEightCompsBundle(allocator, iterations, entity_count);
+    try createEmptyEntities(allocator, iterations, entity_count);
+    try createEntitiesAddOneComp(allocator, iterations, entity_count);
+    try createEntitiesAddFiveComps(allocator, iterations, entity_count);
+    try createEntitiesAddFiveCompsBundle(allocator, iterations, entity_count);
+    try createEntitiesAddEightComps(allocator, iterations, entity_count);
+    try createEntitiesAddEightCompsBundle(allocator, iterations, entity_count);
+
     try addComponent(allocator, iterations, entity_count);
-    // try iterEntitiesOneComp(allocator, iterations, entity_count);
-    // try commandsCreateEntity(allocator, iterations, entity_count);
-    // try commandsCreateEntityEightComps(allocator, iterations, entity_count);
-    // try commandsCreateEntityEightCompsBundle(allocator, iterations, entity_count);
+
+    try commandsCreateEntity(allocator, iterations, entity_count);
+    try commandsCreateEntityEightComps(allocator, iterations, entity_count);
+    try commandsCreateEntityEightCompsBundle(allocator, iterations, entity_count);
+
     try commandsAddComponent(allocator, iterations, entity_count);
 
-    // var world = try World.init(allocator);
-    // defer world.deinit();
-
-    // var commands = try world.addResource(Commands.init(allocator, world));
-    // defer commands.deinit();
-
-    // var entities = std.ArrayList(EntityRef).init(allocator);
-    // defer entities.deinit();
-
-    // var k: u64 = 0;
-
-    // std.debug.print("Create/Destroy Benchmarks\n", .{});
-
-    // k = 0;
-    // while (k < 5) : (k += 1) {
-    //     {
-    //         const start = std.time.nanoTimestamp();
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             _ = try world.createEntity();
-    //         }
-
-    //         const now = std.time.nanoTimestamp();
-    //         const delta = now - start;
-    //         const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //         std.debug.print("    Create: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-    //     }
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         const start = std.time.nanoTimestamp();
-    //         var i: usize = 0;
-    //         while (i < entities.items.len) : (i += 1) {
-    //             // try world.deleteEntity(entities.items[i]);
-    //             try world.deleteEntity(entities.items[entities.items.len - i - 1]);
-    //         }
-
-    //         const now = std.time.nanoTimestamp();
-    //         const delta = now - start;
-    //         const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //         std.debug.print("    Destroy: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-    //     }
-    // }
-
-    // std.debug.print("Iteration Benchmarks\n", .{});
-
-    // std.debug.print("  Benchmark: Iterate {} entities with one component\n", .{entity_count});
-    // k = 0;
-    // while (k < 3) : (k += 1) {
-    //     {
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             const entity = try world.createEntity();
-    //             try world.addComponent(entity, PositionComponent{});
-    //         }
-    //     }
-
-    //     const start = std.time.nanoTimestamp();
-    //     {
-    //         var query = try world.query(.{PositionComponent});
-    //         defer query.deinit();
-    //         var iter = query.iter();
-    //         while (iter.next()) |entity| {
-    //             g_entity = black_box(entity.ref.*);
-    //             g_position = black_box(entity.position.*);
-    //         }
-    //     }
-
-    //     const now = std.time.nanoTimestamp();
-    //     const delta = now - start;
-    //     const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //     std.debug.print("    Elapsed: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         var i: usize = entities.items.len;
-    //         while (i > 0) : (i -= 1) {
-    //             try world.deleteEntity(entities.items[i - 1]);
-    //         }
-    //     }
-    // }
-
-    // std.debug.print("  Benchmark: Iterate {} entities with one component manually\n", .{entity_count});
-    // k = 0;
-    // while (k < 3) : (k += 1) {
-    //     {
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             const entity = try world.createEntity();
-    //             try world.addComponent(entity, PositionComponent{});
-    //         }
-    //     }
-
-    //     const start = std.time.nanoTimestamp();
-    //     {
-    //         var query = try world.query(.{PositionComponent});
-    //         defer query.deinit();
-
-    //         for (query.chunks) |chunk| {
-    //             const component_index = chunk.table.getListIndexForType(Rtti.typeId(PositionComponent)) orelse unreachable;
-    //             const uiae = chunk.entity_refs;
-    //             const components = std.mem.bytesAsSlice(PositionComponent, chunk.getComponents(component_index).data);
-
-    //             var i: usize = 0;
-    //             while (i < chunk.count) : (i += 1) {
-    //                 g_entity = black_box(uiae[i]);
-    //                 g_position = black_box(components[i]);
-    //             }
-    //         }
-    //     }
-
-    //     const now = std.time.nanoTimestamp();
-    //     const delta = now - start;
-    //     const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //     std.debug.print("    Elapsed: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-    //     // std.debug.print("    {}, {}\n", .{ g_position, sum });
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         var i: usize = entities.items.len;
-    //         while (i > 0) : (i -= 1) {
-    //             try world.deleteEntity(entities.items[i - 1]);
-    //         }
-    //     }
-    // }
-
-    // std.debug.print("  Benchmark: Iterate {} entities with two components\n", .{entity_count});
-    // k = 0;
-    // while (k < 3) : (k += 1) {
-    //     {
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             const entity = try world.createEntity();
-    //             try world.addComponent(entity, PositionComponent{});
-    //             try world.addComponent(entity, DirectionComponent{});
-    //         }
-    //     }
-
-    //     const start = std.time.nanoTimestamp();
-    //     {
-    //         var query = try world.query(.{ PositionComponent, DirectionComponent });
-    //         defer query.deinit();
-    //         var iter = query.iter();
-    //         while (iter.next()) |entity| {
-    //             g_entity = black_box(entity.ref.*);
-    //             g_position = black_box(entity.position.*);
-    //             g_direction = black_box(entity.direction.*);
-    //         }
-    //     }
-
-    //     const now = std.time.nanoTimestamp();
-    //     const delta = now - start;
-    //     const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //     std.debug.print("    Elapsed: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         var i: usize = entities.items.len;
-    //         while (i > 0) : (i -= 1) {
-    //             try world.deleteEntity(entities.items[i - 1]);
-    //         }
-    //     }
-    // }
-
-    // k = 0;
-    // std.debug.print("  Benchmark: Iterate {} entities with two components, but only use one\n", .{entity_count});
-    // while (k < 3) : (k += 1) {
-    //     {
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             const entity = try world.createEntity();
-    //             try world.addComponent(entity, PositionComponent{});
-    //             try world.addComponent(entity, DirectionComponent{});
-    //         }
-    //     }
-
-    //     const start = std.time.nanoTimestamp();
-    //     {
-    //         var query = try world.query(.{ PositionComponent, DirectionComponent });
-    //         defer query.deinit();
-    //         var iter = query.iter();
-    //         while (iter.next()) |entity| {
-    //             // g_entity = black_box(entity.ref.*);
-    //             g_position = black_box(entity.position.*);
-    //             // g_direction = black_box(entity.direction.*);
-    //         }
-    //     }
-
-    //     const now = std.time.nanoTimestamp();
-    //     const delta = now - start;
-    //     const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //     std.debug.print("    Elapsed: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         var i: usize = entities.items.len;
-    //         while (i > 0) : (i -= 1) {
-    //             try world.deleteEntity(entities.items[i - 1]);
-    //         }
-    //     }
-    // }
-
-    // k = 0;
-    // std.debug.print("  Benchmark: Iterate {} entities with three components\n", .{entity_count});
-    // while (k < 3) : (k += 1) {
-    //     {
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             const entity = try world.createEntity();
-    //             try world.addComponent(entity, PositionComponent{});
-    //             try world.addComponent(entity, DirectionComponent{});
-    //             try world.addComponent(entity, ComflabulationComponent{});
-    //         }
-    //     }
-
-    //     const start = std.time.nanoTimestamp();
-    //     {
-    //         var query = try world.query(.{ PositionComponent, DirectionComponent, ComflabulationComponent });
-    //         defer query.deinit();
-    //         var iter = query.iter();
-    //         while (iter.next()) |entity| {
-    //             g_entity = black_box(entity.ref.*);
-    //             g_position = black_box(entity.position.*);
-    //             g_direction = black_box(entity.direction.*);
-    //             g_comflab = black_box(entity.comflabulation.*);
-    //         }
-    //     }
-
-    //     const now = std.time.nanoTimestamp();
-    //     const delta = now - start;
-    //     const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //     std.debug.print("    Elapsed: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         var i: usize = entities.items.len;
-    //         while (i > 0) : (i -= 1) {
-    //             try world.deleteEntity(entities.items[i - 1]);
-    //         }
-    //     }
-    // }
-
-    // k = 0;
-    // std.debug.print("  Benchmark: Iterate {} entities with three components, but only use one\n", .{entity_count});
-    // while (k < 3) : (k += 1) {
-    //     {
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             const entity = try world.createEntity();
-    //             try world.addComponent(entity, PositionComponent{});
-    //             try world.addComponent(entity, DirectionComponent{});
-    //             try world.addComponent(entity, ComflabulationComponent{});
-    //         }
-    //     }
-
-    //     const start = std.time.nanoTimestamp();
-    //     {
-    //         var query = try world.query(.{ PositionComponent, DirectionComponent, ComflabulationComponent });
-    //         defer query.deinit();
-    //         var iter = query.iter();
-    //         while (iter.next()) |entity| {
-    //             // g_entity = black_box(entity.ref.*);
-    //             g_position = black_box(entity.position.*);
-    //             // g_direction = black_box(entity.direction.*);
-    //         }
-    //     }
-
-    //     const now = std.time.nanoTimestamp();
-    //     const delta = now - start;
-    //     const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //     std.debug.print("    Elapsed: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         var i: usize = entities.items.len;
-    //         while (i > 0) : (i -= 1) {
-    //             try world.deleteEntity(entities.items[i - 1]);
-    //         }
-    //     }
-    // }
-
-    // k = 0;
-    // std.debug.print("  Benchmark: Iterate {} entities with 1/3 components\n", .{entity_count});
-    // while (k < 3) : (k += 1) {
-    //     {
-    //         var i: usize = 0;
-    //         while (i < entity_count) : (i += 1) {
-    //             const entity = try world.createEntity();
-    //             try world.addComponent(entity, PositionComponent{});
-    //             try world.addComponent(entity, DirectionComponent{});
-    //             try world.addComponent(entity, ComflabulationComponent{});
-    //         }
-    //     }
-
-    //     const start = std.time.nanoTimestamp();
-    //     {
-    //         var query = try world.query(.{PositionComponent});
-    //         defer query.deinit();
-    //         var iter = query.iter();
-    //         while (iter.next()) |entity| {
-    //             // g_entity = black_box(entity.ref.*);
-    //             g_position = black_box(entity.position.*);
-    //         }
-    //     }
-
-    //     const now = std.time.nanoTimestamp();
-    //     const delta = now - start;
-    //     const delta_ms = @intToFloat(f64, delta) / std.time.ns_per_ms;
-    //     std.debug.print("    Elapsed: {} ms ({d:.2} ns per iteration)\n", .{ @floatToInt(i64, delta_ms), delta_ms / @intToFloat(f64, entity_count) * std.time.ns_per_ms });
-
-    //     {
-    //         entities.clearRetainingCapacity();
-
-    //         var iter = try world.entities();
-    //         defer iter.deinit();
-    //         while (iter.next()) |e| {
-    //             try entities.append(e.ref.*);
-    //         }
-
-    //         var i: usize = entities.items.len;
-    //         while (i > 0) : (i -= 1) {
-    //             try world.deleteEntity(entities.items[i - 1]);
-    //         }
-    //     }
-    // }
+    try iterEntitiesOneComp(allocator, iterations, entity_count);
 }
 
 const PositionComponent = struct {
@@ -484,7 +113,7 @@ const TestComp7 = struct {
     d: [2]u64 = .{ 0, 0 },
 };
 
-pub fn createEntities(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
+pub fn createEmptyEntities(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
     std.debug.print("  Create {} empty entities\n", .{entity_count});
 
     var world = try World.init(allocator);
@@ -710,26 +339,19 @@ pub fn commandsCreateEntity(allocator: std.mem.Allocator, iterations: u64, entit
         }
         record_timer.endWithoutStats();
 
-        const num_commands = commands.commands.items.len;
-
         apply_timer.start();
         try commands.applyCommands();
         apply_timer.endWithoutStats();
 
-        std.debug.print("  Record (per entity): ", .{});
+        std.debug.print("    Record (per entity): ", .{});
         record_timer.printStats(entity_count);
-        std.debug.print("  Record (per command):", .{});
-        record_timer.printStats(num_commands);
-        std.debug.print("  Apply (per entity):  ", .{});
+        std.debug.print("    Apply (per entity):  ", .{});
         apply_timer.printStats(entity_count);
-        std.debug.print("  Apply (per command): ", .{});
-        apply_timer.printStats(num_commands);
         std.debug.print("\n", .{});
     }
 
     record_timer.printAvgStats();
     apply_timer.printAvgStats();
-    std.debug.print("\n", .{});
 }
 
 pub fn commandsCreateEntityEightComps(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
@@ -763,26 +385,19 @@ pub fn commandsCreateEntityEightComps(allocator: std.mem.Allocator, iterations: 
         }
         record_timer.endWithoutStats();
 
-        const num_commands = commands.commands.items.len;
-
         apply_timer.start();
         try commands.applyCommands();
         apply_timer.endWithoutStats();
 
-        std.debug.print("  Record (per entity): ", .{});
+        std.debug.print("    Record (per entity): ", .{});
         record_timer.printStats(entity_count);
-        std.debug.print("  Record (per command):", .{});
-        record_timer.printStats(num_commands);
-        std.debug.print("  Apply (per entity):  ", .{});
+        std.debug.print("    Apply (per entity):  ", .{});
         apply_timer.printStats(entity_count);
-        std.debug.print("  Apply (per command): ", .{});
-        apply_timer.printStats(num_commands);
         std.debug.print("\n", .{});
     }
 
     record_timer.printAvgStats();
     apply_timer.printAvgStats();
-    std.debug.print("\n", .{});
 }
 
 pub fn commandsCreateEntityEightCompsBundle(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
@@ -817,26 +432,19 @@ pub fn commandsCreateEntityEightCompsBundle(allocator: std.mem.Allocator, iterat
         }
         record_timer.endWithoutStats();
 
-        const num_commands = commands.commands.items.len;
-
         apply_timer.start();
         try commands.applyCommands();
         apply_timer.endWithoutStats();
 
-        std.debug.print("  Record (per entity): ", .{});
+        std.debug.print("    Record (per entity): ", .{});
         record_timer.printStats(entity_count);
-        std.debug.print("  Record (per command):", .{});
-        record_timer.printStats(num_commands);
-        std.debug.print("  Apply (per entity):  ", .{});
+        std.debug.print("    Apply (per entity):  ", .{});
         apply_timer.printStats(entity_count);
-        std.debug.print("  Apply (per command): ", .{});
-        apply_timer.printStats(num_commands);
         std.debug.print("\n", .{});
     }
 
     record_timer.printAvgStats();
     apply_timer.printAvgStats();
-    std.debug.print("\n", .{});
 }
 
 pub fn commandsAddComponent(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
@@ -876,26 +484,19 @@ pub fn commandsAddComponent(allocator: std.mem.Allocator, iterations: u64, entit
         }
         record_timer.endWithoutStats();
 
-        const num_commands = commands.commands.items.len;
-
         apply_timer.start();
         try commands.applyCommands();
         apply_timer.endWithoutStats();
 
-        std.debug.print("  Record (per entity): ", .{});
+        std.debug.print("    Record (per entity): ", .{});
         record_timer.printStats(entity_count);
-        std.debug.print("  Record (per command):", .{});
-        record_timer.printStats(num_commands);
-        std.debug.print("  Apply (per entity):  ", .{});
+        std.debug.print("    Apply (per entity):  ", .{});
         apply_timer.printStats(entity_count);
-        std.debug.print("  Apply (per command): ", .{});
-        apply_timer.printStats(num_commands);
         std.debug.print("\n", .{});
     }
 
     record_timer.printAvgStats();
     apply_timer.printAvgStats();
-    std.debug.print("\n", .{});
 }
 
 pub fn iterEntitiesOneComp(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
