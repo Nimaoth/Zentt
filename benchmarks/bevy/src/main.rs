@@ -12,11 +12,15 @@ use bevy_ecs::{
 fn main() {
     println!("Benchmarking bevy");
 
-    let entity_count = 10_000_000;
+    let entity_count = 1_000_000;
     let iterations = 10;
 
     create_empty_entities(iterations, entity_count);
     create_empty_entities_add_one_comp(iterations, entity_count);
+    create_empty_entities_add_five_comps(iterations, entity_count);
+    create_empty_entities_add_five_comps_bundle(iterations, entity_count);
+    create_empty_entities_add_eight_comps(iterations, entity_count);
+    create_empty_entities_add_eight_comps_bundle(iterations, entity_count);
     iter_entities_one_comp(iterations, entity_count);
 
     // let mut world = World::default();
@@ -198,6 +202,54 @@ struct ComflabulationComponent  {
     stringy: &'static str,
 }
 
+#[derive(Component, Clone, Copy, Default)]
+struct TestComp1  {
+    a: i64,
+    b: f64,
+}
+
+#[derive(Component, Clone, Copy, Default)]
+struct TestComp2  {
+    a: i64,
+    b: f64,
+}
+
+#[derive(Component, Clone, Copy, Default)]
+struct TestComp3  {
+    a: i64,
+    b: f64,
+}
+
+#[derive(Component, Clone, Copy, Default)]
+struct TestComp4  {
+    a: i64,
+    b: f64,
+} 
+
+#[derive(Component, Clone, Copy, Default)]
+struct TestComp5  {
+    a: i64,
+    b: f64,
+    c: bool,
+    d: [u64; 2],
+}
+
+#[derive(Component, Clone, Copy, Default)]
+struct TestComp6  {
+    a: i64,
+    b: f64,
+    c: bool,
+    d: [u64; 2],
+}
+
+#[derive(Component, Clone, Copy, Default)]
+struct TestComp7  {
+    a: i64,
+    b: f64,
+    c: bool,
+    d: [u64; 2],
+}
+
 fn create_empty_entities(iterations: u64, entity_count: u64) {
     println!("  Create {} empty entities", entity_count);
 
@@ -228,6 +280,106 @@ fn create_empty_entities_add_one_comp(iterations: u64, entity_count: u64) {
         t.start();
         for _ in 0..entity_count {
             world.spawn().insert(PositionComponent{x: 0.0, y: 0.0});
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn create_empty_entities_add_five_comps(iterations: u64, entity_count: u64) {
+    println!("  Create {} entities and add five small components", entity_count);
+
+    let mut world = World::default();
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        world.clear_entities();
+        t.start();
+        for _ in 0..entity_count {
+            world
+                .spawn()
+                .insert(PositionComponent{x: 0.0, y: 0.0})
+                .insert(TestComp1::default())
+                .insert(TestComp2::default())
+                .insert(TestComp3::default())
+                .insert(TestComp4::default());
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn create_empty_entities_add_five_comps_bundle(iterations: u64, entity_count: u64) {
+    println!("  Create {} entities and add five small components as bundle", entity_count);
+
+    let mut world = World::default();
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        world.clear_entities();
+        t.start();
+        for _ in 0..entity_count {
+            world
+                .spawn()
+                .insert_bundle((PositionComponent{x: 0.0, y: 0.0}, TestComp1::default(), TestComp2::default(), TestComp3::default(), TestComp4::default()));
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn create_empty_entities_add_eight_comps(iterations: u64, entity_count: u64) {
+    println!("  Create {} entities and add eight small components", entity_count);
+
+    let mut world = World::default();
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        world.clear_entities();
+        t.start();
+        for _ in 0..entity_count {
+            world
+                .spawn()
+                .insert(PositionComponent{x: 0.0, y: 0.0})
+                .insert(TestComp1::default())
+                .insert(TestComp2::default())
+                .insert(TestComp3::default())
+                .insert(TestComp4::default())
+                .insert(TestComp5::default())
+                .insert(TestComp6::default())
+                .insert(TestComp7::default());
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn create_empty_entities_add_eight_comps_bundle(iterations: u64, entity_count: u64) {
+    println!("  Create {} entities and add eight components as bundle", entity_count);
+
+    let mut world = World::default();
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        world.clear_entities();
+        t.start();
+        for _ in 0..entity_count {
+            world
+                .spawn()
+                .insert_bundle((
+                    PositionComponent{x: 0.0, y: 0.0},
+                    TestComp1::default(),
+                    TestComp2::default(),
+                    TestComp3::default(),
+                    TestComp4::default(),
+                    TestComp5::default(),
+                    TestComp6::default(),
+                    TestComp7::default(),
+                ));
         }
         t.end(entity_count);
     }

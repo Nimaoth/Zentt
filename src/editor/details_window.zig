@@ -80,7 +80,7 @@ pub fn draw(self: *Self, world: *World, entity_ref: EntityRef, commands: *Comman
 
             imgui.SameLineExt(imgui.GetWindowContentRegionWidth() - imgui.CalcTextSize("X").x - 10, -1);
             if (imgui.SmallButton("X")) {
-                _ = (try commands.getEntity(entity_ref)).removeComponentRaw(component_type);
+                _ = commands.getEntity(entity_ref).removeComponentRaw(component_type);
             }
         }
 
@@ -101,7 +101,7 @@ pub fn draw(self: *Self, world: *World, entity_ref: EntityRef, commands: *Comman
 
             imgui.SameLineExt(imgui.GetWindowContentRegionWidth() - imgui.CalcTextSize("X").x - 10, -1);
             if (imgui.SmallButton("X")) {
-                _ = (try commands.getEntity(entity_ref)).removeComponentRaw(components.componentType);
+                _ = commands.getEntity(entity_ref).removeComponentRaw(components.componentType);
             }
 
             if (open) {
@@ -112,7 +112,7 @@ pub fn draw(self: *Self, world: *World, entity_ref: EntityRef, commands: *Comman
         // Buttons for adding components
         if (has_tag) {
             if (imgui.SmallButton("Add Tag")) {
-                const entityHandle = try commands.getEntity(entity_ref);
+                const entityHandle = commands.getEntity(entity_ref);
                 _ = try commands.addComponent(entityHandle, Tag{ .name = "foo" });
             }
         }
@@ -124,7 +124,7 @@ pub fn draw(self: *Self, world: *World, entity_ref: EntityRef, commands: *Comman
 
             const name = try self.format("Add {}", .{entry.key_ptr.*});
             if (imgui.SmallButton(name.ptr)) {
-                const entityHandle = try commands.getEntity(entity_ref);
+                const entityHandle = commands.getEntity(entity_ref);
                 if (entry.value_ptr.*) |data| {
                     _ = try commands.addComponentRaw(entityHandle, entry.key_ptr.*, data);
                 } else {

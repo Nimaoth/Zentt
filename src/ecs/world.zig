@@ -47,6 +47,10 @@ const IntContext = struct {
 
 const EntityMap = std.HashMap(u64, *Entity, std.hash_map.AutoContext(u64), 10);
 
+// Every action which modifies mondifies entities in a way which invalidates
+// e.g. iterators or direct pointers to components should inrement the version.
+version: u128 = 0,
+
 allocator: std.mem.Allocator,
 globalPool: std.heap.ArenaAllocator,
 entityArena: std.heap.ArenaAllocator,
@@ -215,7 +219,7 @@ pub fn query(self: *Self, comptime Components: anytype) !Query(Components) {
             }
         }
     }
-    return Query(Components).init(chunks.allocator, chunks.items, true);
+    return Query(Components).init(chunks.allocator, self, chunks.items, true);
 }
 
 pub fn runFrameSystems(self: *Self) !void {
@@ -342,7 +346,7 @@ fn handleQuery(world: *Self, queryArg: anytype, comptime ParamType: type) !void 
             }
         }
     }
-    queryArg.* = ParamType.init(chunks.allocator, chunks.items, true);
+    queryArg.* = ParamType.init(chunks.allocator, world, chunks.items, true);
 }
 
 const AllEntitiesQuery = Query(.{});
@@ -362,7 +366,7 @@ pub fn entities(self: *Self) !AllEntitiesQuery.Iterator {
             }
         }
     }
-    return AllEntitiesQuery.init(chunks.allocator, chunks.items, false).iterOwned();
+    return AllEntitiesQuery.init(chunks.allocator, self, chunks.items, false).iterOwned();
 }
 
 pub fn getEntityCount(self: *Self) usize {
@@ -402,19 +406,43 @@ pub fn isEntityAlive(self: *Self, entityId: EntityId) bool {
 }
 
 pub fn createEntityFromReserved(self: *Self, entity_ref: EntityRef) !void {
-    // const scope = Profiler.beginScope("createEntityFromReserved");
-    // defer scope.end();
+    self.version += 1;
 
     entity_ref.entity.id = entity_ref.id;
     try self.baseArchetypeTable.addEntity(entity_ref.entity, .{});
 }
 
-pub fn createEntityWithId(self: *Self, id: EntityId) !EntityRef {
-    // const scope = Profiler.beginScope("createEntityWithId");
-    // defer scope.end();
+pub fn createEntityBundleFromReserved(self: *Self, entity_ref: EntityRef, components: anytype) !void {
+    self.version += 1;
 
+    const ComponentsType = if (@typeInfo(@TypeOf(components)) == .Pointer) std.meta.Child(@TypeOf(components)) else @TypeOf(components);
+
+    entity_ref.entity.id = entity_ref.id;
+
+    const archetype = try self.createArchetypeStructType(ComponentsType);
+    var table = try self.getOrCreateArchetypeTable(archetype);
+    try table.addEntity(entity_ref.entity, components);
+}
+
+pub fn createEntityBundleFromReservedRaw(self: *Self, entity_ref: EntityRef, component_types: []const Rtti.TypeId, component_data: []const []const u8) !void {
+    self.version += 1;
+
+    entity_ref.entity.id = entity_ref.id;
+
+    const archetype = try self.createArchetypeFromTypes(component_types);
+    var table = try self.getOrCreateArchetypeTable(archetype);
+    try table.addEntityRaw(entity_ref.entity, component_types, component_data);
+}
+
+pub fn createEntityWithId(self: *Self, id: EntityId) !EntityRef {
     var entity_ref = try self.reserveEntity(id);
     try self.createEntityFromReserved(entity_ref);
+    return entity_ref;
+}
+
+pub fn createEntityBundleWithId(self: *Self, id: EntityId, components: anytype) !EntityRef {
+    var entity_ref = try self.reserveEntity(id);
+    try self.createEntityBundleFromReserved(entity_ref, components);
     return entity_ref;
 }
 
@@ -422,7 +450,12 @@ pub fn createEntity(self: *Self) !EntityRef {
     return self.createEntityWithId(self.reserveEntityId());
 }
 
+pub fn createEntityBundle(self: *Self, components: anytype) !EntityRef {
+    return self.createEntityBundleWithId(self.reserveEntityId(), components);
+}
+
 pub fn deleteEntity(self: *Self, entity_ref: EntityRef) !void {
+    self.version += 1;
     if (entity_ref.get()) |entity| {
         entity.chunk.removeEntity(entity.index);
         entity.* = .{};
@@ -433,18 +466,23 @@ pub fn deleteEntity(self: *Self, entity_ref: EntityRef) !void {
 }
 
 pub fn addComponent(self: *Self, entity_ref: EntityRef, component: anytype) !void {
+    self.version += 1;
     const componentType = Rtti.typeId(@TypeOf(component));
     try self.addComponentRaw(entity_ref, componentType, std.mem.asBytes(&component));
 }
 
+pub fn getComponentIdSet(self: *Self, componentType: Rtti.TypeId) !BitSet {
+    const component_id: u64 = try self.getComponentIdForRtti(componentType);
+    var set = BitSet.initEmpty();
+    set.set(component_id);
+    return set;
+}
+
 pub fn addComponentRaw(self: *Self, entity_ref: EntityRef, componentType: Rtti.TypeId, componentData: []const u8) !void {
-    // const scope = Profiler.beginScope("addComponentRaw");
-    // defer scope.end();
+    self.version += 1;
 
     if (entity_ref.get()) |entity| {
-        const componentId: u64 = try self.getComponentIdForRtti(componentType);
-        var newComponents = BitSet.initEmpty();
-        newComponents.set(componentId);
+        const newComponents = try self.getComponentIdSet(componentType);
         var newArchetype = entity.chunk.table.archetype.addComponents(componentType.typeInfo.hash, newComponents);
 
         var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
@@ -462,10 +500,9 @@ pub fn addComponentRaw(self: *Self, entity_ref: EntityRef, componentType: Rtti.T
 }
 
 pub fn removeComponent(self: *Self, entity_ref: EntityRef, componentType: Rtti.TypeId) !void {
+    self.version += 1;
     if (entity_ref.get()) |entity| {
-        const componentId: u64 = try self.getComponentIdForRtti(componentType);
-        var componentIds = BitSet.initEmpty();
-        componentIds.set(componentId);
+        const componentIds = try self.getComponentIdSet(componentType);
         var newArchetype = entity.chunk.table.archetype.removeComponents(componentType.typeInfo.hash, componentIds);
 
         var newTable: *ArchetypeTable = try self.getOrCreateArchetypeTable(newArchetype);
@@ -521,15 +558,7 @@ pub fn hasComponent(self: *Self, entity_ref: EntityRef, componentType: Rtti.Type
 
 /// Returns the id of the component with the given type.
 pub fn getComponentId(self: *Self, comptime ComponentType: type) !ComponentId {
-    const rtti = Rtti.typeId(ComponentType);
-    if (self.components.get(rtti)) |componentInfo| {
-        return componentInfo.id;
-    } else {
-        const componentId = self.componentIdToComponentType.items.len;
-        try self.components.put(rtti, .{ .id = componentId });
-        try self.componentIdToComponentType.append(rtti);
-        return componentId;
-    }
+    return self.getComponentIdForRtti(Rtti.typeId(ComponentType));
 }
 
 /// Returns the id of the component with the given type.
@@ -545,17 +574,43 @@ pub fn getComponentIdForRtti(self: *Self, rtti: Rtti.TypeId) !ComponentId {
 }
 
 /// Creates an archetype based on the given components.
-fn createArchetypeStruct(self: *Self, comptime T: anytype) !Archetype {
+fn createArchetypeStruct(self: *Self, comptime Components: anytype) !Archetype {
     var hash: u64 = 0;
     var bitSet = BitSet.initEmpty();
 
-    const typeInfo = @typeInfo(@TypeOf(T)).Struct;
+    const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
     inline for (typeInfo.fields) |field| {
         const ComponentType = field.default_value orelse unreachable;
         std.debug.assert(@TypeOf(ComponentType) == type);
         const rtti = Rtti.typeId(ComponentType);
         bitSet.set(try self.getComponentId(ComponentType));
         hash ^= rtti.typeInfo.hash;
+    }
+    return Archetype.init(self, hash, bitSet);
+}
+
+fn createArchetypeStructType(self: *Self, comptime T: type) !Archetype {
+    var hash: u64 = 0;
+    var bitSet = BitSet.initEmpty();
+
+    const typeInfo = @typeInfo(T).Struct;
+    inline for (typeInfo.fields) |field| {
+        const ComponentType = field.field_type;
+        std.debug.assert(@TypeOf(ComponentType) == type);
+        const rtti = Rtti.typeId(ComponentType);
+        bitSet.set(try self.getComponentId(ComponentType));
+        hash ^= rtti.typeInfo.hash;
+    }
+    return Archetype.init(self, hash, bitSet);
+}
+
+fn createArchetypeFromTypes(self: *Self, component_types: []const Rtti.TypeId) !Archetype {
+    var hash: u64 = 0;
+    var bitSet = BitSet.initEmpty();
+
+    for (component_types) |component_type| {
+        bitSet.set(try self.getComponentIdForRtti(component_type));
+        hash ^= component_type.typeInfo.hash;
     }
     return Archetype.init(self, hash, bitSet);
 }

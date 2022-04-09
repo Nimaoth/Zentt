@@ -40,13 +40,25 @@ pub fn createDyingBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
         .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1") orelse unreachable, .destroy_at_end = true });
 }
 pub fn createBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3, health: f32) !void {
-    _ = (try commands.createEntity())
-        .addComponent(FollowPlayerMovementComponent{})
-        .addComponent(TransformComponent{ .position = pos })
-        .addComponent(SpeedComponent{ .speed = 50 })
-        .addComponent(PhysicsComponent{ .own_layer = 0b0010, .target_layer = 0b0111, .radius = 10 })
-        .addComponent(HealthComponent{ .health = health })
-        .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1i") orelse unreachable });
+    // _ = (try commands.createEntity())
+    //     .addComponent(FollowPlayerMovementComponent{})
+    //     .addComponent(TransformComponent{ .position = pos })
+    //     .addComponent(SpeedComponent{ .speed = 50 })
+    //     .addComponent(PhysicsComponent{ .own_layer = 0b0010, .target_layer = 0b0111, .radius = 10 })
+    //     .addComponent(HealthComponent{ .health = health })
+    //     .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1i") orelse unreachable });
+    var entity = .{
+        .follow = FollowPlayerMovementComponent{},
+        .transform = TransformComponent{},
+        .speed = SpeedComponent{ .speed = 50 },
+        .physics = PhysicsComponent{ .own_layer = 0b0010, .target_layer = 0b0111, .radius = 10 },
+        .health = HealthComponent{},
+        .sprite = AnimatedSpriteComponent{ .anim = undefined },
+    };
+    entity.transform.position = pos;
+    entity.health.health = health;
+    entity.sprite.anim = assetdb.getSpriteAnimation("Bat1i") orelse unreachable;
+    _ = try commands.createEntityBundle(&entity);
 }
 
 pub fn moveSystemFollowPlayer(

@@ -2,6 +2,7 @@ const std = @import("std");
 
 const ArchetypeTable = @import("archetype_table.zig");
 const Chunk = @import("chunk.zig");
+const World = @import("world.zig");
 const SystemParameterType = @import("system_parameter_type.zig").SystemParameterType;
 
 const Rtti = @import("../util/rtti.zig");
@@ -11,6 +12,10 @@ const EntityId = Entity.EntityId;
 const EntityRef = Entity.Ref;
 
 pub const ComponentId = u64;
+
+const root = @import("root");
+
+pub const track_iter_invalidation: bool = if (@hasDecl(root, "query_track_iter_invalidation")) root.query_track_iter_invalidation else false;
 
 pub fn Query(comptime Components: anytype) type {
     const EntityHandle = getEntityHandle(Components);
@@ -22,6 +27,9 @@ pub fn Query(comptime Components: anytype) type {
         allocator: std.mem.Allocator,
         free_chunks: bool,
 
+        world: *World,
+        version: u128,
+
         chunks: []*Chunk,
         chunk_index: usize = 0,
         entity_index: u64 = 0,
@@ -29,11 +37,13 @@ pub fn Query(comptime Components: anytype) type {
         entity_handles: ComponentSlices = std.mem.zeroes(ComponentSlices),
         current_entity: EntityHandle = undefined,
 
-        pub fn init(allocator: std.mem.Allocator, chunks: []*Chunk, free_chunks: bool) @This() {
+        pub fn init(allocator: std.mem.Allocator, chunks: []*Chunk, free_chunks: bool, world: *World) @This() {
             var result = @This(){
                 .allocator = allocator,
                 .free_chunks = free_chunks,
                 .chunks = chunks,
+                .world = world,
+                .version = world.version,
             };
 
             if (result.chunks.len > 0) {
@@ -76,6 +86,13 @@ pub fn Query(comptime Components: anytype) type {
         }
 
         pub inline fn next(self: *Self) ?*EntityHandle {
+            if (comptime track_iter_invalidation) {
+                if (self.world.version != self.version) {
+                    std.log.err("Query Iterator was invalidated. (Created at {}, world at {})", .{ self.version, self.world.version });
+                    @panic("Query Iterator was invalidated");
+                }
+            }
+
             if (self.entity_index >= self.entity_handles.ref.len) {
                 if (self.chunk_index + 1 >= self.chunks.len)
                     return null;
@@ -112,13 +129,15 @@ pub fn Query(comptime Components: anytype) type {
         pub const Iterator = Iterator;
 
         allocator: std.mem.Allocator,
+        world: *World,
         chunks: []*Chunk,
         free_chunks: bool,
         componentCount: i64 = ComponentCount,
 
-        pub fn init(allocator: std.mem.Allocator, chunks: []*Chunk, free_chunks: bool) @This() {
+        pub fn init(allocator: std.mem.Allocator, world: *World, chunks: []*Chunk, free_chunks: bool) @This() {
             return @This(){
                 .allocator = allocator,
+                .world = world,
                 .chunks = chunks,
                 .free_chunks = free_chunks,
             };
@@ -131,11 +150,11 @@ pub fn Query(comptime Components: anytype) type {
         }
 
         pub fn iter(self: *const Self) Iterator {
-            return Iterator.init(self.allocator, self.chunks, false);
+            return Iterator.init(self.allocator, self.chunks, false, self.world);
         }
 
         pub fn iterOwned(self: *const Self) Iterator {
-            return Iterator.init(self.allocator, self.chunks, true);
+            return Iterator.init(self.allocator, self.chunks, true, self.world);
         }
 
         // Returns the number of entities which match this query.

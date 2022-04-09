@@ -87,11 +87,26 @@ pub fn addEntity(self: *Self, entity: *Entity, components: anytype) !void {
     var free_chunk = try self.getNextFreeChunk();
     try free_chunk.addEntity(entity);
 
-    const typeInfo = @typeInfo(@TypeOf(components)).Struct;
-    inline for (typeInfo.fields) |field| {
+    const ComponentsType = if (@typeInfo(@TypeOf(components)) == .Pointer) std.meta.Child(@TypeOf(components)) else @TypeOf(components);
+
+    inline for (@typeInfo(ComponentsType).Struct.fields) |field| {
         const componentType = Rtti.typeId(field.field_type);
         const index = self.getListIndexForType(componentType) orelse unreachable;
         try entity.chunk.setComponentRaw(index, entity.index, std.mem.asBytes(&@field(components, field.name)));
+    }
+}
+
+pub fn addEntityRaw(self: *Self, entity: *Entity, component_types: []const Rtti.TypeId, component_data: []const []const u8) !void {
+    // @todo: check if the provided components match the archetype
+    std.debug.assert(component_types.len == component_data.len);
+    var free_chunk = try self.getNextFreeChunk();
+    try free_chunk.addEntity(entity);
+
+    for (component_types) |component_type, i| {
+        if (component_type.typeInfo.size > 0) {
+            const index = self.getListIndexForType(component_type) orelse unreachable;
+            try entity.chunk.setComponentRaw(index, entity.index, component_data[i]);
+        }
     }
 }
 

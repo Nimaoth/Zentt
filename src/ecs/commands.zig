@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const ArenaAllocator = @import("../util/arena_allocator.zig").ClearableArenaAllocator;
+
 const Rtti = @import("../util/rtti.zig");
 const Entity = @import("entity.zig");
 const EntityRef = Entity.Ref;
@@ -24,10 +26,10 @@ const TempEntityId = struct {
         return self.commands.?.addComponent(self, component) catch return .{};
     }
 
-    pub fn removeComponentRaw(self: TempEntityId, componentType: Rtti.TypeId) TempEntityId {
+    pub fn removeComponentRaw(self: TempEntityId, component_type: Rtti.TypeId) TempEntityId {
         if (self.commands == null)
             return self;
-        return self.commands.?.removeComponentRaw(self, componentType) catch return .{};
+        return self.commands.?.removeComponentRaw(self, component_type) catch return .{};
     }
 
     pub fn build(self: TempEntityId) EntityRef {
@@ -37,47 +39,78 @@ const TempEntityId = struct {
 
 const Commands = union(enum) {
     CreateEntity: EntityRef,
+    CreateEntityBundle: struct {
+        entity_ref: EntityRef,
+        component_types: []Rtti.TypeId,
+        component_datas: []const []const u8,
+    },
     DestroyEntity: EntityRef,
     AddComponent: struct {
         entity_ref: EntityRef,
-        componentType: Rtti.TypeId,
-        componentDataIndex: usize,
-        componentDataLen: usize,
+        component_type: Rtti.TypeId,
+        component_data: []const u8,
     },
     RemoveComponent: struct {
         entity_ref: EntityRef,
-        componentType: Rtti.TypeId,
+        component_type: Rtti.TypeId,
     },
 };
 
 commands: std.ArrayList(Commands),
-componentData: std.ArrayList(u8),
+component_data_arena: ArenaAllocator,
 world: *World,
 
 pub fn init(allocator: std.mem.Allocator, world: *World) Self {
     return Self{
         .commands = std.ArrayList(Commands).init(allocator),
-        .componentData = std.ArrayList(u8).init(allocator),
+        .component_data_arena = ArenaAllocator.init(allocator),
         .world = world,
     };
 }
 
 pub fn deinit(self: *const Self) void {
     self.commands.deinit();
-    self.componentData.deinit();
+    self.component_data_arena.deinit();
 }
 
-pub fn getComponentData(self: *const Self, index: usize, len: usize) []const u8 {
-    return self.componentData.items[index..(index + len)];
-}
-
-pub fn getEntity(self: *Self, entity_ref: EntityRef) !TempEntityId {
+pub fn getEntity(self: *Self, entity_ref: EntityRef) TempEntityId {
     return TempEntityId{ .commands = self, .entity_ref = entity_ref };
 }
 
 pub fn createEntity(self: *Self) !TempEntityId {
     const entity = TempEntityId{ .commands = self, .entity_ref = try self.world.reserveEntity(self.world.reserveEntityId()) };
     try self.commands.append(.{ .CreateEntity = entity.entity_ref });
+    return entity;
+}
+
+pub fn createEntityBundle(self: *Self, components: anytype) !TempEntityId {
+    const ComponentsType = if (@typeInfo(@TypeOf(components)) == .Pointer) std.meta.Child(@TypeOf(components)) else @TypeOf(components);
+    const components_ptr: *const ComponentsType = if (@typeInfo(@TypeOf(components)) == .Pointer) components else &components;
+
+    const num_components = @typeInfo(ComponentsType).Struct.fields.len;
+
+    const component_types = try self.component_data_arena.allocator().alloc(Rtti.TypeId, num_components);
+    const component_datas = try self.component_data_arena.allocator().alloc([]u8, num_components);
+    const component_data = try self.component_data_arena.allocator().alloc(u8, @sizeOf(ComponentsType));
+    std.mem.copy(u8, component_data, std.mem.asBytes(components_ptr));
+
+    const entity = TempEntityId{ .commands = self, .entity_ref = try self.world.reserveEntity(self.world.reserveEntityId()) };
+    try self.commands.append(.{ .CreateEntityBundle = .{
+        .entity_ref = entity.entity_ref,
+        .component_types = component_types,
+        .component_datas = component_datas,
+    } });
+
+    inline for (@typeInfo(ComponentsType).Struct.fields) |field, i| {
+        component_types[i] = Rtti.typeId(field.field_type);
+        if (@sizeOf(field.field_type) == 0) {
+            component_datas[i] = &.{};
+        } else {
+            const index = @offsetOf(ComponentsType, field.name);
+            component_datas[i] = component_data[index .. index + @sizeOf(field.field_type)];
+        }
+    }
+
     return entity;
 }
 
@@ -95,26 +128,25 @@ pub fn addComponent(self: *Self, entity: TempEntityId, component: anytype) !Temp
     return self.addComponentRaw(entity, Rtti.typeId(@TypeOf(component)), std.mem.asBytes(&component));
 }
 
-pub fn addComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti.TypeId, data: []const u8) !TempEntityId {
-    const dataStartIndex = self.componentData.items.len;
-    try self.componentData.appendSlice(data);
+pub fn addComponentRaw(self: *Self, entity: TempEntityId, component_type: Rtti.TypeId, data: []const u8) !TempEntityId {
+    const component_data = try self.component_data_arena.allocator().alloc(u8, data.len);
+    std.mem.copy(u8, component_data, data);
     try self.commands.append(.{ .AddComponent = .{
         .entity_ref = entity.entity_ref,
-        .componentType = componentType,
-        .componentDataIndex = dataStartIndex,
-        .componentDataLen = data.len,
+        .component_type = component_type,
+        .component_data = component_data,
     } });
     return entity;
 }
 
-pub fn removeComponent(self: *Self, entity: TempEntityId, comptime ComponentType: type) !TempEntityId {
-    return try self.removeComponentRaw(entity, Rtti.typeId(ComponentType));
+pub fn removeComponent(self: *Self, entity: TempEntityId, comptime component_type: type) !TempEntityId {
+    return try self.removeComponentRaw(entity, Rtti.typeId(component_type));
 }
 
-pub fn removeComponentRaw(self: *Self, entity: TempEntityId, componentType: Rtti.TypeId) !TempEntityId {
+pub fn removeComponentRaw(self: *Self, entity: TempEntityId, component_type: Rtti.TypeId) !TempEntityId {
     try self.commands.append(.{ .RemoveComponent = .{
         .entity_ref = entity.entity_ref,
-        .componentType = componentType,
+        .component_type = component_type,
     } });
     return entity;
 }
@@ -125,7 +157,7 @@ pub fn applyCommands(self: *Self) !void {
 
     defer {
         self.commands.clearRetainingCapacity();
-        self.componentData.clearRetainingCapacity();
+        self.component_data_arena.reset();
     }
 
     for (self.commands.items) |command| {
@@ -134,17 +166,20 @@ pub fn applyCommands(self: *Self) !void {
                 try self.world.createEntityFromReserved(entity_ref);
             },
 
+            .CreateEntityBundle => |data| {
+                try self.world.createEntityBundleFromReservedRaw(data.entity_ref, data.component_types, data.component_datas);
+            },
+
             .DestroyEntity => |entity_ref| {
                 try self.world.deleteEntity(entity_ref);
             },
 
             .AddComponent => |data| {
-                const componentData = self.getComponentData(data.componentDataIndex, data.componentDataLen);
-                try self.world.addComponentRaw(data.entity_ref, data.componentType, componentData);
+                try self.world.addComponentRaw(data.entity_ref, data.component_type, data.component_data);
             },
 
             .RemoveComponent => |data| {
-                try self.world.removeComponent(data.entity_ref, data.componentType);
+                try self.world.removeComponent(data.entity_ref, data.component_type);
             },
         }
     }
