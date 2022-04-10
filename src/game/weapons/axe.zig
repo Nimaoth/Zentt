@@ -70,11 +70,19 @@ pub const AxeComponent = struct {
 };
 
 pub fn createAxe(commands: *Commands, assetdb: *AssetDB, axe_res: *AxeResource, position: Vec3, velocity: Vec3) !void {
-    _ = (try commands.createEntityWithId(axe_res.getFreeEntityId()))
-        .addComponent(AxeComponent{ .velocity = velocity })
-        .addComponent(TransformComponent{ .position = position })
-        .addComponent(PhysicsComponent{ .own_layer = 0b0100, .target_layer = 0b0010, .radius = 10, .push_factor = 0, .inverse_mass = 10000 })
-        .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("Axe.png", .{}) });
+    _ = axe_res;
+    var entity = .{
+        .axe = AxeComponent{},
+        .transform = TransformComponent{},
+        .speed = SpeedComponent{ .speed = 50 },
+        .physics = PhysicsComponent{ .own_layer = 0b0100, .target_layer = 0b0010, .radius = 10, .push_factor = 0, .inverse_mass = 10000 },
+        .health = HealthComponent{},
+        .sprite = SpriteComponent{ .texture = undefined },
+    };
+    entity.axe.velocity = velocity;
+    entity.transform.position = position;
+    entity.sprite.texture = try assetdb.getTextureByPath("Axe.png", .{});
+    _ = try commands.createEntityBundle(&entity);
 }
 
 pub fn axeSystem(

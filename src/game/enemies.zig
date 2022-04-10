@@ -35,18 +35,16 @@ const PhysicsComponent = @import("physics.zig").PhysicsComponent;
 const Gem = @import("gem.zig");
 
 pub fn createDyingBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3) !void {
-    _ = (try commands.createEntity())
-        .addComponent(TransformComponent{ .position = pos })
-        .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1") orelse unreachable, .destroy_at_end = true });
+    var entity = .{
+        .transform = TransformComponent{},
+        .sprite = AnimatedSpriteComponent{ .anim = undefined, .destroy_at_end = true },
+    };
+    entity.transform.position = pos;
+    entity.sprite.anim = assetdb.getSpriteAnimation("Bat1") orelse unreachable;
+    _ = try commands.createEntityBundle(&entity);
 }
+
 pub fn createBat(commands: *Commands, assetdb: *AssetDB, pos: Vec3, health: f32) !void {
-    // _ = (try commands.createEntity())
-    //     .addComponent(FollowPlayerMovementComponent{})
-    //     .addComponent(TransformComponent{ .position = pos })
-    //     .addComponent(SpeedComponent{ .speed = 50 })
-    //     .addComponent(PhysicsComponent{ .own_layer = 0b0010, .target_layer = 0b0111, .radius = 10 })
-    //     .addComponent(HealthComponent{ .health = health })
-    //     .addComponent(AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Bat1i") orelse unreachable });
     var entity = .{
         .follow = FollowPlayerMovementComponent{},
         .transform = TransformComponent{},

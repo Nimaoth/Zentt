@@ -63,11 +63,16 @@ pub const BibleComponent = struct {
 };
 
 pub fn createBible(commands: *Commands, assetdb: *AssetDB, bible_res: *BibleResource) !void {
-    _ = (try commands.createEntityWithId(bible_res.getFreeEntityId()))
-        .addComponent(BibleComponent{})
-        .addComponent(TransformComponent{})
-        .addComponent(PhysicsComponent{ .own_layer = 0b0100, .target_layer = 0b0010, .radius = 7, .inverse_mass = 99999, .push_factor = 0 })
-        .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("HolyBook.png", .{}) });
+    _ = bible_res;
+    var entity = .{
+        .axe = BibleComponent{},
+        .transform = TransformComponent{},
+        .physics = PhysicsComponent{ .own_layer = 0b0100, .target_layer = 0b0010, .radius = 7, .push_factor = 0, .inverse_mass = 99999 },
+        .health = HealthComponent{},
+        .sprite = SpriteComponent{ .texture = undefined },
+    };
+    entity.sprite.texture = try assetdb.getTextureByPath("HolyBook.png", .{});
+    _ = try commands.createEntityBundle(&entity);
 }
 
 pub fn bibleSystem(

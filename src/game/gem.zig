@@ -36,10 +36,15 @@ pub const GemComponent = struct {
 };
 
 pub fn createGem(commands: *Commands, assetdb: *AssetDB, position: Vec3, xp: f32) !void {
-    _ = (try commands.createEntity())
-        .addComponent(GemComponent{ .xp = xp })
-        .addComponent(TransformComponent{ .position = position })
-        .addComponent(SpriteComponent{ .texture = try assetdb.getTextureByPath("Gem1.png", .{}) });
+    var entity = .{
+        .gem = GemComponent{},
+        .transform = TransformComponent{},
+        .sprite = SpriteComponent{ .texture = undefined },
+    };
+    entity.gem.xp = xp;
+    entity.transform.position = position;
+    entity.sprite.texture = try assetdb.getTextureByPath("Gem1.png", .{});
+    _ = try commands.createEntityBundle(&entity);
 }
 
 pub fn gemSystem(

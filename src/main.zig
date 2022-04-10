@@ -89,27 +89,33 @@ pub fn main() !void {
     var enemy_spawner = try world.addResource(game.EnemySpawner.init(allocator, world));
     defer enemy_spawner.deinit();
 
-    _ = (try commands.createEntity())
-        .addComponent(game.Player{
-        .area_modifier = 1,
-        .speed_modifier = 1,
-        .duration_modifier = 1,
-        .damage_modifier = 1,
-        .cooldown_modifier = 1,
-        .amount_modifier = 0,
-    })
-        .addComponent(game.TransformComponent{ .position = Vec3.new(100, 0, 0), .size = 1 })
-        .addComponent(game.SpeedComponent{ .speed = 150 })
-        .addComponent(game.CameraComponent{ .size = 1000 })
-        .addComponent(game.PhysicsComponent{ .own_layer = 0b0001, .target_layer = 0b0010, .radius = 15, .inverse_mass = 0 })
-        .addComponent(game.HealthComponent{ .health = 100 })
-        .addComponent(game.GridCenterComponent{})
-        .addComponent(game.AnimatedSpriteComponent{ .anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable });
+    var player = .{
+        .player = game.Player{
+            .area_modifier = 1,
+            .speed_modifier = 1,
+            .duration_modifier = 1,
+            .damage_modifier = 1,
+            .cooldown_modifier = 1,
+            .amount_modifier = 0,
+        },
+        .transform = game.TransformComponent{ .position = comptime Vec3.new(100, 0, 0), .size = 1 },
+        .speed = game.SpeedComponent{ .speed = 150 },
+        .camera = game.CameraComponent{ .size = 1000 },
+        .physics = game.PhysicsComponent{ .own_layer = 0b0001, .target_layer = 0b0010, .radius = 15, .inverse_mass = 0 },
+        .health = game.HealthComponent{ .health = 100 },
+        .grid_center = game.GridCenterComponent{},
+        .sprite = game.AnimatedSpriteComponent{ .anim = undefined },
+    };
+    player.sprite.anim = assetdb.getSpriteAnimation("Antonio") orelse unreachable;
+    _ = try commands.createEntityBundle(&player);
 
     // Background.
-    _ = (try commands.createEntity())
-        .addComponent(game.TransformComponent{ .position = Vec3.new(0, 0, 100), .size = 1000 })
-        .addComponent(game.SpriteComponent{ .texture = try assetdb.getTextureByPath("Forest_119.png", .{}), .tiling = Vec2.new(1000, 1000) });
+    var background = .{
+        .transform = game.TransformComponent{ .position = comptime Vec3.new(0, 0, 100), .size = 1000 },
+        .sprite = game.SpriteComponent{ .texture = undefined, .tiling = comptime Vec2.new(1000, 1000) },
+    };
+    background.sprite.texture = try assetdb.getTextureByPath("Forest_119.png", .{});
+    _ = try commands.createEntityBundle(&background);
 
     // {
     // const animation_count = assetdb.sprite_animations.count();
