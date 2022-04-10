@@ -10,6 +10,11 @@ void createEntitiesAddEightComps(int64_t iterations, int64_t entity_count);
 void addComponent(int64_t iterations, int64_t entity_count);
 void iterEntitiesOneCompViewFor(int64_t iterations, int64_t entity_count);
 void iterEntitiesOneCompViewEach(int64_t iterations, int64_t entity_count);
+void iterEntitiesEightCompsUseThree(int64_t iterations, int64_t entity_count);
+void iterEntitiesEightCompsUseAll(int64_t iterations, int64_t entity_count);
+void iterEntitiesFiveCompsDifferentCombsUseTwoView(int64_t iterations, int64_t entity_count);
+void iterEntitiesFiveCompsDifferentCombsUseTwoGroup(int64_t iterations, int64_t entity_count);
+void iterEntitiesFiveCompsDifferentCombsUseTwoGroup2(int64_t iterations, int64_t entity_count);
 
 int main() {
     printf("Benchmarking entt\n");
@@ -26,6 +31,11 @@ int main() {
 
     iterEntitiesOneCompViewFor(iterations, entity_count);
     iterEntitiesOneCompViewEach(iterations, entity_count);
+    iterEntitiesEightCompsUseThree(iterations, entity_count);
+    iterEntitiesEightCompsUseAll(iterations, entity_count);
+    iterEntitiesFiveCompsDifferentCombsUseTwoView(iterations, entity_count);
+    iterEntitiesFiveCompsDifferentCombsUseTwoGroup(iterations, entity_count);
+    iterEntitiesFiveCompsDifferentCombsUseTwoGroup2(iterations, entity_count);
 
     return 0;
 }
@@ -245,4 +255,189 @@ void iterEntitiesOneCompViewEach(int64_t iterations, int64_t entity_count) {
         t.end(entity_count);
     }
     t.printAvgStats();
+}
+
+void iterEntitiesEightCompsUseThree(int64_t iterations, int64_t entity_count) {
+    printf("  Iterate %lld entities with eight components, use three\n", entity_count);
+    entt::registry registry;
+
+    for (int64_t k = 0; k < entity_count; k++) {
+        auto e = registry.create();
+        registry.emplace<PositionComponent>(e);
+        registry.emplace<TestComp1>(e);
+        registry.emplace<TestComp2>(e);
+        registry.emplace<TestComp3>(e);
+        registry.emplace<TestComp4>(e);
+        registry.emplace<TestComp5>(e);
+        registry.emplace<TestComp6>(e);
+        registry.emplace<TestComp7>(e);
+    }
+
+    timer t;
+    for (int64_t i = 0; i < iterations; i++) {
+        auto view = registry.view<PositionComponent, TestComp1, TestComp7>();
+        t.start();
+        view.each([](auto& pos, auto& comp1, auto& comp7) {
+            pos.x = pos.x * 1.000001 + 1;
+            comp1.x = comp1.x * 2 + 1;
+            comp7.b = comp7.b * 1.000001 + 1;
+        });
+        t.end(entity_count);
+    }
+    t.printAvgStats();
+}
+
+void iterEntitiesEightCompsUseAll(int64_t iterations, int64_t entity_count) {
+    printf("  Iterate %lld entities with eight components, use all\n", entity_count);
+    entt::registry registry;
+
+    for (int64_t k = 0; k < entity_count; k++) {
+        auto e = registry.create();
+        registry.emplace<PositionComponent>(e);
+        registry.emplace<TestComp1>(e);
+        registry.emplace<TestComp2>(e);
+        registry.emplace<TestComp3>(e);
+        registry.emplace<TestComp4>(e);
+        registry.emplace<TestComp5>(e);
+        registry.emplace<TestComp6>(e);
+        registry.emplace<TestComp7>(e);
+    }
+
+    timer t;
+    for (int64_t i = 0; i < iterations; i++) {
+        auto view = registry.view<PositionComponent, TestComp1, TestComp2, TestComp3, TestComp4, TestComp5, TestComp6, TestComp7>();
+        t.start();
+        view.each([](auto& pos, auto& comp1, auto& comp2, auto& comp3, auto& comp4, auto& comp5, auto& comp6, auto& comp7) {
+            pos.x = pos.x * 1.000001 + 1;
+            comp1.x = comp1.x * 2 + 1;
+            comp7.b = comp7.b * 1.000001 + 1;
+        });
+        t.end(entity_count);
+    }
+    t.printAvgStats();
+}
+
+void iterEntitiesFiveCompsDifferentCombsUseTwoView(int64_t iterations, int64_t entity_count) {
+    printf("  Iterate %lld entities with five components, different combinations, use 2\n", entity_count);
+    entt::registry registry;
+
+    uint64_t x = 0;
+    for (int64_t i = 0; i < entity_count; i++) {
+        auto e = registry.create();
+        registry.emplace<PositionComponent>(e);
+
+        if (i % 2 == 1 || i % 3 == 0) registry.emplace<DirectionComponent>(e, 1.0f, 2.0f);
+
+        x = (x << 1) ^ (x + 1);
+        if (i % 2 == 0) registry.emplace<TestComp1>(e);
+        if (i % 3 == 0) registry.emplace<TestComp2>(e);
+        if (i % 4 == 0) registry.emplace<TestComp3>(e);
+        if (i % 5 == 0) registry.emplace<TestComp4>(e);
+        if (i % 6 == 0) registry.emplace<TestComp5>(e);
+        if (i % 7 == 0) registry.emplace<TestComp6>(e);
+        if (i % 8 == 0) registry.emplace<TestComp7>(e);
+    }
+
+    timer t;
+    for (int64_t i = 0; i < iterations; i++) {
+        auto view = registry.view<PositionComponent, DirectionComponent>();
+        t.start();
+        view.each([](auto& pos, auto& dir) {
+            pos.x += dir.x * 2;
+            pos.y += dir.y;
+        });
+        t.end(entity_count);
+    }
+    t.printAvgStats();
+}
+
+void iterEntitiesFiveCompsDifferentCombsUseTwoGroup(int64_t iterations, int64_t entity_count) {
+    printf("  Iterate %lld entities with five components, different combinations, use 2, groups\n", entity_count);
+    entt::registry registry;
+
+    uint64_t x = 0;
+    for (int64_t i = 0; i < entity_count; i++) {
+        auto e = registry.create();
+        registry.emplace<PositionComponent>(e);
+
+        if (i % 2 == 1 || i % 3 == 0) registry.emplace<DirectionComponent>(e, 1.0f, 2.0f);
+
+        x = (x << 1) ^ (x + 1);
+        if (i % 2 == 0) registry.emplace<TestComp1>(e);
+        if (i % 3 == 0) registry.emplace<TestComp2>(e);
+        if (i % 4 == 0) registry.emplace<TestComp3>(e);
+        if (i % 5 == 0) registry.emplace<TestComp4>(e);
+        if (i % 6 == 0) registry.emplace<TestComp5>(e);
+        if (i % 7 == 0) registry.emplace<TestComp6>(e);
+        if (i % 8 == 0) registry.emplace<TestComp7>(e);
+    }
+
+    timer t;
+    for (int64_t i = 0; i < iterations; i++) {
+        auto view = registry.group<PositionComponent, DirectionComponent>();
+        t.start();
+        view.each([](auto& pos, auto& dir) {
+            pos.x += dir.x * 2;
+            pos.y += dir.y;
+        });
+        t.end(entity_count);
+    }
+    t.printAvgStats();
+}
+
+void iterEntitiesFiveCompsDifferentCombsUseTwoGroup2(int64_t iterations, int64_t entity_count) {
+    printf("  Iterate %lld entities with five components, different combinations, use 2, groups\n", entity_count);
+    entt::registry registry;
+
+    uint64_t x = 0;
+    for (int64_t i = 0; i < entity_count; i++) {
+        auto e = registry.create();
+        registry.emplace<PositionComponent>(e);
+
+        if (i % 2 == 1 || i % 3 == 0) registry.emplace<DirectionComponent>(e, 1.0f, 2.0f);
+        if (i % 2 == 0 || i % 3 != 0) registry.emplace<ComflabulationComponent>(e);
+
+        x = (x << 1) ^ (x + 1);
+        if (i % 2 == 0) registry.emplace<TestComp1>(e);
+        if (i % 3 == 0) registry.emplace<TestComp2>(e);
+        if (i % 4 == 0) registry.emplace<TestComp3>(e);
+        if (i % 5 == 0) registry.emplace<TestComp4>(e);
+        if (i % 6 == 0) registry.emplace<TestComp5>(e);
+        if (i % 7 == 0) registry.emplace<TestComp6>(e);
+        if (i % 8 == 0) registry.emplace<TestComp7>(e);
+    }
+
+    printf("  Iterate Position and Direction\n");
+
+    timer t;
+    for (int64_t i = 0; i < iterations; i++) {
+        auto view = registry.group<PositionComponent>(entt::get<DirectionComponent>);
+
+        size_t count = view.size();
+
+        t.start();
+        view.each([](auto& pos, auto& dir) {
+            pos.x += dir.x * 2;
+            pos.y += dir.y;
+        });
+        t.end(count);
+    }
+    t.printAvgStats();
+
+    printf("  Iterate Position and Comflab\n");
+
+    timer t2;
+    for (int64_t i = 0; i < iterations; i++) {
+        auto view = registry.group<PositionComponent>(entt::get<ComflabulationComponent>);
+
+        size_t count = view.size();
+
+        t2.start();
+        view.each([](auto& pos, auto& com) {
+            pos.x += com.thingy * 2;
+            pos.y += com.dingy;
+        });
+        t2.end(count);
+    }
+    t2.printAvgStats();
 }

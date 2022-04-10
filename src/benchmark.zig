@@ -43,6 +43,8 @@ pub fn main() !void {
     try createEntitiesAddFiveCompsBundle(allocator, iterations, entity_count);
     try createEntitiesAddEightComps(allocator, iterations, entity_count);
     try createEntitiesAddEightCompsBundle(allocator, iterations, entity_count);
+    try createEntitiesAddFiveEmptyComps(allocator, iterations, entity_count);
+    try createEntitiesAddFiveEmptyCompsBundle(allocator, iterations, entity_count);
 
     try addComponent(allocator, iterations, entity_count);
 
@@ -53,6 +55,10 @@ pub fn main() !void {
     try commandsAddComponent(allocator, iterations, entity_count);
 
     try iterEntitiesOneComp(allocator, iterations, entity_count);
+    try iterEntitiesEightCompsUseThree(allocator, iterations, entity_count);
+    try iterEntitiesEightCompsUseAll(allocator, iterations, entity_count);
+    try iterEntitiesFiveCompsDifferentCombsUseTwo(allocator, iterations, entity_count);
+    try iterEntitiesFiveCompsDifferentCombsUseTwo2(allocator, iterations, entity_count);
 }
 
 const PositionComponent = struct {
@@ -71,6 +77,12 @@ const ComflabulationComponent = struct {
     mingy: bool = false,
     stringy: []const u8 = "",
 };
+
+const Tag1 = struct {};
+const Tag2 = struct {};
+const Tag3 = struct {};
+const Tag4 = struct {};
+const Tag5 = struct {};
 
 const TestComp1 = struct {
     a: i64 = 0,
@@ -272,6 +284,63 @@ pub fn createEntitiesAddEightCompsBundle(allocator: std.mem.Allocator, iteration
                 TestComp5{},
                 TestComp6{},
                 TestComp7{},
+            });
+        }
+        t.end(entity_count);
+    }
+
+    t.printAvgStats();
+}
+
+pub fn createEntitiesAddFiveEmptyComps(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
+    std.debug.print("  Create {} entities and add five empty components\n", .{entity_count});
+
+    var world = try World.init(allocator);
+    defer world.deinit();
+
+    var t = Timer{};
+
+    var k: u64 = 0;
+    while (k < iterations) : (k += 1) {
+        try world.clear();
+
+        t.start();
+        var i: usize = 0;
+        while (i < entity_count) : (i += 1) {
+            const e = try world.createEntity();
+            try world.addComponent(e, Tag1{});
+            try world.addComponent(e, Tag2{});
+            try world.addComponent(e, Tag3{});
+            try world.addComponent(e, Tag4{});
+            try world.addComponent(e, Tag5{});
+        }
+        t.end(entity_count);
+    }
+
+    t.printAvgStats();
+}
+
+pub fn createEntitiesAddFiveEmptyCompsBundle(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
+    std.debug.print("  Create {} entities with five empty components as bundle\n", .{entity_count});
+
+    var world = try World.init(allocator);
+    defer world.deinit();
+
+    var t = Timer{};
+
+    var k: u64 = 0;
+    while (k < iterations) : (k += 1) {
+        try world.clear();
+
+        t.start();
+        var i: usize = 0;
+        while (i < entity_count) : (i += 1) {
+            _ = try world.createEntityBundle(&.{
+                Tag1{},
+                Tag2{},
+                Tag3{},
+                Tag4{},
+                Tag5{},
             });
         }
         t.end(entity_count);
@@ -529,6 +598,202 @@ pub fn iterEntitiesOneComp(allocator: std.mem.Allocator, iterations: u64, entity
     t.printAvgStats();
 }
 
+pub fn iterEntitiesEightCompsUseThree(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
+    std.debug.print("  Iterate {} entities with eight components, use three\n", .{entity_count});
+
+    var world = try World.init(allocator);
+    defer world.deinit();
+
+    var i: usize = 0;
+    while (i < entity_count) : (i += 1) {
+        _ = try world.createEntityBundle(&.{
+            PositionComponent{},
+            TestComp1{},
+            TestComp2{},
+            TestComp3{},
+            TestComp4{},
+            TestComp5{},
+            TestComp6{},
+            TestComp7{},
+        });
+    }
+
+    var t = Timer{};
+
+    var k: u64 = 0;
+    while (k < iterations) : (k += 1) {
+        var query = try world.query(.{ PositionComponent, TestComp1, TestComp7 });
+        defer query.deinit();
+        var iter = query.iter();
+
+        t.start();
+        while (iter.next()) |entity| {
+            entity.position.x = entity.position.x * 1.000001 + 1;
+            entity.test_comp1.a = entity.test_comp1.a * 2 + 1;
+            entity.test_comp7.b = entity.test_comp7.b * 1.000001 + 1;
+        }
+        t.end(entity_count);
+    }
+
+    t.printAvgStats();
+}
+
+pub fn iterEntitiesEightCompsUseAll(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
+    std.debug.print("  Iterate {} entities with eight components, use all\n", .{entity_count});
+
+    var world = try World.init(allocator);
+    defer world.deinit();
+
+    var i: usize = 0;
+    while (i < entity_count) : (i += 1) {
+        _ = try world.createEntityBundle(&.{
+            PositionComponent{},
+            TestComp1{},
+            TestComp2{},
+            TestComp3{},
+            TestComp4{},
+            TestComp5{},
+            TestComp6{},
+            TestComp7{},
+        });
+    }
+
+    var t = Timer{};
+
+    var k: u64 = 0;
+    while (k < iterations) : (k += 1) {
+        var query = try world.query(.{ PositionComponent, TestComp1, TestComp2, TestComp3, TestComp4, TestComp5, TestComp6, TestComp7 });
+        defer query.deinit();
+        var iter = query.iter();
+
+        t.start();
+        while (iter.next()) |entity| {
+            entity.position.x = entity.position.x * 1.000001 + 1;
+            entity.test_comp1.a = entity.test_comp1.a * 2 + 1;
+            entity.test_comp7.b = entity.test_comp7.b * 1.000001 + 1;
+        }
+        t.end(entity_count);
+    }
+
+    t.printAvgStats();
+}
+
+pub fn iterEntitiesFiveCompsDifferentCombsUseTwo(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
+    std.debug.print("  Iterate {} entities with five components, different combinations, use 2\n", .{entity_count});
+
+    var world = try World.init(allocator);
+    defer world.deinit();
+
+    var i: usize = 0;
+    var x: u64 = 0;
+    while (i < entity_count) : (i += 1) {
+        const e = try world.createEntityBundle(.{PositionComponent{}});
+
+        if (i % 2 == 1 or i % 3 == 0) try world.addComponent(e, DirectionComponent{ .x = 1, .y = 2 });
+
+        x = (x << 1) ^ (x +% 1);
+        if (i % 2 == 0) try world.addComponent(e, TestComp1{});
+        if (i % 3 == 0) try world.addComponent(e, TestComp2{});
+        if (i % 4 == 0) try world.addComponent(e, TestComp3{});
+        if (i % 5 == 0) try world.addComponent(e, TestComp4{});
+        if (i % 6 == 0) try world.addComponent(e, TestComp5{});
+        if (i % 7 == 0) try world.addComponent(e, TestComp6{});
+        if (i % 8 == 0) try world.addComponent(e, TestComp7{});
+    }
+
+    var t = Timer{};
+
+    var k: u64 = 0;
+    while (k < iterations) : (k += 1) {
+        var query = try world.query(.{ PositionComponent, DirectionComponent });
+        defer query.deinit();
+        var iter = query.iter();
+
+        t.start();
+        while (iter.next()) |entity| {
+            entity.position.x += entity.direction.x * 2;
+            entity.position.y += entity.direction.y;
+        }
+        t.end(entity_count);
+    }
+
+    t.printAvgStats();
+}
+
+pub fn iterEntitiesFiveCompsDifferentCombsUseTwo2(allocator: std.mem.Allocator, iterations: u64, entity_count: u64) !void {
+    std.debug.print("  Iterate {} entities with five components, different combinations, use 2\n", .{entity_count});
+
+    var world = try World.init(allocator);
+    defer world.deinit();
+
+    var i: usize = 0;
+    var x: u64 = 0;
+    while (i < entity_count) : (i += 1) {
+        const e = try world.createEntityBundle(.{PositionComponent{}});
+
+        if (i % 2 == 1 or i % 3 == 0) try world.addComponent(e, DirectionComponent{ .x = 1, .y = 2 });
+        if (i % 2 == 0 or i % 3 != 0) try world.addComponent(e, ComflabulationComponent{});
+
+        x = (x << 1) ^ (x +% 1);
+        if (i % 2 == 0) try world.addComponent(e, TestComp1{});
+        if (i % 3 == 0) try world.addComponent(e, TestComp2{});
+        if (i % 4 == 0) try world.addComponent(e, TestComp3{});
+        if (i % 5 == 0) try world.addComponent(e, TestComp4{});
+        if (i % 6 == 0) try world.addComponent(e, TestComp5{});
+        if (i % 7 == 0) try world.addComponent(e, TestComp6{});
+        if (i % 8 == 0) try world.addComponent(e, TestComp7{});
+    }
+
+    // for (world.archetypeTablesArray.items) |table| {
+    //     const count = table.getEntityCount();
+    //     if (count != 0) std.debug.print("{}: {}\n", .{ table.archetype, count });
+    // }
+
+    std.debug.print("  Iterate Position and Direction\n", .{});
+
+    var t = Timer{};
+
+    var k: u64 = 0;
+    while (k < iterations) : (k += 1) {
+        var query = try world.query(.{ PositionComponent, DirectionComponent });
+        defer query.deinit();
+        var iter = query.iter();
+
+        const count = iter.count(); // 666667
+
+        t.start();
+        while (iter.next()) |entity| {
+            entity.position.x += entity.direction.x * 2;
+            entity.position.y += entity.direction.y;
+        }
+        t.end(count);
+    }
+
+    t.printAvgStats();
+
+    std.debug.print("  Iterate Position and Comflab\n", .{});
+
+    var t2 = Timer{};
+
+    k = 0;
+    while (k < iterations) : (k += 1) {
+        var query = try world.query(.{ PositionComponent, ComflabulationComponent });
+        defer query.deinit();
+        var iter = query.iter();
+
+        const count = iter.count(); // 833333
+
+        t2.start();
+        while (iter.next()) |entity| {
+            entity.position.x += entity.comflabulation.thingy * 2;
+            entity.position.y += @intToFloat(f32, entity.comflabulation.dingy);
+        }
+        t2.end(count);
+    }
+
+    t2.printAvgStats();
+}
+
 // Utilities
 
 inline fn black_box(value: anytype) @TypeOf(value) {
@@ -560,6 +825,7 @@ const RunningMean = struct {
 };
 
 const Timer = struct {
+    timer: std.time.Timer = undefined,
     start_time: i128 = 0,
     end_time: i128 = std.math.maxInt(i128),
     total_sum_ms: f64 = 0,
@@ -569,21 +835,17 @@ const Timer = struct {
     total: RunningMean = .{},
     iter: RunningMean = .{},
 
-    pub fn now() @This() {
-        return .{ .start_time = std.time.nanoTimestamp() };
-    }
-
     pub fn start(self: *@This()) void {
-        self.start_time = std.time.nanoTimestamp();
+        self.timer = std.time.Timer.start() catch unreachable;
     }
 
     pub fn end(self: *@This(), count: u64) void {
-        self.end_time = std.time.nanoTimestamp();
+        self.end_time = self.timer.read();
         printStats(self, count);
     }
 
     pub fn endWithoutStats(self: *@This()) void {
-        self.end_time = std.time.nanoTimestamp();
+        self.end_time = self.timer.read();
     }
 
     pub fn printStats(self: *@This(), count: u64) void {
@@ -600,8 +862,6 @@ const Timer = struct {
     }
 
     pub fn printAvgStats(self: *@This()) void {
-        // std.debug.print("  {d:.2}ms ({d:.2}ns)\n", .{ self.total_sum_ms / self.count, self.iter_sum_ns / self.count });
-
         const total_result = self.total.get();
         const iter_result = self.iter.get();
         std.debug.print("  Total: {d:.2}ms ({d:.2}, {d:.2})\n", .{ total_result.mean, total_result.variance, total_result.sample_variance });

@@ -21,9 +21,14 @@ fn main() {
     create_entities_add_five_comps_bundle(iterations, entity_count);
     create_entities_add_eight_comps(iterations, entity_count);
     create_entities_add_eight_comps_bundle(iterations, entity_count);
+
     add_component(iterations, entity_count);
 
     iter_entities_one_comp(iterations, entity_count);
+    iter_entities_eight_comps_use_three(iterations, entity_count);
+    iter_entities_eight_comps_use_all(iterations, entity_count);
+    iter_entities_five_comps_different_combs_use_two(iterations, entity_count);
+    iter_entities_five_comps_different_combs_use_two2(iterations, entity_count);
 }
 #[derive(Component, Clone, Copy)]
 struct PositionComponent {
@@ -37,7 +42,7 @@ struct DirectionComponent  {
     y: f32,
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, Default)]
 struct ComflabulationComponent  {
     thingy: f32,
     dingy: i32,
@@ -280,6 +285,173 @@ fn iter_entities_one_comp(iterations: u64, entity_count: u64) {
             position.x *= 1.000001;
         }
         t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn iter_entities_eight_comps_use_three(iterations: u64, entity_count: u64) {
+    println!("  Iterate {} entities with eight components, use three", entity_count);
+
+    let mut world = World::default();
+
+    for _ in 0..entity_count {
+        world
+            .spawn()
+            .insert(PositionComponent{x: 0.0, y: 0.0})
+            .insert(TestComp1::default())
+            .insert(TestComp2::default())
+            .insert(TestComp3::default())
+            .insert(TestComp4::default())
+            .insert(TestComp5::default())
+            .insert(TestComp6::default())
+            .insert(TestComp7::default());
+    }
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        let mut query = world.query::<(&mut PositionComponent, &mut TestComp1, &mut TestComp7)>();
+        t.start();
+        for (mut position, mut comp1, mut comp7) in query.iter_mut(&mut world) {
+            position.x *= 1.000001;
+            position.x = position.x * 1.000001 + 1.0;
+            comp1.a = comp1.a * 2 + 1;
+            comp7.b = comp7.b * 1.000001 + 1.0;
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn iter_entities_eight_comps_use_all(iterations: u64, entity_count: u64) {
+    println!("  Iterate {} entities with eight components, use all", entity_count);
+
+    let mut world = World::default();
+
+    for _ in 0..entity_count {
+        world
+            .spawn()
+            .insert(PositionComponent{x: 0.0, y: 0.0})
+            .insert(TestComp1::default())
+            .insert(TestComp2::default())
+            .insert(TestComp3::default())
+            .insert(TestComp4::default())
+            .insert(TestComp5::default())
+            .insert(TestComp6::default())
+            .insert(TestComp7::default());
+    }
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        let mut query = world.query::<(&mut PositionComponent, &mut TestComp1, &mut TestComp2, &mut TestComp3, &mut TestComp4, &mut TestComp5, &mut TestComp6, &mut TestComp7)>();
+        t.start();
+        for (mut position, mut comp1, comp2, comp3, comp4, comp5, comp6, mut comp7) in query.iter_mut(&mut world) {
+            position.x *= 1.000001;
+            position.x = position.x * 1.000001 + 1.0;
+            comp1.a = comp1.a * 2 + 1;
+            comp7.b = comp7.b * 1.000001 + 1.0;
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn iter_entities_five_comps_different_combs_use_two(iterations: u64, entity_count: u64) {
+    println!("  Iterate {} entities with five components, different combinations, use 2", entity_count);
+
+    let mut world = World::default();
+    let mut x: u64 = 0;
+    for i in 0..entity_count {
+        let mut e = world.spawn();
+        e.insert(PositionComponent{x: 0.0, y: 0.0});
+
+        if i % 2 == 1 || i % 3 == 0 {
+            e.insert(DirectionComponent{ x: 1.0, y: 2.0 });
+        }
+
+        x = (x << 1) ^ (x + 1);
+        if i % 2 == 0 { e.insert(TestComp1::default()); }
+        if i % 3 == 0 { e.insert(TestComp2::default()); }
+        if i % 4 == 0 { e.insert(TestComp3::default()); }
+        if i % 5 == 0 { e.insert(TestComp4::default()); }
+        if i % 6 == 0 { e.insert(TestComp5::default()); }
+        if i % 7 == 0 { e.insert(TestComp6::default()); }
+        if i % 8 == 0 { e.insert(TestComp7::default()); }
+    }
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        let mut query = world.query::<(&mut PositionComponent, &DirectionComponent)>();
+        t.start();
+        for (mut position, direction) in query.iter_mut(&mut world) {
+            position.x += direction.x * 2.0;
+            position.y += direction.y;
+        }
+        t.end(entity_count);
+    }
+    t.print_avg_stats();
+}
+
+fn iter_entities_five_comps_different_combs_use_two2(iterations: u64, entity_count: u64) {
+    println!("  Iterate {} entities with five components, different combinations, use 2", entity_count);
+
+    let mut world = World::default();
+    let mut x: u64 = 0;
+    for i in 0..entity_count {
+        let mut e = world.spawn();
+        e.insert(PositionComponent{x: 0.0, y: 0.0});
+
+        if i % 2 == 1 || i % 3 == 0 { e.insert(DirectionComponent{ x: 1.0, y: 2.0 }); }
+        if i % 2 == 0 || i % 3 != 0 { e.insert(ComflabulationComponent::default()); }
+
+        x = (x << 1) ^ (x + 1);
+        if i % 2 == 0 { e.insert(TestComp1::default()); }
+        if i % 3 == 0 { e.insert(TestComp2::default()); }
+        if i % 4 == 0 { e.insert(TestComp3::default()); }
+        if i % 5 == 0 { e.insert(TestComp4::default()); }
+        if i % 6 == 0 { e.insert(TestComp5::default()); }
+        if i % 7 == 0 { e.insert(TestComp6::default()); }
+        if i % 8 == 0 { e.insert(TestComp7::default()); }
+    }
+
+    println!("  Iterate Position and Direction");
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        let mut query = world.query::<(&mut PositionComponent, &DirectionComponent)>();
+
+
+        let mut count = 0;
+
+        t.start();
+        for (mut position, direction) in query.iter_mut(&mut world) {
+            count += 1;
+            position.x += direction.x * 2.0;
+            position.y += direction.y;
+        }
+        t.end(count);
+    }
+    t.print_avg_stats();
+
+    println!("  Iterate Position and Comflab");
+
+    let mut t = Timer::new();
+
+    for _ in 0..iterations {
+        let mut query = world.query::<(&mut PositionComponent, &ComflabulationComponent)>();
+
+        let mut count = 0;
+
+        t.start();
+        for (mut position, com) in query.iter_mut(&mut world) {
+            count += 1;
+            position.x += com.thingy * 2.0;
+            position.y += com.dingy as f32;
+        }
+        t.end(count);
     }
     t.print_avg_stats();
 }
