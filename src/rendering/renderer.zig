@@ -10,6 +10,8 @@ const Image = @import("vulkan/graphics_context.zig").Image;
 const Buffer = @import("vulkan/graphics_context.zig").Buffer;
 const Swapchain = @import("vulkan/swapchain.zig").Swapchain;
 
+pub const scene_render_extent = vk.Extent2D{ .width = 2560, .height = 1440 };
+
 const Self = @This();
 
 pub const SceneImage = struct {
@@ -117,7 +119,7 @@ pub fn init(allocator: Allocator, window: *sdl.SDL_Window, extent: vk.Extent2D) 
     errdefer destroyFramebuffers(&self.gc, allocator, self.framebuffers);
 
     // scene render pass
-    const sceneExtent = vk.Extent2D{ .width = 1920, .height = 1080 };
+    const sceneExtent = scene_render_extent;
     self.sceneRenderPass = try createSceneRenderPass(&self.gc, self.swapchain.surface_format.format);
     errdefer self.gc.vkd.destroyRenderPass(self.gc.dev, self.sceneRenderPass, null);
 

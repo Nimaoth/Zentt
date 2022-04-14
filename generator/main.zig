@@ -11,13 +11,12 @@ pub fn main() !void {
     const allocator = arena.allocator();
 
     var args = try std.process.argsWithAllocator(allocator);
-    const prog_name = args.next(allocator) orelse return error.ExecutableNameMissing;
+    const prog_name = args.next() orelse return error.ExecutableNameMissing;
 
     var maybe_xml_path: ?[]const u8 = null;
     var maybe_out_path: ?[]const u8 = null;
 
-    while (args.next(allocator)) |argOrError| {
-        const arg = try argOrError;
+    while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
             @setEvalBranchQuota(2000);
             try stderr.writer().print(

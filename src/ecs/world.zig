@@ -47,8 +47,8 @@ const IntContext = struct {
 
 const EntityMap = std.HashMap(u64, *Entity, std.hash_map.AutoContext(u64), 10);
 
-// Every action which modifies mondifies entities in a way which invalidates
-// e.g. iterators or direct pointers to components should inrement the version.
+// Every action which modifies entities in a way which invalidates
+// e.g. iterators or direct pointers to components should increment the version.
 version: u128 = 0,
 
 allocator: std.mem.Allocator,
@@ -580,7 +580,7 @@ fn createArchetypeStruct(self: *Self, comptime Components: anytype) !Archetype {
 
     const typeInfo = @typeInfo(@TypeOf(Components)).Struct;
     inline for (typeInfo.fields) |field| {
-        const ComponentType = field.default_value orelse unreachable;
+        const ComponentType = @field(Components, field.name);
         std.debug.assert(@TypeOf(ComponentType) == type);
         const rtti = Rtti.typeId(ComponentType);
         bitSet.set(try self.getComponentId(ComponentType));

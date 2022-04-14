@@ -61,7 +61,7 @@ pub fn drawScene(self: *Self) !void {
             @ptrCast(**anyopaque, &self.app.renderer.getSceneImage().descriptor).*,
             size,
             .{ .x = 0, .y = 0 },
-            .{ .x = size.x / 1920, .y = size.y / 1080 }, // the size is the size of the scene frame buffer which doesn't get resized.
+            .{ .x = size.x / @intToFloat(f32, Renderer.scene_render_extent.width), .y = size.y / @intToFloat(f32, Renderer.scene_render_extent.height) }, // the size is the size of the scene frame buffer which doesn't get resized.
             .{ .x = 1, .y = 1, .z = 1, .w = 1 },
             .{ .x = 0, .y = 0, .z = 0, .w = 0 },
         );

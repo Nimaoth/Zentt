@@ -884,9 +884,9 @@ fn Renderer(comptime WriterType: type) type {
                     }
 
                     try self.writer.writeAll(": bool ");
-                    if (bitpos == 0) { // Force alignment to integer boundaries
-                        try self.writer.print("align(@alignOf({s})) ", .{flags_type});
-                    }
+                    // if (bitpos == 0) { // Force alignment to integer boundaries
+                    //     try self.writer.print("align(@alignOf({s})) ", .{flags_type});
+                    // }
                     try self.writer.writeAll("= false, ");
                 }
             }
@@ -1358,11 +1358,21 @@ fn Renderer(comptime WriterType: type) type {
 
         fn renderErrorSet(self: *Self, errors: []const []const u8) !void {
             try self.writer.writeAll("error{");
+
+            var unique_names = std.StringHashMap(void).init(self.allocator);
+            defer unique_names.deinit();
+
             for (errors) |name| {
+                if (unique_names.contains(name))
+                    continue;
+                try unique_names.put(name, {});
                 try self.renderResultAsErrorName(name);
                 try self.writer.writeAll(", ");
             }
-            try self.writer.writeAll("Unknown, }");
+            if (!unique_names.contains("VK_ERROR_UNKNOWN")) {
+                try self.writer.writeAll("Unknown,");
+            }
+            try self.writer.writeAll("}");
         }
 
         fn renderResultAsErrorName(self: *Self, name: []const u8) !void {

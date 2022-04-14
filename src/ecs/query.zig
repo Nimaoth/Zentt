@@ -67,7 +67,7 @@ pub fn Query(comptime Components: anytype) type {
             self.entity_handles.ref = chunk.entity_refs[0..chunk.count];
 
             inline for (typeInfo.fields) |field, i| {
-                const ComponentType = field.default_value orelse unreachable;
+                const ComponentType = @field(Components, field.name);
                 std.debug.assert(@TypeOf(ComponentType) == type);
                 if (@sizeOf(ComponentType) > 0) {
                     const component_index = chunk.table.getListIndexForType(Rtti.typeId(ComponentType)) orelse unreachable;
@@ -108,7 +108,7 @@ pub fn Query(comptime Components: anytype) type {
             const resultTypeInfo = @typeInfo(EntityHandle).Struct;
             inline for (typeInfo.fields) |field, i| {
                 const field_name = resultTypeInfo.fields[i + 1].name;
-                const ComponentType = field.default_value orelse unreachable;
+                const ComponentType = @field(Components, field.name);
                 if (@sizeOf(ComponentType) > 0) {
                     @field(self.current_entity, field_name) = &@field(self.entity_handles, field_name)[self.entity_index];
                 }
@@ -202,8 +202,14 @@ fn toLowerCase(c: u8) u8 {
 }
 
 /// Converts from "PascalCase" to "sake_case", and removes "Component" suffix if present.
-fn componentNameToFieldName(comptime name: []const u8) []const u8 {
+fn componentNameToFieldName(comptime type_name: []const u8) []const u8 {
     // Count how many _ we have to insert. (underscore between lower case letter followed by upper case letter)
+    @setEvalBranchQuota(10000);
+
+    const name = if (std.mem.lastIndexOf(u8, type_name, &.{'.'})) |index| blk: {
+        break :blk type_name[index + 1 ..];
+    } else type_name;
+
     comptime var underscore_count = 0;
     comptime var last = name[0];
     inline for (name[1..]) |current| {
@@ -228,9 +234,6 @@ fn componentNameToFieldName(comptime name: []const u8) []const u8 {
         last = current;
         index += 1;
     }
-
-    // const T = @Type(std.builtin.TypeInfo{ .Struct = .{ .layout = .Extern, .fields = &.{.{ .name = buffer[0..], .field_type = u8, .default_value = @intCast(u8, 0), .is_comptime = false, .alignment = 1 }}, .decls = &.{}, .is_tuple = false } });
-    // @compileLog(@typeInfo(T).Struct.fields[0].name);
 
     if (std.mem.endsWith(u8, buffer[0..], "_component")) {
         return buffer[0..(buffer.len - "_component".len)];
@@ -257,7 +260,7 @@ fn getEntityHandles(comptime Components: anytype) type {
 
         // Fill field type info for all components with non-zero size
         inline for (typeInfo.fields) |field, index| {
-            const ComponentType = field.default_value orelse unreachable;
+            const ComponentType = @field(Components, field.name);
 
             std.debug.assert(@TypeOf(ComponentType) == type);
             if (@sizeOf(ComponentType) > 0) {
@@ -272,7 +275,7 @@ fn getEntityHandles(comptime Components: anytype) type {
                 fields[index + 1] = .{
                     .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
                     .field_type = u8,
-                    .default_value = @intCast(u8, 0),
+                    .default_value = null,
                     .is_comptime = false,
                     .alignment = @alignOf(u8),
                 };
@@ -292,7 +295,6 @@ fn getEntityHandles(comptime Components: anytype) type {
 }
 
 fn getEntityHandle(comptime Components: anytype) type {
-    _ = Components;
     const typeInfo = comptime blk: {
         const T = @TypeOf(Components);
         const typeInfo = @typeInfo(T).Struct;
@@ -309,7 +311,7 @@ fn getEntityHandle(comptime Components: anytype) type {
 
         // Fill field type info for all components with non-zero size
         inline for (typeInfo.fields) |field, index| {
-            const ComponentType = field.default_value orelse unreachable;
+            const ComponentType = @field(Components, field.name);
 
             std.debug.assert(@TypeOf(ComponentType) == type);
             if (@sizeOf(ComponentType) > 0) {
@@ -324,7 +326,7 @@ fn getEntityHandle(comptime Components: anytype) type {
                 fields[index + 1] = .{
                     .name = componentNameToFieldName(deduplicate(@typeName(ComponentType), fields[0..(index + 1)])),
                     .field_type = u8,
-                    .default_value = @intCast(u8, 0),
+                    .default_value = null,
                     .is_comptime = false,
                     .alignment = @alignOf(u8),
                 };
